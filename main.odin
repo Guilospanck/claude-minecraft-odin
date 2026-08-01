@@ -224,6 +224,28 @@ main :: proc() {
 		}
 	}
 
+	// Title screen. MC_TITLE screenshots it; headless scene runs skip it.
+	if os.get_env("MC_TITLE", context.temp_allocator) != "" {
+		for f in 0 ..< max(max_frames, 1) {
+			glfw.PollEvents()
+			render_title(g_input.fb_w, g_input.fb_h)
+			if f == max(max_frames, 1) - 1 && shot_path != "" {
+				render_screenshot(shot_path, g_input.fb_w, g_input.fb_h)
+			}
+			glfw.SwapBuffers(win)
+			free_all(context.temp_allocator)
+		}
+		return
+	}
+	if max_frames <= 0 {
+		for !glfw.WindowShouldClose(win) && !g_input.start {
+			glfw.PollEvents()
+			render_title(g_input.fb_w, g_input.fb_h)
+			glfw.SwapBuffers(win)
+			free_all(context.temp_allocator)
+		}
+	}
+
 	frame := 0
 	last := glfw.GetTime()
 	for !glfw.WindowShouldClose(win) {

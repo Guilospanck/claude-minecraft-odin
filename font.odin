@@ -138,6 +138,16 @@ text_init :: proc() {
 	gl.BindVertexArray(0)
 }
 
+// Approximate NDC width of a string at glyph width ch_w.
+text_width :: proc(s: string, ch_w: f32) -> f32 {
+	return f32(len(s)) * ch_w * f32(CELL_W) / f32(GLYPH_W)
+}
+
+// Draw a string horizontally centred on x=0 at NDC height y.
+text_center :: proc(s: string, y, ch_w, ch_h: f32, color: Vec4) {
+	text_draw(s, -text_width(s, ch_w) * 0.5, y, ch_w, ch_h, color)
+}
+
 // Draw `s` with its top-left at NDC (x,y); ch_w/ch_h are per-glyph NDC size.
 text_draw :: proc(s: string, x, y, ch_w, ch_h: f32, color: Vec4) {
 	if text_prog == 0 do return

@@ -1,8 +1,37 @@
 package main
 
 import "core:fmt"
+import gl "vendor:OpenGL"
 
 g_show_inventory: bool
+
+// Title screen: cleared background + centred title, tagline, prompt, and help.
+render_title :: proc(fbw, fbh: i32) {
+	gl.Viewport(0, 0, fbw, fbh)
+	gl.ClearColor(0.09, 0.12, 0.20, 1.0)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	cw :: proc(ch_h, aspect: f32) -> f32 {return ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))}
+
+	text_center("ODINCRAFT", 0.45, cw(0.16, aspect), 0.16, Vec4{0.55, 0.85, 0.55, 1})
+	text_center("A VOXEL WORLD IN PURE ODIN", 0.18, cw(0.05, aspect), 0.05, Vec4{0.8, 0.8, 0.85, 1})
+	text_center("PRESS ENTER TO PLAY", -0.15, cw(0.07, aspect), 0.07, Vec4{1, 1, 0.6, 1})
+	text_center(
+		"WASD MOVE   MOUSE LOOK   LMB MINE   RMB PLACE",
+		-0.55,
+		cw(0.04, aspect),
+		0.04,
+		Vec4{0.7, 0.75, 0.82, 1},
+	)
+	text_center(
+		"E INVENTORY   C CRAFT   V SMELT   G EAT   F FLY",
+		-0.64,
+		cw(0.04, aspect),
+		0.04,
+		Vec4{0.7, 0.75, 0.82, 1},
+	)
+}
 
 // Full-screen inventory panel: title, every owned block with a colour swatch
 // and count, and a controls footer. Toggled with E.
