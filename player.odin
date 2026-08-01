@@ -23,8 +23,10 @@ Player :: struct {
 	respawn:     Vec3,
 	inventory:   [BlockId]int,
 	hunger:      f32, // 0..HUNGER_MAX
-	raw_food:    int, // raw meat dropped by mobs (weak)
-	cooked_food: int, // cooked in a furnace (restores more hunger)
+	raw_food:     int, // raw meat dropped by mobs (weak)
+	cooked_food:  int, // cooked in a furnace (restores more hunger)
+	portal_timer: f32, // time stood in a portal (triggers dimension travel)
+	lava_timer:   f32, // lava-damage tick
 	starve:      f32, // starvation damage timer
 }
 
@@ -63,6 +65,7 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.inventory[.Ore] = 6
 	p.inventory[.Glass] = 8 // so every hotbar slot starts placeable
 	p.inventory[.Iron] = 8
+	p.inventory[.Obsidian] = 30 // enough to build a nether portal (press P)
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.

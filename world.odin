@@ -3,9 +3,15 @@ package main
 import "core:math"
 import "core:slice"
 
+Dimension :: enum {
+	Overworld,
+	Nether,
+}
+
 World :: struct {
 	chunks:      map[Ivec2]^Chunk,
 	seed:        u64,
+	dimension:   Dimension,
 	mobs:        [dynamic]Mob,
 	items:       [dynamic]Item,
 	arrows:      [dynamic]Arrow,
@@ -16,9 +22,10 @@ World :: struct {
 // Set before sorting chunk work lists; the comparators read it (single-threaded).
 g_center: Ivec2
 
-world_init :: proc(w: ^World, seed: u64) {
+world_init :: proc(w: ^World, seed: u64, dim: Dimension = .Overworld) {
 	w.chunks = make(map[Ivec2]^Chunk)
 	w.seed = seed
+	w.dimension = dim
 	w.mobs = make([dynamic]Mob, 0, MOB_CAP)
 	w.items = make([dynamic]Item, 0, 64)
 	w.arrows = make([dynamic]Arrow, 0, 32)
@@ -104,7 +111,11 @@ world_ensure_chunk :: proc(w: ^World, coord: Ivec2) -> ^Chunk {
 	}
 	if !ok {
 		c = chunk_make(coord)
-		worldgen_fill(c, w.seed)
+		if w.dimension == .Nether {
+			worldgen_nether(c, w.seed)
+		} else {
+			worldgen_fill(c, w.seed)
+		}
 	}
 	c.generated = true
 	c.dirty = true

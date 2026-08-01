@@ -192,6 +192,39 @@ generate_waterfalls :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: 
 	}
 }
 
+// The Nether: netherrack landscape riddled with caves over a lava sea, with
+// bedrock floor and ceiling. Dark and hostile.
+worldgen_nether :: proc(c: ^Chunk, seed: u64) {
+	base_x := c.coord.x * CHUNK_W
+	base_z := c.coord.y * CHUNK_D
+	LAVA_LEVEL :: 30
+	for lz in 0 ..< CHUNK_D {
+		for lx in 0 ..< CHUNK_W {
+			fx := f32(base_x + lx)
+			fz := f32(base_z + lz)
+			h := 46 + int(fbm2(seed + 50, fx * 0.02, fz * 0.02, 3) * 16.0) // netherrack top
+			for y in 0 ..< CHUNK_H {
+				b: BlockId = .Air
+				if y == 0 || y >= CHUNK_H - 4 {
+					b = .Bedrock
+				} else if y < h {
+					b = .Netherrack
+					cave := fbm3(seed + 60, fx * 0.05, f32(y) * 0.05, fz * 0.05, 3)
+					if cave > 0.52 && y > 1 do b = .Air // cavey nether
+				}
+				if b == .Air && y > 0 && y <= LAVA_LEVEL do b = .Lava // lava sea
+				// glowstone specks clinging to the ceiling
+				if b == .Netherrack && y > h - 2 {
+					if value_noise3(seed + 70, fx * 0.15, f32(y) * 0.15, fz * 0.15) > 0.86 {
+						b = .Glowstone
+					}
+				}
+				c.blocks[chunk_index(lx, y, lz)] = b
+			}
+		}
+	}
+}
+
 // Build a tree (round oak or conical spruce). chunk_set clips any leaves that
 // spill past the chunk edge.
 @(private = "file")

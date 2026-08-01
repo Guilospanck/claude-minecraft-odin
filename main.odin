@@ -121,6 +121,11 @@ main :: proc() {
 	world_init(&world, seed)
 	defer world_save_all(&world)
 
+	// The Nether: a second world reached through portals.
+	nether: World
+	world_init(&nether, seed ~ 0x4E45_5448_4552_0001, .Nether)
+	cur := &world // the dimension currently being played/rendered
+
 	// One-off: locate nearby biomes for this seed, print, and exit.
 	if os.get_env("MC_SCAN", context.allocator) != "" {
 		scan_biomes(&world)
@@ -285,6 +290,20 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_PORTAL builds a lit portal ahead; MC_NETHER starts in the nether.
+	if os.get_env("MC_PORTAL", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		ox := int(player.pos.x + fwd.x * 3) - 1
+		oz := int(player.pos.z + fwd.z * 3)
+		oy := int(player.pos.y)
+		world_ensure_chunk(cur, world_chunk_at(cur, ox, oz))
+		world_ensure_chunk(cur, world_chunk_at(cur, ox + 3, oz))
+		build_portal(cur, ox, oy, oz)
+	}
+	if os.get_env("MC_NETHER", context.temp_allocator) != "" {
+		cur = &nether // camera positioned via MC_CAM
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -397,24 +416,68 @@ main :: proc() {
 			g_input.select = 0
 		} else {
 			process_input(&player, dt)
-			physics_update(&world, &player, dt)
+			physics_update(cur, &player, dt)
 			player_tick(&player, dt)
-			handle_break_place(&world, &player)
-			world_stream(&world, player.pos)
-			mobs_update(&world, &player, &world.mobs, dt)
-			items_update(&world, &player, &world.items, dt)
-			arrows_update(&world, &player, dt)
-			particles_update(&world, &world.particles, dt)
+			handle_break_place(cur, &player)
+
+			// build a portal in front of the player (P)
+			if g_input.portal {
+				if player.inventory[.Obsidian] >= PORTAL_COST {
+					fwd := camera_front(player.yaw, 0)
+					ox := int(player.pos.x + fwd.x * 2) - 1
+					oz := int(player.pos.z + fwd.z * 2)
+					oy := int(player.pos.y)
+					build_portal(cur, ox, oy, oz)
+					player.inventory[.Obsidian] -= PORTAL_COST
+					fmt.println("portal lit - step in to travel")
+				} else {
+					fmt.println("need", PORTAL_COST, "Obsidian for a portal (craft: T)")
+				}
+				g_input.portal = false
+			}
+
+			// dimension travel
+			if player_in_portal(cur, player.pos) {
+				player.portal_timer += dt
+				if player.portal_timer > PORTAL_TRIGGER {
+					player.portal_timer = -1.5 // cooldown before it can trigger again
+					cur = cur == &world ? &nether : &world
+					player.pos = portal_destination(cur, int(player.pos.x), int(player.pos.z))
+					player.vel = Vec3{0, 0, 0}
+					fmt.println("entered the", cur.dimension)
+				}
+			} else if player.portal_timer < 0 {
+				player.portal_timer += dt
+			} else {
+				player.portal_timer = 0
+			}
+
+			// lava burns
+			if player_in_lava(cur, player.pos) {
+				player.lava_timer += dt
+				if player.lava_timer > 0.4 {
+					player_damage(&player, 2, Vec3{0, 0, 0})
+					player.lava_timer = 0
+				}
+			} else {
+				player.lava_timer = 0
+			}
+
+			world_stream(cur, player.pos)
+			mobs_update(cur, &player, &cur.mobs, dt)
+			items_update(cur, &player, &cur.items, dt)
+			arrows_update(cur, &player, dt)
+			particles_update(cur, &cur.particles, dt)
 		}
 		g_input.nav_up = false;g_input.nav_down = false;g_input.nav_left = false;g_input.nav_right = false
 
 		if net_active() {
 			net_send_pos(&player)
-			net_apply_edits(&world)
+			net_apply_edits(cur)
 		}
 
-		render_remesh(&world, player.pos)
-		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
+		render_remesh(cur, player.pos)
+		render_frame(cur, &player, g_input.fb_w, g_input.fb_h)
 		fw, fh := int(g_input.fb_w), int(g_input.fb_h)
 		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
 		else if g_show_settings do ui_draw_settings(fw, fh)

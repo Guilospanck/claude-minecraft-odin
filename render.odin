@@ -215,7 +215,13 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	fog_col := sky
 	fog_start := f32(CHUNK_W * (g_settings.render_radius - 2))
 	fog_end := f32(CHUNK_W * g_settings.render_radius)
-	if underwater {
+	nether := w.dimension == .Nether
+	if nether {
+		fog_col = Vec3{0.24, 0.05, 0.05} // murky red haze
+		fog_start = 3.0
+		fog_end = f32(CHUNK_W * g_settings.render_radius) * 0.65
+		ambient = 0.72 // dim ambient glow, no sun
+	} else if underwater {
 		fog_col = Vec3{0.10, 0.24, 0.42}
 		fog_start = 1.5
 		fog_end = 22.0
@@ -231,7 +237,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	proj := proj_matrix(aspect)
 	vp := proj * view
 
-	if !underwater do sky_render(eye, vp, w.time_of_day)
+	if !underwater && !nether do sky_render(eye, vp, w.time_of_day)
 
 	gl.UseProgram(r_chunk_prog)
 	set_mat4(u_mvp, vp)

@@ -19,6 +19,10 @@ BlockId :: enum u8 {
 	Iron,
 	Glass,
 	Cactus,
+	Obsidian,
+	Portal,
+	Netherrack,
+	Lava,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -26,6 +30,10 @@ block_emission :: proc(b: BlockId) -> u8 {
 	#partial switch b {
 	case .Glowstone:
 		return 15
+	case .Lava:
+		return 12
+	case .Portal:
+		return 11
 	}
 	return 0
 }
@@ -42,7 +50,7 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water:
+	case .Air, .Water, .Lava, .Portal:
 		return false
 	}
 	return true
@@ -51,24 +59,24 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass:
+	case .Air, .Water, .Glass, .Portal:
 		return false
 	}
-	return true
+	return true // Lava renders opaque (solid-looking) though it isn't collidable
 }
 
 // Drawn in the translucent pass (blended, no depth write).
 block_is_translucent :: proc(b: BlockId) -> bool {
-	return b == .Water || b == .Glass
+	return b == .Water || b == .Glass || b == .Portal
 }
 
 // Should a face of `cur` against neighbour `nb` be emitted?
 face_visible :: proc(cur, nb: BlockId) -> bool {
-	if cur == .Water {
-		return nb == .Air // water only shows its surface / edges
+	if cur == .Water || cur == .Lava {
+		return nb == .Air // fluids show their surface / edges
 	}
-	if cur == .Glass {
-		return !block_is_opaque(nb) && nb != .Glass // hide glass-glass seams
+	if cur == .Glass || cur == .Portal {
+		return !block_is_opaque(nb) && nb != cur // hide same-type seams
 	}
 	return !block_is_opaque(nb)
 }
@@ -109,6 +117,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.GLASS
 	case .Cactus:
 		return ad.CACTUS
+	case .Obsidian:
+		return ad.OBSIDIAN
+	case .Portal:
+		return ad.PORTAL
+	case .Netherrack:
+		return ad.NETHERRACK
+	case .Lava:
+		return ad.LAVA
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -148,6 +164,14 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.70, 0.85, 0.95}
 	case .Cactus:
 		return {0.25, 0.48, 0.25}
+	case .Obsidian:
+		return {0.14, 0.10, 0.20}
+	case .Portal:
+		return {0.55, 0.25, 0.75}
+	case .Netherrack:
+		return {0.45, 0.14, 0.14}
+	case .Lava:
+		return {0.95, 0.45, 0.12}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -188,6 +212,14 @@ block_name :: proc(b: BlockId) -> string {
 		return "Glass"
 	case .Cactus:
 		return "Cactus"
+	case .Obsidian:
+		return "Obsidian"
+	case .Portal:
+		return "Portal"
+	case .Netherrack:
+		return "Netherrack"
+	case .Lava:
+		return "Lava"
 	}
 	return "?"
 }

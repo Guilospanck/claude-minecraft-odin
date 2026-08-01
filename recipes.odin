@@ -20,6 +20,7 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Sand, 4}, {.Ore, 1}, {}}, n_in = 2, out = .Glowstone, out_count = 1},
 	{inputs = {{.Ore, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Iron, out_count = 1, needs_furnace = true},
 	{inputs = {{.Sand, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Glass, out_count = 1, needs_furnace = true},
+	{inputs = {{.Stone, 8}, {}, {}}, n_in = 1, out = .Obsidian, out_count = 4},
 }
 
 g_show_crafting: bool

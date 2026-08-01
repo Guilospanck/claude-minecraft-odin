@@ -94,6 +94,17 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 			case "cactus":
 				ridge := (px % 5 == 0)
 				c = shade(Color{54, 112, 54, 255}, jitter(gx, gy, 10) + (ridge ? -20 : 8))
+			case "obsidian":
+				spec := ((jitter(gx * 2, gy * 2, 100) + 100) % 9) < 2
+				c = spec ? Color{80, 50, 110, 255} : shade(Color{28, 20, 40, 255}, jitter(gx, gy, 8))
+			case "portal":
+				sw := ((jitter(gx, gy * 2, 100) + 100) % 4) < 1
+				c = sw ? Color{170, 90, 220, 255} : shade(Color{110, 45, 170, 255}, jitter(gx, gy, 16))
+			case "netherrack":
+				c = shade(Color{110, 34, 34, 255}, jitter(gx, gy, 16))
+			case "lava":
+				hot := ((jitter(gx, gy, 100) + 100) % 3) < 1
+				c = hot ? Color{255, 180, 40, 255} : shade(Color{224, 96, 24, 255}, jitter(gx, gy, 18))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
 			case:
@@ -133,6 +144,10 @@ main :: proc() {
 	paint(ad.IRON, Color{198, 198, 205, 255}, "iron")
 	paint(ad.GLASS, Color{176, 214, 232, 255}, "glass")
 	paint(ad.CACTUS, Color{54, 112, 54, 255}, "cactus")
+	paint(ad.OBSIDIAN, Color{28, 20, 40, 255}, "obsidian")
+	paint(ad.PORTAL, Color{110, 45, 170, 255}, "portal")
+	paint(ad.NETHERRACK, Color{110, 34, 34, 255}, "netherrack")
+	paint(ad.LAVA, Color{224, 96, 24, 255}, "lava")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

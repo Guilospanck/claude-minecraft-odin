@@ -110,7 +110,7 @@ ui_draw_crafting :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		)
 		y -= ch_h * 1.9
 	}
-	text_center("PRESS 1-4 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
+	text_center("PRESS 1-5 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
 }
 
 // Minecraft-style hotbar: 9 slots (keys 1-9) with block swatch, count, and a
