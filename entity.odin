@@ -7,18 +7,20 @@ MobKind :: enum {
 	Sheep,
 	Cow,
 	Chicken,
+	Rabbit,
 	Zombie,
+	Skeleton,
 }
 
 MOB_KIND_COUNT :: len(MobKind)
-PASSIVE_COUNT :: 4 // Pig..Chicken; Zombie is hostile and spawns separately
+PASSIVE_COUNT :: 5 // Pig..Rabbit; hostiles spawn separately
 
 ZOMBIE_DETECT :: f32(18.0)
 ZOMBIE_REACH :: f32(1.5)
 ZOMBIE_DMG :: 3
 
 mob_is_hostile :: proc(k: MobKind) -> bool {
-	return k == .Zombie
+	return k == .Zombie || k == .Skeleton
 }
 
 Mob :: struct {
@@ -42,11 +44,13 @@ MobDims :: struct {
 }
 
 MOB_DIMS := [MobKind]MobDims {
-	.Pig     = {0.45, 0.9, 2.2},
-	.Sheep   = {0.45, 1.2, 2.0},
-	.Cow     = {0.5, 1.4, 1.9},
-	.Chicken = {0.3, 0.7, 2.6},
-	.Zombie  = {0.35, 1.9, 3.2},
+	.Pig      = {0.45, 0.9, 2.2},
+	.Sheep    = {0.45, 1.2, 2.0},
+	.Cow      = {0.5, 1.4, 1.9},
+	.Chicken  = {0.3, 0.7, 2.6},
+	.Rabbit   = {0.25, 0.5, 2.8},
+	.Zombie   = {0.35, 1.9, 3.2},
+	.Skeleton = {0.33, 1.85, 3.8},
 }
 
 MOB_CAP :: 22
@@ -152,8 +156,8 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	)
 }
 
-// Hostile spawn: zombies appear at night on any solid surface with headroom.
-zombie_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
+// Hostile spawn: zombies/skeletons appear at night on solid ground.
+hostile_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if len(mobs^) >= MOB_CAP do return
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(24, 46)
@@ -166,14 +170,16 @@ zombie_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if world_block(w, wx, sy + 1, wz) == .Water do return
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return
 
+	kind: MobKind = rng_f32() < 0.5 ? .Zombie : .Skeleton
+	hp := kind == .Zombie ? 12 : 8
 	append(
 		mobs,
 		Mob {
-			kind = .Zombie,
+			kind = kind,
 			pos = Vec3{f32(wx) + 0.5, f32(sy + 1), f32(wz) + 0.5},
 			yaw = rng_range(0, 2 * math.PI),
 			ai_timer = rng_range(0, 2),
-			health = 12,
+			health = hp,
 		},
 	)
 }
@@ -206,7 +212,7 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 	player_pos := p.pos
 	if rng_f32() < 0.03 do mob_try_spawn(w, mobs, player_pos)
-	if is_night(w.time_of_day) && rng_f32() < 0.05 do zombie_try_spawn(w, mobs, player_pos)
+	if is_night(w.time_of_day) && rng_f32() < 0.05 do hostile_try_spawn(w, mobs, player_pos)
 
 	i := 0
 	for i < len(mobs^) {

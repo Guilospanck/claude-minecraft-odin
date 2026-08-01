@@ -14,11 +14,13 @@ Player :: struct {
 	fly:        bool,
 	selected:   BlockId,
 	step_accum: f32, // distance walked since the last footstep sound
-	health:     int,
-	hurt_timer: f32, // brief invulnerability after taking damage
-	fall_speed: f32, // tracked while airborne for fall damage
-	respawn:    Vec3,
-	inventory:  [BlockId]int,
+	health:      int,
+	hurt_timer:  f32, // brief invulnerability after taking damage
+	safe_timer:  f32, // time since last damage (gates regen)
+	regen_timer: f32, // accumulates toward the next regen tick
+	fall_speed:  f32, // tracked while airborne for fall damage
+	respawn:     Vec3,
+	inventory:   [BlockId]int,
 }
 
 HOTBAR := [9]BlockId {
@@ -58,6 +60,7 @@ player_damage :: proc(p: ^Player, amount: int, dir: Vec3) {
 	if p.hurt_timer > 0 do return
 	p.health -= amount
 	p.hurt_timer = 0.5
+	p.safe_timer = 0 // pause regen after taking a hit
 	if dir.x != 0 || dir.z != 0 {
 		p.vel.x += dir.x * 5
 		p.vel.z += dir.z * 5
@@ -130,9 +133,21 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 }
 
-// Per-frame player upkeep: invulnerability timer + footstep sounds.
+// Per-frame player upkeep: timers, health regen, footstep sounds.
 player_tick :: proc(p: ^Player, dt: f32) {
 	if p.hurt_timer > 0 do p.hurt_timer -= dt
+
+	// regenerate 1 HP every 1.5s once unharmed for 4s
+	p.safe_timer += dt
+	if p.safe_timer > 4.0 && p.health < MAX_HEALTH {
+		p.regen_timer += dt
+		if p.regen_timer > 1.5 {
+			p.health += 1
+			p.regen_timer = 0
+		}
+	} else {
+		p.regen_timer = 0
+	}
 
 	if p.on_ground && !p.fly {
 		sp := math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
