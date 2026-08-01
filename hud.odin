@@ -57,42 +57,36 @@ hud_rect :: proc(x0, y0, x1, y1: f32, col: Vec4) {
 	gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }
 
-// Ten heart pips at the bottom-left; each represents 2 health points.
+// Ten heart icons at the bottom-left; each represents 2 health points.
 hud_draw_health :: proc(health, fbw, fbh: int) {
-	gl.UseProgram(h_prog)
-	gl.Disable(gl.DEPTH_TEST)
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	sz: f32 = 0.04
+	sz: f32 = 0.052
 	w := sz / aspect
-	gap: f32 = 0.006
-	x_start: f32 = -0.96
-	y0: f32 = -0.90
+	gap: f32 = 0.004
+	x_start: f32 = -0.97
+	y0: f32 = -0.91
 	for i in 0 ..< 10 {
 		x0 := x_start + f32(i) * (w + gap)
-		filled := health > i * 2
-		col := filled ? Vec4{0.90, 0.16, 0.16, 1} : Vec4{0.22, 0.22, 0.22, 1}
-		hud_rect(x0, y0, x0 + w, y0 + sz, col)
+		hp := health - i * 2
+		idx := hp >= 2 ? 0 : (hp == 1 ? 1 : 2) // full / half / empty heart
+		hud_icon(x0, y0, x0 + w, y0 + sz, idx)
 	}
-	gl.Enable(gl.DEPTH_TEST)
 }
 
-// Ten hunger pips at the bottom-right (each = 2 hunger points).
+// Ten drumstick icons at the bottom-right (each = 2 hunger points).
 hud_draw_hunger :: proc(hunger, fbw, fbh: int) {
-	gl.UseProgram(h_prog)
-	gl.Disable(gl.DEPTH_TEST)
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	sz: f32 = 0.04
+	sz: f32 = 0.052
 	w := sz / aspect
-	gap: f32 = 0.006
-	y0: f32 = -0.90
-	x_end: f32 = 0.96
+	gap: f32 = 0.004
+	y0: f32 = -0.91
+	x_end: f32 = 0.97
 	for i in 0 ..< 10 {
 		x1 := x_end - f32(i) * (w + gap)
-		filled := hunger > i * 2
-		col := filled ? Vec4{0.80, 0.52, 0.16, 1} : Vec4{0.22, 0.20, 0.18, 1}
-		hud_rect(x1 - w, y0, x1, y0 + sz, col)
+		hg := hunger - i * 2
+		idx := hg >= 2 ? 3 : (hg == 1 ? 4 : 5) // full / half / empty drumstick
+		hud_icon(x1 - w, y0, x1, y0 + sz, idx)
 	}
-	gl.Enable(gl.DEPTH_TEST)
 }
 
 // A swatch of the currently selected block, bottom-centre.

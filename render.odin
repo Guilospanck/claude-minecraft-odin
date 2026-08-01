@@ -68,6 +68,7 @@ render_init :: proc(atlas: u32) {
 	sky_init()
 	text_init()
 	minimap_init()
+	icons_init()
 
 	gl.GenVertexArrays(1, &r_outline_vao)
 	gl.GenBuffers(1, &r_outline_vbo)
