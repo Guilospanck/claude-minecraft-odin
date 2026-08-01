@@ -31,6 +31,7 @@ Mob :: struct {
 	walk_phase:   f32, // drives leg animation
 	ai_timer:     f32,
 	attack_timer: f32, // hostile melee cooldown
+	burn_accum:   f32, // fractional daylight-burn damage
 	health:       int,
 }
 
@@ -211,7 +212,13 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 	for i < len(mobs^) {
 		m := &mobs^[i]
 		if mob_is_hostile(m.kind) && is_day(w.time_of_day) {
-			m.health -= 1 // burn up in daylight
+			// dt-scaled burn: ~6 hp/s, so a 12-hp zombie lasts ~2s in daylight
+			m.burn_accum += 6.0 * dt
+			if m.burn_accum >= 1.0 {
+				d := int(m.burn_accum)
+				m.health -= d
+				m.burn_accum -= f32(d)
+			}
 		}
 		dx := m.pos.x - player_pos.x
 		dz := m.pos.z - player_pos.z
