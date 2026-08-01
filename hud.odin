@@ -37,6 +37,9 @@ hud_draw :: proc(fbw, fbh: i32) {
 	gl.UseProgram(h_prog)
 	gl.Uniform4f(h_color, 1.0, 1.0, 1.0, 0.85)
 	gl.Disable(gl.DEPTH_TEST)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	gl.DrawArrays(gl.LINES, 0, 4)
+	gl.Disable(gl.BLEND)
 	gl.Enable(gl.DEPTH_TEST)
 }

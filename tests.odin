@@ -92,6 +92,54 @@ test_collision_lands_on_floor :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ground_stable_high_fps :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for x in 0 ..< CHUNK_W {
+		for z in 0 ..< CHUNK_D {
+			chunk_set(c, x, 10, z, .Stone)
+		}
+	}
+	p: Player
+	player_init(&p, Vec3{8.5, 13.0, 8.5})
+	dt: f32 = 1.0 / 240.0
+	for _ in 0 ..< 600 {
+		physics_update(&w, &p, dt) // settle onto the floor
+	}
+	stable := true
+	for _ in 0 ..< 240 {
+		physics_update(&w, &p, dt)
+		if !p.on_ground {
+			stable = false
+			break
+		}
+	}
+	testing.expect(t, stable, "on_ground must stay true at 240 fps (no flicker)")
+	testing.expect(t, p.pos.y >= 10.9 && p.pos.y <= 11.1, "still resting on the floor")
+}
+
+@(test)
+test_no_tunnel_terminal_velocity :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a single 1-block-thick floor at y=40
+	for x in 0 ..< CHUNK_W {
+		for z in 0 ..< CHUNK_D {
+			chunk_set(c, x, 40, z, .Stone)
+		}
+	}
+	p: Player
+	player_init(&p, Vec3{8.5, 44.0, 8.5})
+	p.vel.y = -TERMINAL_VEL
+	// worst case: one big clamped-dt step that would otherwise skip the floor
+	for _ in 0 ..< 30 {
+		physics_update(&w, &p, 0.05)
+	}
+	testing.expect(t, p.pos.y >= 40.9, "must not tunnel through the 1-block floor")
+	testing.expect(t, p.on_ground, "should come to rest on the floor")
+}
+
+@(test)
 test_mesher_single_block :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

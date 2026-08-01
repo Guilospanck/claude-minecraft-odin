@@ -31,9 +31,20 @@ world_block :: proc(w: ^World, wx, wy, wz: int) -> BlockId {
 	return c.blocks[chunk_index(lx, wy, lz)]
 }
 
+// Dirty the full 8-neighbourhood: face neighbours share border faces, and
+// diagonal neighbours are sampled by corner ambient-occlusion.
 @(private = "file")
 mark_neighbors_dirty :: proc(w: ^World, coord: Ivec2) {
-	offs := [4]Ivec2{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+	offs := [8]Ivec2 {
+		{1, 0},
+		{-1, 0},
+		{0, 1},
+		{0, -1},
+		{1, 1},
+		{1, -1},
+		{-1, 1},
+		{-1, -1},
+	}
 	for off in offs {
 		if nc, ok := w.chunks[Ivec2{coord.x + off.x, coord.y + off.y}]; ok {
 			nc.dirty = true
@@ -52,11 +63,16 @@ world_set_block :: proc(w: ^World, wx, wy, wz: int, b: BlockId) {
 	lz := wz - cz * CHUNK_D
 	c.blocks[chunk_index(lx, wy, lz)] = b
 	c.dirty = true
-	// border edits also dirty the adjacent chunk
+	// border edits also dirty the adjacent chunk (shared faces)
 	if lx == 0 do mark_dirty(w, Ivec2{cx - 1, cz})
 	if lx == CHUNK_W - 1 do mark_dirty(w, Ivec2{cx + 1, cz})
 	if lz == 0 do mark_dirty(w, Ivec2{cx, cz - 1})
 	if lz == CHUNK_D - 1 do mark_dirty(w, Ivec2{cx, cz + 1})
+	// corner edits also dirty the diagonal chunk (corner AO)
+	if lx == 0 && lz == 0 do mark_dirty(w, Ivec2{cx - 1, cz - 1})
+	if lx == 0 && lz == CHUNK_D - 1 do mark_dirty(w, Ivec2{cx - 1, cz + 1})
+	if lx == CHUNK_W - 1 && lz == 0 do mark_dirty(w, Ivec2{cx + 1, cz - 1})
+	if lx == CHUNK_W - 1 && lz == CHUNK_D - 1 do mark_dirty(w, Ivec2{cx + 1, cz + 1})
 }
 
 @(private = "file")
@@ -125,7 +141,7 @@ world_stream :: proc(w: ^World, cam: Vec3) {
 	}
 	for coord in remove {
 		c := w.chunks[coord]
-		save_chunk(c)
+		if !save_chunk(c) do continue // keep it loaded and retry next frame
 		chunk_gl_free(c)
 		delete(c.blocks)
 		free(c)

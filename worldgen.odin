@@ -127,8 +127,11 @@ generate_trees :: proc(
 	heights: []int,
 	biomes: []Biome,
 ) {
-	for lz in 2 ..< CHUNK_D - 2 {
-		for lx in 2 ..< CHUNK_W - 2 {
+	// Every column is eligible: the trunk is always in-bounds and chunk_set
+	// silently clips any canopy leaves that spill past the chunk edge, so this
+	// gives a uniform tree distribution instead of bald strips along seams.
+	for lz in 0 ..< CHUNK_D {
+		for lx in 0 ..< CHUNK_W {
 			biome := biomes[lx + lz * CHUNK_W]
 			if biome != .Plains && biome != .Forest do continue
 

@@ -16,7 +16,9 @@ chunk_path :: proc(coord: Ivec2) -> string {
 }
 
 // Run-length encode the block array: [id u8][run u16 little-endian] records.
-save_chunk :: proc(c: ^Chunk) {
+// Returns false (and logs) if the write failed, so callers can avoid dropping
+// the chunk's edits.
+save_chunk :: proc(c: ^Chunk) -> bool {
 	save_ensure_dir()
 	buf := make([dynamic]u8, 0, 4096)
 	defer delete(buf)
@@ -31,7 +33,11 @@ save_chunk :: proc(c: ^Chunk) {
 		append(&buf, u8(b), u8(run & 0xff), u8((run >> 8) & 0xff))
 		i += run
 	}
-	_ = os.write_entire_file(chunk_path(c.coord), buf[:])
+	if err := os.write_entire_file(chunk_path(c.coord), buf[:]); err != nil {
+		fmt.eprintln("save_chunk failed:", chunk_path(c.coord), err)
+		return false
+	}
+	return true
 }
 
 load_chunk :: proc(coord: Ivec2) -> (^Chunk, bool) {
@@ -68,7 +74,9 @@ save_meta :: proc(seed: u64) {
 	for i in 0 ..< 8 {
 		buf[i] = u8((seed >> uint(i * 8)) & 0xff)
 	}
-	_ = os.write_entire_file(fmt.tprintf("%s/meta", WORLD_DIR), buf[:])
+	if err := os.write_entire_file(fmt.tprintf("%s/meta", WORLD_DIR), buf[:]); err != nil {
+		fmt.eprintln("save_meta failed:", err)
+	}
 }
 
 load_meta :: proc() -> (u64, bool) {

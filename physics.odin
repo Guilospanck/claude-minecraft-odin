@@ -29,19 +29,30 @@ player_collides :: proc(w: ^World, pos: Vec3) -> bool {
 	return false
 }
 
-// Move one axis by `disp`; on collision, snap flush to the blocking face and
-// zero that axis' velocity. Returns whether a collision happened.
+// Substep length: keep any single collision test under one block so a fast
+// fall (up to TERMINAL_VEL*dt_max = 3 blocks) can't tunnel a 1-block floor.
+@(private = "file")
+MAX_STEP :: f32(0.5)
+
+// Move one axis by `disp` (substepped); on collision, snap flush to the
+// blocking face and zero that axis' velocity. Returns whether it collided.
 @(private = "file")
 move_axis :: proc(w: ^World, p: ^Player, disp: f32, axis: int) -> bool {
-	p.pos[axis] += disp
-	if player_collides(w, p.pos) {
-		if disp > 0 {
-			p.pos[axis] = math.floor(p.pos[axis] + HI[axis]) - HI[axis] - EPS
-		} else if disp < 0 {
-			p.pos[axis] = math.floor(p.pos[axis] + LO[axis]) + 1 - LO[axis] + EPS
+	remaining := disp
+	for {
+		step := clamp(remaining, -MAX_STEP, MAX_STEP)
+		p.pos[axis] += step
+		if player_collides(w, p.pos) {
+			if step > 0 {
+				p.pos[axis] = math.floor(p.pos[axis] + HI[axis]) - HI[axis] - EPS
+			} else if step < 0 {
+				p.pos[axis] = math.floor(p.pos[axis] + LO[axis]) + 1 - LO[axis] + EPS
+			}
+			p.vel[axis] = 0
+			return true
 		}
-		p.vel[axis] = 0
-		return true
+		remaining -= step
+		if math.abs(remaining) < 1e-5 do break
 	}
 	return false
 }
@@ -58,7 +69,13 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 
 	move_axis(w, p, p.vel.x * dt, 0)
 	move_axis(w, p, p.vel.z * dt, 2)
+	move_axis(w, p, p.vel.y * dt, 1)
 
-	dy := p.vel.y * dt
-	p.on_ground = move_axis(w, p, dy, 1) && dy < 0
+	// Ground contact from a small probe below the feet, independent of whether
+	// we collided this exact frame (which fails at high frame rates where the
+	// per-frame gravity drop is smaller than the resting EPS gap).
+	p.on_ground = player_collides(w, p.pos - Vec3{0, 2 * EPS, 0})
+	if p.on_ground && p.vel.y < 0 {
+		p.vel.y = 0
+	}
 }
