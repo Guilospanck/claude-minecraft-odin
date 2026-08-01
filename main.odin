@@ -17,9 +17,9 @@ scan_biomes :: proc(w: ^World) {
 		}
 	}
 	lim := SR * CHUNK_W
-	best_g, best_w, best_s := 1 << 30, 1 << 30, 1 << 30
-	gx, gy, gz, wx0, wy0, wz0, sx, sy0, sz := 0, 0, 0, 0, 0, 0, 0, 0, 0
-	fg, fw, fs := false, false, false
+	best_g, best_w, best_s, best_d := 1 << 30, 1 << 30, 1 << 30, 1 << 30
+	gx, gy, gz, wx0, wy0, wz0, sx, sy0, sz, dx0, dy0, dz0 := 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	fg, fw, fs, fd := false, false, false, false
 	for wz in -lim ..< lim {
 		for wx in -lim ..< lim {
 			surf_y := -1
@@ -36,6 +36,9 @@ scan_biomes :: proc(w: ^World) {
 			d := wx * wx + wz * wz
 			if surf_b == .Grass && d < best_g {best_g = d;gx, gy, gz = wx, surf_y, wz;fg = true}
 			if surf_b == .Snow && d < best_s {best_s = d;sx, sy0, sz = wx, surf_y, wz;fs = true}
+			if surf_b == .Sand && surf_y > SEA_LEVEL + 2 && d < best_d {
+				best_d = d;dx0, dy0, dz0 = wx, surf_y, wz;fd = true
+			}
 			if world_block(w, wx, SEA_LEVEL, wz) == .Water && d < best_w {
 				best_w = d
 				wx0, wy0, wz0 = wx, SEA_LEVEL, wz
@@ -46,6 +49,7 @@ scan_biomes :: proc(w: ^World) {
 	fmt.println("grass:", fg, gx, gy, gz)
 	fmt.println("water:", fw, wx0, wy0, wz0)
 	fmt.println("snow: ", fs, sx, sy0, sz)
+	fmt.println("desert:", fd, dx0, dy0, dz0)
 }
 
 // Highest solid block near the world origin, used as the spawn point.
@@ -218,7 +222,7 @@ main :: proc() {
 		fwd := camera_front(player.yaw, 0)
 		right := Vec3{-fwd.z, 0, fwd.x}
 		base := player.pos + fwd * 7
-		blocks := [?]BlockId{.Glass, .Furnace, .Iron, .Glowstone, .Stone}
+		blocks := [?]BlockId{.Glass, .Furnace, .Iron, .Cactus, .Glowstone}
 		for b, k in blocks {
 			x := int(base.x + right.x * f32(k * 2 - 4))
 			z := int(base.z + right.z * f32(k * 2 - 4))

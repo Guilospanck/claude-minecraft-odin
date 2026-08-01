@@ -6,13 +6,17 @@ Biome :: enum {
 	Desert,
 	Snow,
 	Mountains,
+	Savanna,
+	Swamp,
+	Taiga,
 }
 
 @(private = "file")
 classify_biome :: proc(temp, moist, mountain: f32, h: int) -> Biome {
 	if mountain > 0.45 || h > SEA_LEVEL + 30 do return .Mountains
-	if temp > 0.35 && moist < 0.0 do return .Desert
-	if temp < -0.35 do return .Snow
+	if temp < -0.35 do return moist > 0.0 ? .Taiga : .Snow
+	if temp > 0.35 do return moist < -0.15 ? .Desert : .Savanna
+	if moist > 0.30 && h < SEA_LEVEL + 6 do return .Swamp
 	if moist > 0.15 do return .Forest
 	return .Plains
 }
@@ -23,11 +27,11 @@ surface_block :: proc(biome: Biome, h: int) -> BlockId {
 	switch biome {
 	case .Desert:
 		return .Sand
-	case .Snow:
+	case .Snow, .Taiga:
 		return .Snow
 	case .Mountains:
 		return h > SEA_LEVEL + 34 ? .Snow : .Stone
-	case .Plains, .Forest:
+	case .Plains, .Forest, .Savanna, .Swamp:
 		return .Grass
 	}
 	return .Grass
@@ -117,56 +121,77 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 	generate_trees(c, seed, base_x, base_z, heights[:], biomes[:])
 }
 
-// Trees are confined to columns whose canopy fits inside the chunk, so no
-// cross-chunk writes are needed. Deterministic per (world x, world z).
+// Build a tree (round oak or conical spruce). chunk_set clips any leaves that
+// spill past the chunk edge.
 @(private = "file")
-generate_trees :: proc(
-	c: ^Chunk,
-	seed: u64,
-	base_x, base_z: int,
-	heights: []int,
-	biomes: []Biome,
-) {
-	// Every column is eligible: the trunk is always in-bounds and chunk_set
-	// silently clips any canopy leaves that spill past the chunk edge, so this
-	// gives a uniform tree distribution instead of bald strips along seams.
-	for lz in 0 ..< CHUNK_D {
-		for lx in 0 ..< CHUNK_W {
-			biome := biomes[lx + lz * CHUNK_W]
-			if biome != .Plains && biome != .Forest do continue
-
-			surf_y := heights[lx + lz * CHUNK_W] - 1
-			if surf_y < SEA_LEVEL do continue // no trees on beaches / underwater
-			if chunk_get(c, lx, surf_y, lz) != .Grass do continue // cave opening etc.
-
-			wx := base_x + lx
-			wz := base_z + lz
-			hsh := hash_u64(
-				seed ~ (u64(i64(wx)) * 0x9E3779B1) ~ (u64(i64(wz)) * 0x85EBCA77),
-			)
-			chance := biome == .Forest ? u64(40) : u64(8) // per 1000
-			if hsh % 1000 >= chance do continue
-
-			trunk_h := 4 + int((hsh >> 10) % 3) // 4..6
-			trunk_base := surf_y + 1
-			for i in 0 ..< trunk_h {
-				chunk_set(c, lx, trunk_base + i, lz, .Wood)
-			}
-
-			crown := trunk_base + trunk_h - 1
-			for dy in -1 ..= 1 {
-				r := dy == 1 ? 1 : 2
-				for dz in -r ..= r {
-					for dx in -r ..= r {
-						if dx == 0 && dz == 0 && dy < 1 do continue // don't overwrite trunk
-						yy := crown + dy
-						if chunk_get(c, lx + dx, yy, lz + dz) == .Air {
-							chunk_set(c, lx + dx, yy, lz + dz, .Leaves)
-						}
+place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, spruce: bool) {
+	base := surf_y + 1
+	for i in 0 ..< trunk_h {
+		chunk_set(c, lx, base + i, lz, .Wood)
+	}
+	crown := base + trunk_h - 1
+	if spruce {
+		for dy := -3; dy <= 1; dy += 1 {
+			r := dy <= -2 ? 2 : (dy <= 0 ? 1 : 0)
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if abs(dx) == r && abs(dz) == r do continue // clip corners
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
 					}
 				}
 			}
-			chunk_set(c, lx, crown + 2, lz, .Leaves) // little top
+		}
+	} else {
+		for dy in -1 ..= 1 {
+			r := dy == 1 ? 1 : 2
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if dx == 0 && dz == 0 && dy < 1 do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
+	}
+	chunk_set(c, lx, crown + 2, lz, .Leaves)
+}
+
+// Per-biome surface decoration: trees (density/type varies) and desert cacti.
+@(private = "file")
+generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
+	for lz in 2 ..< CHUNK_D - 2 {
+		for lx in 2 ..< CHUNK_W - 2 {
+			biome := biomes[lx + lz * CHUNK_W]
+			surf_y := heights[lx + lz * CHUNK_W] - 1
+			if surf_y < SEA_LEVEL do continue
+			surf := chunk_get(c, lx, surf_y, lz)
+
+			wx := base_x + lx
+			wz := base_z + lz
+			hsh := hash_u64(seed ~ (u64(i64(wx)) * 0x9E3779B1) ~ (u64(i64(wz)) * 0x85EBCA77))
+			r := hsh % 1000
+			th := int((hsh >> 10) % 3)
+
+			switch biome {
+			case .Desert:
+				if surf == .Sand && r < 8 {
+					for i in 0 ..< 1 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
+				}
+			case .Forest:
+				if surf == .Grass && r < 45 do place_tree(c, lx, surf_y, lz, 4 + th, false)
+			case .Swamp:
+				if surf == .Grass && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, false)
+			case .Plains:
+				if surf == .Grass && r < 8 do place_tree(c, lx, surf_y, lz, 4 + th, false)
+			case .Savanna:
+				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, false)
+			case .Taiga:
+				if surf == .Snow && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, true)
+			case .Snow, .Mountains:
+			// bare
+			}
 		}
 	}
 }

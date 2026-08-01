@@ -91,6 +91,9 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 			case "glass":
 				edge := px == 0 || py == 0 || px == 15 || py == 15
 				c = edge ? Color{210, 232, 244, 255} : shade(Color{176, 214, 232, 255}, jitter(gx, gy, 6))
+			case "cactus":
+				ridge := (px % 5 == 0)
+				c = shade(Color{54, 112, 54, 255}, jitter(gx, gy, 10) + (ridge ? -20 : 8))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
 			case:
@@ -129,6 +132,7 @@ main :: proc() {
 	paint(ad.FURNACE, Color{86, 86, 90, 255}, "furnace")
 	paint(ad.IRON, Color{198, 198, 205, 255}, "iron")
 	paint(ad.GLASS, Color{176, 214, 232, 255}, "glass")
+	paint(ad.CACTUS, Color{54, 112, 54, 255}, "cactus")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

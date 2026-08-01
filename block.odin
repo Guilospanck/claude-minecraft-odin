@@ -18,6 +18,7 @@ BlockId :: enum u8 {
 	Furnace,
 	Iron,
 	Glass,
+	Cactus,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -106,6 +107,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.IRON
 	case .Glass:
 		return ad.GLASS
+	case .Cactus:
+		return ad.CACTUS
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -143,6 +146,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.78, 0.78, 0.82}
 	case .Glass:
 		return {0.70, 0.85, 0.95}
+	case .Cactus:
+		return {0.25, 0.48, 0.25}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -181,6 +186,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Iron"
 	case .Glass:
 		return "Glass"
+	case .Cactus:
+		return "Cactus"
 	}
 	return "?"
 }

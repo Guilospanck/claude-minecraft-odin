@@ -25,3 +25,4 @@ GLOWSTONE  :: Tile{12, 0}
 FURNACE    :: Tile{13, 0}
 IRON       :: Tile{14, 0}
 GLASS      :: Tile{15, 0}
+CACTUS     :: Tile{0, 1}
