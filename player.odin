@@ -106,20 +106,31 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 		eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
 		dir := camera_front(p.yaw, p.pitch)
 		hit := raycast(w, eye, dir, REACH)
-		if hit.hit {
-			if g_input.break_req {
+		block_dist :=
+			hit.hit \
+			? linalg.length(Vec3{f32(hit.bx) + 0.5, f32(hit.by) + 0.5, f32(hit.bz) + 0.5} - eye) \
+			: REACH
+
+		if g_input.break_req {
+			// A left click punches a mob if one is under the crosshair and
+			// nearer than the targeted block; otherwise it breaks the block.
+			mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
+			if mob_idx >= 0 && mob_t <= block_dist {
+				mob_hit(&w.mobs, mob_idx, dir)
+			} else if hit.hit {
 				world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
 			}
-			if g_input.place_req {
-				tx := hit.bx + hit.nx
-				ty := hit.by + hit.ny
-				tz := hit.bz + hit.nz
-				if ty >= 0 &&
-				   ty < CHUNK_H &&
-				   world_block(w, tx, ty, tz) == .Air &&
-				   !block_hits_player(p, tx, ty, tz) {
-					world_set_block(w, tx, ty, tz, p.selected)
-				}
+		}
+
+		if g_input.place_req && hit.hit {
+			tx := hit.bx + hit.nx
+			ty := hit.by + hit.ny
+			tz := hit.bz + hit.nz
+			if ty >= 0 &&
+			   ty < CHUNK_H &&
+			   world_block(w, tx, ty, tz) == .Air &&
+			   !block_hits_player(p, tx, ty, tz) {
+				world_set_block(w, tx, ty, tz, p.selected)
 			}
 		}
 	}

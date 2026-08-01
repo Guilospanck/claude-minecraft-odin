@@ -73,6 +73,7 @@ main :: proc() {
 		save_meta(seed)
 	}
 	fmt.println("world seed:", seed)
+	rng_seed(seed ~ 0xA5A5_5A5A_C3C3_3C3C)
 
 	world: World
 	world_init(&world, seed)
@@ -117,6 +118,14 @@ main :: proc() {
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
 
+	// Debug: MC_MOBS=N force-spawns N animals in front of the camera.
+	if s := os.get_env("MC_MOBS", context.temp_allocator); s != "" {
+		if n, ok := strconv.parse_int(s); ok {
+			fwd := camera_front(player.yaw, 0)
+			mob_debug_populate(&world, &world.mobs, player.pos + fwd * 8, n)
+		}
+	}
+
 	frame := 0
 	last := glfw.GetTime()
 	for !glfw.WindowShouldClose(win) {
@@ -134,6 +143,7 @@ main :: proc() {
 		physics_update(&world, &player, dt)
 		handle_break_place(&world, &player)
 		world_stream(&world, player.pos)
+		mobs_update(&world, &world.mobs, player.pos, dt)
 		render_remesh(&world, player.pos)
 		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
 

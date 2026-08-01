@@ -16,6 +16,11 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 - Raycast (Amanatides–Woo) block **break** / **place** with a targeting outline.
 - Translucent water pass, distance fog, textured atlas, crosshair HUD.
 - World **save/load** (per-chunk RLE files) with a persistent seed.
+- **Animals** — pigs, sheep, cows, and chickens as blocky multi-box models
+  with leg animation, wandering AI, gravity/collision, step auto-jump, and
+  ring spawning / distance despawn. Left click punches (and can kill) them.
+
+![animals](docs/mobs.png)
 
 ## Requirements
 
@@ -43,7 +48,7 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 | `Left Shift`     | Fly down                  |
 | `F`              | Toggle fly (noclip)       |
 | `1`–`9`          | Select hotbar block       |
-| Left click       | Break block               |
+| Left click       | Break block / punch animal |
 | Right click      | Place selected block      |
 | `Esc`            | Quit (saves the world)    |
 
@@ -58,6 +63,7 @@ odin test .           # noise, chunk indexing, raycast, collision, meshing, save
 - `MC_FRAMES=N` – render N frames then exit cleanly (headless smoke test).
 - `MC_SHOT=path.png` – write a screenshot of the final frame.
 - `MC_CAM="x,y,z,yaw,pitch"` – override the camera (enables fly).
+- `MC_MOBS=N` – force-spawn N animals in front of the camera.
 - `MC_SCAN=1` – generate a region, print nearby biome coordinates, and exit.
 
 ## Layout

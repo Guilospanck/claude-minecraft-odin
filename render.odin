@@ -62,6 +62,8 @@ render_init :: proc(atlas: u32) {
 	gl.FrontFace(gl.CCW)
 	gl.ClearColor(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1.0)
 
+	entity_render_init()
+
 	gl.GenVertexArrays(1, &r_outline_vao)
 	gl.GenBuffers(1, &r_outline_vbo)
 	gl.BindVertexArray(r_outline_vao)
@@ -229,6 +231,8 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	}
 	gl.DepthMask(true)
 	gl.Disable(gl.BLEND)
+
+	entity_render_frame(&w.mobs, vp)
 
 	draw_outline(w, p, vp)
 	hud_draw(fbw, fbh)
