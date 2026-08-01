@@ -68,12 +68,25 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			fx := f32(wx)
 			fz := f32(wz)
 
-			hn := fbm2(seed, fx * 0.010, fz * 0.010, 4) // smoother rolling hills
+			// Large-scale continent + local roughness blend flat plains and
+			// rough highlands continuously (no cliffs at biome seams).
+			continent := fbm2(seed + 7, fx * 0.0016, fz * 0.0016, 2)
+			rough := wg_smoothstep(-0.15, 0.45, fbm2(seed + 13, fx * 0.004, fz * 0.004, 2))
+			hn := fbm2(seed, fx * 0.010, fz * 0.010, 4)
 			mountain := fbm2(seed + 31, fx * 0.006, fz * 0.006, 3)
-			h := SEA_LEVEL + int(hn * 16.0)
-			// mountains rise gradually (no abrupt cliff at a hard threshold)
+
+			h := SEA_LEVEL + int(continent * 10.0)
+			h += int(hn * (4.0 + rough * 22.0)) // flat where smooth, hilly where rough
 			mfac := wg_smoothstep(0.30, 0.75, mountain)
-			h += int(mfac * 44.0)
+			h += int(mfac * 44.0 * (0.5 + 0.5 * rough))
+
+			// Rivers: winding channels along a low-frequency zero-crossing.
+			river := fbm2(seed + 99, fx * 0.0035, fz * 0.0035, 2)
+			is_river := abs(river) < 0.035
+			if is_river && h > SEA_LEVEL - 2 {
+				h = SEA_LEVEL - 2
+			}
+
 			if h < 4 do h = 4
 			if h > CHUNK_H - 8 do h = CHUNK_H - 8
 
@@ -103,19 +116,25 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 					b = .Water
 				}
 
-				// carve caves, but stay well below the surface so coastlines and
-				// hilltops don't turn into thin bridges / swiss cheese
+				// Caves stay well below the surface so coastlines / hilltops
+				// don't become thin bridges. Deep down, low-frequency 3D noise
+				// opens larger caverns with overhangs.
 				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h - 5 {
 					cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)
 					if cave > 0.72 {
 						b = .Air
+					} else if y < 34 {
+						cav := fbm3(seed + 321, fx * 0.02, f32(y) * 0.03, fz * 0.02, 2)
+						if cav > 0.6 {
+							b = .Air // deep cavern / overhang
+						}
 					}
 				}
 
-				// sparse ore in stone
-				if b == .Stone {
-					ov := value_noise3(seed + 777, fx * 0.19, f32(y) * 0.19, fz * 0.19)
-					if ov > 0.82 {
+				// Ore in connected veins, only deep underground.
+				if b == .Stone && y < 42 {
+					ov := fbm3(seed + 777, fx * 0.08, f32(y) * 0.08, fz * 0.08, 2)
+					if ov > 0.76 {
 						b = .Ore
 					}
 				}
