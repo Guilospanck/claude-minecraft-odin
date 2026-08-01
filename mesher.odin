@@ -156,6 +156,52 @@ emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, 
 	}
 }
 
+// One double-sided textured quad (front + back winding, so it shows through
+// back-face culling). Corners p0..p3 go bottom-left, bottom-right, top-right,
+// top-left; UVs map top->v0, bottom->v1.
+@(private = "file")
+emit_sprite_quad :: proc(arr: ^[dynamic]Vertex, p0, p1, p2, p3: Vec3, u0, v0, u1, v1, shade, bl: f32) {
+	v: [4]Vertex
+	v[0] = {p0, {u0, v1}, shade, bl, {1, 1, 1}}
+	v[1] = {p1, {u1, v1}, shade, bl, {1, 1, 1}}
+	v[2] = {p2, {u1, v0}, shade, bl, {1, 1, 1}}
+	v[3] = {p3, {u0, v0}, shade, bl, {1, 1, 1}}
+	// front (CCW) then back (reversed) so the cross is visible from both sides
+	append(arr, v[0], v[1], v[2], v[0], v[2], v[3])
+	append(arr, v[0], v[2], v[1], v[0], v[3], v[2])
+}
+
+// A cross-sprite (two crossed vertical quads) filling the cell horizontally from
+// `inset`..1-inset and vertically y0..y1.
+@(private = "file")
+emit_sprite :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl, inset, y0, y1: f32) {
+	u0, v0, u1, v1 := tile_uv(block_tile(b, .PosY))
+	shade: f32 = 0.9
+	lo := f32(0) + inset
+	hi := f32(1) - inset
+	x := f32(wx)
+	y := f32(wy)
+	z := f32(wz)
+	// diagonal A: (lo,lo) -> (hi,hi)
+	emit_sprite_quad(
+		arr,
+		{x + lo, y + y0, z + lo},
+		{x + hi, y + y0, z + hi},
+		{x + hi, y + y1, z + hi},
+		{x + lo, y + y1, z + lo},
+		u0, v0, u1, v1, shade, bl,
+	)
+	// diagonal B: (lo,hi) -> (hi,lo)
+	emit_sprite_quad(
+		arr,
+		{x + lo, y + y0, z + hi},
+		{x + hi, y + y0, z + lo},
+		{x + hi, y + y1, z + lo},
+		{x + lo, y + y1, z + hi},
+		u0, v0, u1, v1, shade, bl,
+	)
+}
+
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 	md: MeshData
 	md.opaque = make([dynamic]Vertex, 0, 4096)
@@ -173,6 +219,15 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				if b == .Air do continue
 				wx := base_x + x
 				wz := base_z + z
+				if block_is_sprite(b) {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					if b == .Torch {
+						emit_sprite(&md.opaque, b, wx, y, wz, bl, 0.34, 0.0, 0.62)
+					} else {
+						emit_sprite(&md.opaque, b, wx, y, wz, bl, 0.05, 0.0, 0.95)
+					}
+					continue
+				}
 				for face in Face {
 					fn := FACES[face].n
 					nb := world_block(w, wx + fn.x, y + fn.y, wz + fn.z)

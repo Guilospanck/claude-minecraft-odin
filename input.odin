@@ -20,6 +20,8 @@ InputState :: struct {
 	settings_toggle:      bool, // O
 	craft_toggle:         bool, // T
 	portal:               bool, // P (build a nether portal)
+	interact:             bool, // one-shot R press (use/till/plant/harvest/sleep)
+	confirm:              bool, // one-shot Y press (confirm quit)
 	nav_up, nav_down:     bool, // arrow keys (menus)
 	nav_left, nav_right:  bool,
 	select:               int, // 1..9, or 0 for none
@@ -72,6 +74,10 @@ key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int) 
 		g_input.craft_toggle = true
 	case glfw.KEY_P:
 		g_input.portal = true
+	case glfw.KEY_R:
+		g_input.interact = true
+	case glfw.KEY_Y:
+		g_input.confirm = true
 	case glfw.KEY_UP:
 		g_input.nav_up = true
 	case glfw.KEY_DOWN:

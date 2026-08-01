@@ -45,7 +45,7 @@ raycast :: proc(w: ^World, origin, dir: Vec3, max_dist: f32) -> RayHit {
 	t: f32 = 0
 
 	for t <= max_dist {
-		if block_is_solid(world_block(w, x, y, z)) {
+		if block_stops_ray(world_block(w, x, y, z)) {
 			return RayHit{true, x, y, z, nx, ny, nz, t}
 		}
 		if t_max_x < t_max_y {

@@ -168,6 +168,7 @@ main :: proc() {
 	if os.get_env("MC_INV", context.temp_allocator) != "" do g_show_inventory = true
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
 	if os.get_env("MC_CRAFT", context.temp_allocator) != "" do g_show_crafting = true
+	if os.get_env("MC_QUITUI", context.temp_allocator) != "" do g_show_quit_confirm = true
 
 	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
 	fixed_time: f32 = -1
@@ -281,6 +282,40 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_FARM lays out a tilled field (wheat at each stage), torches, a bed.
+	if os.get_env("MC_FARM", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 6
+		surface_y :: proc(w: ^World, x, z: int) -> int {
+			world_ensure_chunk(w, world_chunk_at(w, x, z))
+			for y := CHUNK_H - 2; y >= 1; y -= 1 {
+				if block_is_solid(world_block(w, x, y, z)) do return y
+			}
+			return SEA_LEVEL
+		}
+		// a 5x4 field of farmland with rows of wheat at increasing stages
+		stages := [?]BlockId{.Wheat1, .Wheat2, .Wheat3, .Wheat3}
+		for row in 0 ..< 4 {
+			for col in 0 ..< 5 {
+				x := int(base.x + right.x * f32(col - 2) + fwd.x * f32(row))
+				z := int(base.z + right.z * f32(col - 2) + fwd.z * f32(row))
+				gy := surface_y(&world, x, z)
+				world_set_block(&world, x, gy, z, .Farmland)
+				world_set_block(&world, x, gy + 1, z, stages[row])
+			}
+		}
+		// torches + a bed flanking the field
+		tx := int(base.x + right.x * 3)
+		tz := int(base.z + right.z * 3)
+		ty := surface_y(&world, tx, tz)
+		world_set_block(&world, tx, ty + 1, tz, .Torch)
+		bx := int(base.x - right.x * 3)
+		bz := int(base.z - right.z * 3)
+		by := surface_y(&world, bx, bz)
+		world_set_block(&world, bx, by + 1, bz, .Bed)
+	}
+
 	// Debug: MC_PARTICLES bursts break-particles ahead.
 	if os.get_env("MC_PARTICLES", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -356,6 +391,9 @@ main :: proc() {
 	g_input.inv_toggle = false
 	g_input.settings_toggle = false
 	g_input.craft_toggle = false
+	g_input.interact = false
+	g_input.confirm = false
+	g_input.portal = false
 
 	frame := 0
 	last := glfw.GetTime()
@@ -373,28 +411,45 @@ main :: proc() {
 		}
 
 		glfw.PollEvents()
+		// ESC opens a quit-confirm overlay (or backs out of a menu / the
+		// overlay). Y on the overlay actually exits.
 		if g_input.quit {
+			g_input.quit = false
+			if g_show_quit_confirm {
+				g_show_quit_confirm = false
+			} else if g_show_inventory || g_show_settings || g_show_crafting {
+				g_show_inventory = false
+				g_show_settings = false
+				g_show_crafting = false
+			} else {
+				g_show_quit_confirm = true
+			}
+		}
+		if g_show_quit_confirm && g_input.confirm {
 			glfw.SetWindowShouldClose(win, true)
 		}
+		g_input.confirm = false
 
-		// menu toggles (mutually exclusive)
-		if g_input.inv_toggle {
-			g_show_inventory = !g_show_inventory
-			if g_show_inventory {g_show_settings = false;g_show_crafting = false}
-			g_input.inv_toggle = false
+		// menu toggles (mutually exclusive; disabled while confirming quit)
+		if !g_show_quit_confirm {
+			if g_input.inv_toggle {
+				g_show_inventory = !g_show_inventory
+				if g_show_inventory {g_show_settings = false;g_show_crafting = false}
+			}
+			if g_input.settings_toggle {
+				g_show_settings = !g_show_settings
+				if g_show_settings {g_show_inventory = false;g_show_crafting = false}
+			}
+			if g_input.craft_toggle {
+				g_show_crafting = !g_show_crafting
+				if g_show_crafting {g_show_inventory = false;g_show_settings = false}
+			}
 		}
-		if g_input.settings_toggle {
-			g_show_settings = !g_show_settings
-			if g_show_settings {g_show_inventory = false;g_show_crafting = false}
-			g_input.settings_toggle = false
-		}
-		if g_input.craft_toggle {
-			g_show_crafting = !g_show_crafting
-			if g_show_crafting {g_show_inventory = false;g_show_settings = false}
-			g_input.craft_toggle = false
-		}
+		g_input.inv_toggle = false
+		g_input.settings_toggle = false
+		g_input.craft_toggle = false
 
-		paused := g_show_inventory || g_show_settings || g_show_crafting
+		paused := g_show_inventory || g_show_settings || g_show_crafting || g_show_quit_confirm
 		if paused {
 			// discard buffered gameplay one-shots so they don't fire on close
 			g_input.dx = 0
@@ -405,6 +460,8 @@ main :: proc() {
 			g_input.smelt = false
 			g_input.eat = false
 			g_input.fly_toggle = false
+			g_input.interact = false
+			g_input.portal = false
 			if g_show_settings {
 				if g_input.nav_up do g_settings_sel = (g_settings_sel + SETTINGS_COUNT - 1) % SETTINGS_COUNT
 				if g_input.nav_down do g_settings_sel = (g_settings_sel + 1) % SETTINGS_COUNT
@@ -420,6 +477,13 @@ main :: proc() {
 			physics_update(cur, &player, dt)
 			player_tick(&player, dt)
 			handle_break_place(cur, &player)
+
+			// R: use/interact (till, plant, harvest, sleep)
+			if g_input.interact {
+				try_interact(cur, &player)
+				g_input.interact = false
+			}
+			crops_tick(cur, dt)
 
 			// build a portal in front of the player (P)
 			if g_input.portal {
@@ -483,6 +547,7 @@ main :: proc() {
 		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
 		else if g_show_settings do ui_draw_settings(fw, fh)
 		else if g_show_crafting do ui_draw_crafting(&player, cur, fw, fh)
+		if g_show_quit_confirm do ui_draw_quit_confirm(fw, fh)
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames
 		if is_last && shot_path != "" {

@@ -30,3 +30,9 @@ OBSIDIAN   :: Tile{1, 1}
 PORTAL     :: Tile{2, 1}
 NETHERRACK :: Tile{3, 1}
 LAVA       :: Tile{4, 1}
+FARMLAND   :: Tile{5, 1}
+WHEAT1     :: Tile{6, 1} // sprite (transparent background)
+WHEAT2     :: Tile{7, 1}
+WHEAT3     :: Tile{8, 1}
+TORCH      :: Tile{9, 1} // sprite
+BED        :: Tile{10, 1}

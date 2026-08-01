@@ -25,6 +25,9 @@ Player :: struct {
 	hunger:      f32, // 0..HUNGER_MAX
 	raw_food:     int, // raw meat dropped by mobs (weak)
 	cooked_food:  int, // cooked in a furnace (restores more hunger)
+	seeds:        int, // plant on farmland
+	wheat:        int, // harvested crop; bake into bread
+	bread:        int, // baked food (restores a good chunk of hunger)
 	portal_timer: f32, // time stood in a portal (triggers dimension travel)
 	lava_timer:   f32, // lava-damage tick
 	starve:      f32, // starvation damage timer
@@ -37,9 +40,9 @@ HOTBAR := [9]BlockId {
 	.Wood,
 	.Sand,
 	.Glass,
+	.Torch,
+	.Bed,
 	.Furnace,
-	.Iron,
-	.Glowstone,
 }
 
 player_init :: proc(p: ^Player, pos: Vec3) {
@@ -66,6 +69,9 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.inventory[.Glass] = 8 // so every hotbar slot starts placeable
 	p.inventory[.Iron] = 8
 	p.inventory[.Obsidian] = 30 // enough to build a nether portal (press P)
+	p.inventory[.Torch] = 16
+	p.inventory[.Bed] = 1
+	p.seeds = 8 // enough to start a small farm (R to till/plant)
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
@@ -173,7 +179,7 @@ player_tick :: proc(p: ^Player, dt: f32) {
 		p.starve = 0
 	}
 
-	// eat: prefer cooked (heals more) over raw
+	// eat: prefer cooked meat (+8), then bread (+6), then raw meat (+3)
 	if g_input.eat {
 		if p.hunger < f32(HUNGER_MAX) {
 			if p.cooked_food > 0 {
@@ -181,6 +187,11 @@ player_tick :: proc(p: ^Player, dt: f32) {
 				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
 				audio_play(.Place, 0.4)
 				fmt.println("ate cooked food — hunger", int(p.hunger))
+			} else if p.bread > 0 {
+				p.bread -= 1
+				p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
+				audio_play(.Place, 0.4)
+				fmt.println("ate bread — hunger", int(p.hunger))
 			} else if p.raw_food > 0 {
 				p.raw_food -= 1
 				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
@@ -245,7 +256,14 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 				mob_hit(w, mob_idx, dir)
 			} else if hit.hit {
 				broken := world_block(w, hit.bx, hit.by, hit.bz)
-				if broken != .Bedrock { // bedrock is unbreakable
+				if block_is_crop(broken) {
+					// harvest by breaking: ripe gives wheat, young gives seeds back
+					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
+					net_send_edit(hit.bx, hit.by, hit.bz, .Air, w.dimension)
+					audio_play(.Break)
+					p.seeds += 1
+					if broken == .Wheat3 do p.wheat += 1
+				} else if broken != .Bedrock { // bedrock is unbreakable
 					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
 					net_send_edit(hit.bx, hit.by, hit.bz, .Air, w.dimension)
 					particle_spawn_break(&w.particles, broken, hit.bx, hit.by, hit.bz)
@@ -255,6 +273,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 						broken,
 						Vec3{f32(hit.bx) + 0.5, f32(hit.by) + 0.3, f32(hit.bz) + 0.5},
 					)
+					if broken == .Grass && rng_int(4) == 0 do p.seeds += 1 // seeds hide in grass
 				}
 			}
 		}
@@ -352,5 +371,11 @@ try_craft :: proc(p: ^Player) {
 		fmt.println("crafted Glowstone (4 Sand + 1 Ore) — now have", p.inventory[.Glowstone])
 		return
 	}
-	fmt.println("craft: 8 Stone -> Furnace, or 4 Sand + 1 Ore -> Glowstone")
+	if p.wheat >= 3 {
+		p.wheat -= 3
+		p.bread += 1
+		fmt.println("baked bread (3 Wheat) — now have", p.bread)
+		return
+	}
+	fmt.println("craft: 8 Stone -> Furnace, 4 Sand + 1 Ore -> Glowstone, 3 Wheat -> Bread")
 }

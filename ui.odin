@@ -4,6 +4,24 @@ import "core:fmt"
 import gl "vendor:OpenGL"
 
 g_show_inventory: bool
+g_show_quit_confirm: bool
+
+// ESC confirmation overlay: Y quits, ESC resumes.
+ui_draw_quit_confirm :: proc(fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	hud_quad(-1, -1, 1, 1, Vec4{0, 0, 0, 0.55}) // dim the world behind
+	hud_quad(-0.52, -0.24, 0.52, 0.30, Vec4{0.08, 0.08, 0.12, 0.96})
+	ch_h: f32 = 0.08
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	text_center("QUIT GAME", 0.10, ch_w, ch_h, Vec4{1, 0.85, 0.5, 1})
+	text_center(
+		"Y = QUIT     ESC = KEEP PLAYING",
+		-0.10,
+		ch_w * 0.5,
+		ch_h * 0.5,
+		Vec4{0.9, 0.92, 0.96, 1},
+	)
+}
 
 // Title screen: cleared background + centred title, tagline, prompt, and help.
 render_title :: proc(fbw, fbh: i32) {
@@ -25,7 +43,7 @@ render_title :: proc(fbw, fbh: i32) {
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
 	text_center(
-		"E INVENTORY   T CRAFT   O SETTINGS   G EAT   F FLY",
+		"E INV  T CRAFT  R USE/FARM  G EAT  F FLY  P PORTAL",
 		-0.64,
 		cw(0.04, aspect),
 		0.04,
@@ -110,7 +128,7 @@ ui_draw_crafting :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		)
 		y -= ch_h * 1.9
 	}
-	text_center("PRESS 1-5 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
+	text_center("PRESS 1-7 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
 }
 
 // Minecraft-style hotbar: 9 slots (keys 1-9) with block swatch, count, and a
@@ -206,6 +224,30 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 			ch_h,
 			Vec4{0.95, 0.85, 0.7, 1},
 		)
+		y -= ch_h * 1.5
+	}
+	if p.bread > 0 {
+		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.78, 0.58, 0.30, 1})
+		text_draw(
+			fmt.tprintf("BREAD X%d  (EAT: G)", p.bread),
+			x + ch_w * 2.0,
+			y,
+			ch_w,
+			ch_h,
+			Vec4{0.95, 0.88, 0.72, 1},
+		)
+		y -= ch_h * 1.5
+	}
+	if p.wheat > 0 || p.seeds > 0 {
+		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.82, 0.70, 0.28, 1})
+		text_draw(
+			fmt.tprintf("WHEAT X%d   SEEDS X%d  (BAKE: C)", p.wheat, p.seeds),
+			x + ch_w * 2.0,
+			y,
+			ch_w,
+			ch_h,
+			Vec4{0.92, 0.90, 0.7, 1},
+		)
 	}
 
 	// --- right column: how to get / make things ---
@@ -229,6 +271,14 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		"KILL ANIMALS -> RAW FOOD",
 		"COOK RAW FOOD AT A FURNACE (V)",
 		"EAT: G (COOKED HEALS MORE)",
+		"",
+		"FARMING (R = USE):",
+		"  R ON GRASS/DIRT -> TILL",
+		"  R ON FARMLAND -> PLANT SEEDS",
+		"  BREAK RIPE WHEAT -> WHEAT",
+		"  3 WHEAT -> BREAD (C)",
+		"",
+		"TORCH: LIGHT   BED: R TO SLEEP",
 	}
 	for line in help {
 		if line != "" {

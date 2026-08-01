@@ -23,6 +23,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.items)
 	delete(w.arrows)
 	delete(w.particles)
+	delete(w.crops)
 }
 
 @(test)
@@ -380,4 +381,64 @@ test_light_blocked_by_solid :: proc(t: ^testing.T) {
 	// the opaque wall cell holds no propagated light, and light is blocked past it
 	testing.expect(t, chunk_light_at(c, 9, 40, 8) == 0, "opaque cell not lit")
 	testing.expect(t, chunk_light_at(c, 10, 40, 8) < 14, "light does not pass straight through")
+}
+
+@(test)
+test_new_block_properties :: proc(t: ^testing.T) {
+	// sprites: non-solid, non-opaque, but stop the targeting ray
+	for b in ([]BlockId{.Wheat1, .Wheat2, .Wheat3, .Torch}) {
+		testing.expect(t, block_is_sprite(b), "sprite flag")
+		testing.expect(t, !block_is_solid(b), "sprite is non-solid")
+		testing.expect(t, !block_is_opaque(b), "sprite is non-opaque")
+		testing.expect(t, block_stops_ray(b), "sprite stops the ray")
+	}
+	testing.expect(t, block_is_crop(.Wheat1) && block_is_crop(.Wheat3), "wheat is a crop")
+	testing.expect(t, !block_is_crop(.Torch), "torch is not a crop")
+	testing.expect(t, block_emission(.Torch) == 13, "torch emits light")
+	// solid, opaque blocks
+	testing.expect(t, block_is_solid(.Farmland) && block_is_opaque(.Farmland), "farmland is a normal cube")
+	testing.expect(t, block_is_solid(.Bed) && block_is_opaque(.Bed), "bed is a normal cube")
+}
+
+@(test)
+test_crop_growth_ripens :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 4, 40, 4, .Wheat1)
+	append(&w.crops, Crop{pos = Ivec3{4, 40, 4}})
+
+	// one full interval: young -> growing
+	crops_tick(&w, GROW_TIME + 0.1)
+	testing.expect(t, world_block(&w, 4, 40, 4) == .Wheat2, "advances to stage 2")
+	// second interval: growing -> ripe, then it stops being tracked
+	crops_tick(&w, GROW_TIME + 0.1)
+	testing.expect(t, world_block(&w, 4, 40, 4) == .Wheat3, "advances to ripe")
+	testing.expect(t, len(w.crops) == 0, "ripe crop is no longer tracked")
+	// a further tick does not regress or crash
+	crops_tick(&w, GROW_TIME + 0.1)
+	testing.expect(t, world_block(&w, 4, 40, 4) == .Wheat3, "stays ripe")
+}
+
+@(test)
+test_crop_removed_when_broken :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 2, 40, 2, .Wheat1)
+	append(&w.crops, Crop{pos = Ivec3{2, 40, 2}})
+	world_set_block(&w, 2, 40, 2, .Air) // harvested/broken
+	crops_tick(&w, GROW_TIME + 0.1)
+	testing.expect(t, len(w.crops) == 0, "broken crop drops out of the list")
+}
+
+@(test)
+test_sprite_mesh_emits_geometry :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 40, 8, .Wheat3)
+	md := mesh_chunk(&w, c)
+	defer mesh_free(&md)
+	// two crossed double-sided quads = 4 quads * 6 verts = 24 verts, in the opaque
+	// (cutout) pass, none in the water pass.
+	testing.expect(t, len(md.opaque) == 24, "sprite emits a double-sided cross")
+	testing.expect(t, len(md.water) == 0, "sprite is not translucent")
 }

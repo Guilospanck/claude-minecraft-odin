@@ -107,6 +107,46 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				c = hot ? Color{255, 180, 40, 255} : shade(Color{224, 96, 24, 255}, jitter(gx, gy, 18))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
+			case "farmland":
+				furrow := (py % 5) == 2
+				c =
+					py < 3 \
+					? shade(Color{80, 54, 32, 255}, jitter(gx, gy, 8)) \
+					: shade(Color{104, 70, 40, 255}, jitter(gx, gy, 10) + (furrow ? -26 : 4))
+			case "bed":
+				if py < 5 {
+					c = shade(Color{226, 228, 232, 255}, jitter(gx, gy, 6)) // pillow
+				} else {
+					edge := px == 0 || px == 15 || py == 15
+					c =
+						edge \
+						? Color{120, 70, 40, 255} \
+						: shade(Color{176, 44, 52, 255}, jitter(gx, gy, 12))
+				}
+			case "wheat1", "wheat2", "wheat3":
+				c = Color{0, 0, 0, 0} // transparent background (cutout sprite)
+				stage := kind == "wheat3" ? 3 : (kind == "wheat2" ? 2 : 1)
+				height := stage == 1 ? 6 : (stage == 2 ? 11 : 15)
+				top := ad.TILE_PX - height
+				stalk := px == 3 || px == 4 || px == 6 || px == 9 || px == 10 || px == 12
+				if stalk && py >= top {
+					col := stage == 1 \
+						? Color{92, 150, 62, 255} \
+						: (stage == 2 ? Color{150, 168, 72, 255} : Color{206, 178, 74, 255})
+					if stage == 3 && py < top + 5 do col = Color{230, 205, 96, 255} // ripe head
+					c = shade(col, jitter(gx, gy, 10))
+					c.a = 255
+				}
+			case "torch":
+				c = Color{0, 0, 0, 0}
+				if (px == 7 || px == 8) && py >= 5 { 	// stick
+					c = shade(Color{122, 82, 42, 255}, jitter(gx, gy, 8))
+					c.a = 255
+				}
+				if px >= 6 && px <= 9 && py >= 2 && py <= 5 { 	// flame
+					c = shade(Color{255, 208, 92, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
 			case:
 				// plain grain (already applied)
 			}
@@ -148,6 +188,12 @@ main :: proc() {
 	paint(ad.PORTAL, Color{110, 45, 170, 255}, "portal")
 	paint(ad.NETHERRACK, Color{110, 34, 34, 255}, "netherrack")
 	paint(ad.LAVA, Color{224, 96, 24, 255}, "lava")
+	paint(ad.FARMLAND, Color{104, 70, 40, 255}, "farmland")
+	paint(ad.WHEAT1, Color{0, 0, 0, 0}, "wheat1")
+	paint(ad.WHEAT2, Color{0, 0, 0, 0}, "wheat2")
+	paint(ad.WHEAT3, Color{0, 0, 0, 0}, "wheat3")
+	paint(ad.TORCH, Color{0, 0, 0, 0}, "torch")
+	paint(ad.BED, Color{176, 44, 52, 255}, "bed")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

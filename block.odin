@@ -23,6 +23,12 @@ BlockId :: enum u8 {
 	Portal,
 	Netherrack,
 	Lava,
+	Farmland,
+	Wheat1, // crop stage 1 (just planted)
+	Wheat2, // crop stage 2 (growing)
+	Wheat3, // crop stage 3 (ripe — harvestable)
+	Torch,
+	Bed,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -30,12 +36,34 @@ block_emission :: proc(b: BlockId) -> u8 {
 	#partial switch b {
 	case .Glowstone:
 		return 15
+	case .Torch:
+		return 13
 	case .Lava:
 		return 12
 	case .Portal:
 		return 11
 	}
 	return 0
+}
+
+// Cross-sprite blocks (two crossed quads with a cutout texture) instead of cubes.
+block_is_sprite :: proc(b: BlockId) -> bool {
+	#partial switch b {
+	case .Wheat1, .Wheat2, .Wheat3, .Torch:
+		return true
+	}
+	return false
+}
+
+block_is_crop :: proc(b: BlockId) -> bool {
+	return b == .Wheat1 || b == .Wheat2 || b == .Wheat3
+}
+
+// The raycast stops here when targeting for break/place/interact. Solid blocks
+// stop it (as does collision), and so do the non-solid sprites so you can aim
+// at crops and torches.
+block_stops_ray :: proc(b: BlockId) -> bool {
+	return block_is_solid(b) || block_is_sprite(b)
 }
 
 Face :: enum {
@@ -50,7 +78,7 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Lava, .Portal:
+	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
 		return false
 	}
 	return true
@@ -59,7 +87,7 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass, .Portal:
+	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
 		return false
 	}
 	return true // Lava renders opaque (solid-looking) though it isn't collidable
@@ -125,6 +153,18 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.NETHERRACK
 	case .Lava:
 		return ad.LAVA
+	case .Farmland:
+		return ad.FARMLAND
+	case .Wheat1:
+		return ad.WHEAT1
+	case .Wheat2:
+		return ad.WHEAT2
+	case .Wheat3:
+		return ad.WHEAT3
+	case .Torch:
+		return ad.TORCH
+	case .Bed:
+		return ad.BED
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -172,6 +212,18 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.45, 0.14, 0.14}
 	case .Lava:
 		return {0.95, 0.45, 0.12}
+	case .Farmland:
+		return {0.36, 0.24, 0.14}
+	case .Wheat1:
+		return {0.45, 0.62, 0.30}
+	case .Wheat2:
+		return {0.62, 0.66, 0.28}
+	case .Wheat3:
+		return {0.82, 0.70, 0.28}
+	case .Torch:
+		return {0.95, 0.80, 0.35}
+	case .Bed:
+		return {0.80, 0.20, 0.24}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -220,6 +272,18 @@ block_name :: proc(b: BlockId) -> string {
 		return "Netherrack"
 	case .Lava:
 		return "Lava"
+	case .Farmland:
+		return "Farmland"
+	case .Wheat1:
+		return "Wheat (young)"
+	case .Wheat2:
+		return "Wheat (growing)"
+	case .Wheat3:
+		return "Wheat (ripe)"
+	case .Torch:
+		return "Torch"
+	case .Bed:
+		return "Bed"
 	}
 	return "?"
 }

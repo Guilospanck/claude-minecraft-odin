@@ -21,6 +21,8 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Ore, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Iron, out_count = 1, needs_furnace = true},
 	{inputs = {{.Sand, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Glass, out_count = 1, needs_furnace = true},
 	{inputs = {{.Stone, 8}, {}, {}}, n_in = 1, out = .Obsidian, out_count = 4},
+	{inputs = {{.Wood, 1}, {}, {}}, n_in = 1, out = .Torch, out_count = 4},
+	{inputs = {{.Wood, 5}, {}, {}}, n_in = 1, out = .Bed, out_count = 1},
 }
 
 g_show_crafting: bool
