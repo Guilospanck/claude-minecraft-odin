@@ -12,6 +12,12 @@ Biome :: enum {
 }
 
 @(private = "file")
+wg_smoothstep :: proc(e0, e1, x: f32) -> f32 {
+	t := clamp((x - e0) / (e1 - e0), 0, 1)
+	return t * t * (3 - 2 * t)
+}
+
+@(private = "file")
 classify_biome :: proc(temp, moist, mountain: f32, h: int) -> Biome {
 	if mountain > 0.45 || h > SEA_LEVEL + 30 do return .Mountains
 	if temp < -0.35 do return moist > 0.0 ? .Taiga : .Snow
@@ -62,12 +68,12 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			fx := f32(wx)
 			fz := f32(wz)
 
-			hn := fbm2(seed, fx * 0.012, fz * 0.012, 5) // rolling hills [-1,1]
+			hn := fbm2(seed, fx * 0.010, fz * 0.010, 4) // smoother rolling hills
 			mountain := fbm2(seed + 31, fx * 0.006, fz * 0.006, 3)
-			h := SEA_LEVEL + int(hn * 18.0)
-			if mountain > 0.3 {
-				h += int((mountain - 0.3) * 70.0)
-			}
+			h := SEA_LEVEL + int(hn * 16.0)
+			// mountains rise gradually (no abrupt cliff at a hard threshold)
+			mfac := wg_smoothstep(0.30, 0.75, mountain)
+			h += int(mfac * 44.0)
 			if h < 4 do h = 4
 			if h > CHUNK_H - 8 do h = CHUNK_H - 8
 
@@ -97,10 +103,11 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 					b = .Water
 				}
 
-				// carve caves through interior solids (not surface, bedrock or water)
-				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h - 1 {
-					cave := fbm3(seed + 555, fx * 0.055, f32(y) * 0.055, fz * 0.055, 3)
-					if cave > 0.62 {
+				// carve caves, but stay well below the surface so coastlines and
+				// hilltops don't turn into thin bridges / swiss cheese
+				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h - 5 {
+					cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)
+					if cave > 0.72 {
 						b = .Air
 					}
 				}
