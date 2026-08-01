@@ -23,7 +23,8 @@ Player :: struct {
 	respawn:     Vec3,
 	inventory:   [BlockId]int,
 	hunger:      f32, // 0..HUNGER_MAX
-	food_count:  int, // collected food you can eat
+	raw_food:    int, // raw meat dropped by mobs (weak)
+	cooked_food: int, // cooked in a furnace (restores more hunger)
 	starve:      f32, // starvation damage timer
 }
 
@@ -169,13 +170,20 @@ player_tick :: proc(p: ^Player, dt: f32) {
 		p.starve = 0
 	}
 
-	// eat collected food
+	// eat: prefer cooked (heals more) over raw
 	if g_input.eat {
-		if p.food_count > 0 && p.hunger < f32(HUNGER_MAX) {
-			p.food_count -= 1
-			p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
-			audio_play(.Place, 0.4)
-			fmt.println("ate food — hunger", int(p.hunger), " food left", p.food_count)
+		if p.hunger < f32(HUNGER_MAX) {
+			if p.cooked_food > 0 {
+				p.cooked_food -= 1
+				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
+				audio_play(.Place, 0.4)
+				fmt.println("ate cooked food — hunger", int(p.hunger))
+			} else if p.raw_food > 0 {
+				p.raw_food -= 1
+				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
+				audio_play(.Place, 0.4)
+				fmt.println("ate raw food (cook it for more!) — hunger", int(p.hunger))
+			}
 		}
 		g_input.eat = false
 	}
@@ -300,6 +308,13 @@ try_smelt :: proc(w: ^World, p: ^Player) {
 	}
 	if p.inventory[.Wood] < 1 {
 		fmt.println("smelt: need Wood as fuel")
+		return
+	}
+	if p.raw_food >= 1 {
+		p.inventory[.Wood] -= 1
+		p.raw_food -= 1
+		p.cooked_food += 1
+		fmt.println("cooked food (1 Raw + 1 Wood) — cooked:", p.cooked_food)
 		return
 	}
 	if p.inventory[.Ore] >= 1 {

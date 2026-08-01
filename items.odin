@@ -56,7 +56,7 @@ items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 		dz := it.pos.z - p.pos.z
 		if it.age > 0.4 && dx * dx + dy * dy + dz * dz < ITEM_PICKUP * ITEM_PICKUP {
 			if it.food {
-				p.food_count += 1
+				p.raw_food += 1
 			} else {
 				p.inventory[it.block] += 1
 			}

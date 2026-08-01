@@ -264,6 +264,22 @@ test_net_protocol :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_cooking :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 40, 8, .Furnace)
+	p: Player
+	player_init(&p, Vec3{8.5, 40.0, 8.5})
+	p.inventory = {}
+	p.inventory[.Wood] = 2
+	p.raw_food = 3
+	try_smelt(&w, &p) // cook near the furnace
+	testing.expect(t, p.cooked_food == 1, "raw food cooks to cooked")
+	testing.expect(t, p.raw_food == 2, "one raw consumed")
+	testing.expect(t, p.inventory[.Wood] == 1, "one wood fuel consumed")
+}
+
+@(test)
 test_mob_drops_food :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

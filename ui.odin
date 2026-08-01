@@ -184,15 +184,27 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		if y < -0.62 do break
 	}
 
-	if p.food_count > 0 {
+	if p.raw_food > 0 {
 		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.72, 0.28, 0.22, 1})
 		text_draw(
-			fmt.tprintf("FOOD X%d  (G TO EAT)", p.food_count),
+			fmt.tprintf("RAW FOOD X%d  (COOK: V)", p.raw_food),
 			x + ch_w * 2.0,
 			y,
 			ch_w,
 			ch_h,
 			Vec4{0.95, 0.8, 0.75, 1},
+		)
+		y -= ch_h * 1.5
+	}
+	if p.cooked_food > 0 {
+		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.55, 0.35, 0.2, 1})
+		text_draw(
+			fmt.tprintf("COOKED FOOD X%d  (EAT: G)", p.cooked_food),
+			x + ch_w * 2.0,
+			y,
+			ch_w,
+			ch_h,
+			Vec4{0.95, 0.85, 0.7, 1},
 		)
 	}
 
@@ -214,7 +226,9 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		"  ORE + WOOD -> IRON",
 		"  SAND + WOOD -> GLASS",
 		"",
-		"KILL ANIMALS -> FOOD (EAT: G)",
+		"KILL ANIMALS -> RAW FOOD",
+		"COOK RAW FOOD AT A FURNACE (V)",
+		"EAT: G (COOKED HEALS MORE)",
 	}
 	for line in help {
 		if line != "" {
