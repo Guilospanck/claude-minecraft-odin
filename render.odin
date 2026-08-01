@@ -253,6 +253,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	entity_render_frame(&w.mobs, vp, ambient)
 	items_render_frame(&w.items, vp, ambient)
 	arrows_render_frame(&w.arrows, vp, ambient)
+	remotes_render_frame(vp, ambient)
 
 	draw_outline(w, p, vp)
 	hud_draw(fbw, fbh)

@@ -227,6 +227,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 				broken := world_block(w, hit.bx, hit.by, hit.bz)
 				if broken != .Bedrock { // bedrock is unbreakable
 					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
+					net_send_edit(hit.bx, hit.by, hit.bz, .Air)
 					audio_play(.Break)
 					item_spawn(
 						&w.items,
@@ -247,6 +248,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 			   !block_hits_player(p, tx, ty, tz) &&
 			   p.inventory[p.selected] > 0 {
 				world_set_block(w, tx, ty, tz, p.selected)
+				net_send_edit(tx, ty, tz, p.selected)
 				p.inventory[p.selected] -= 1
 				audio_play(.Place)
 			}

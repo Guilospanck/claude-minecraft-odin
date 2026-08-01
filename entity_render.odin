@@ -121,6 +121,49 @@ skeleton_parts := [6]MobPart {
 	{{0.28, 1.2, -0.1}, {0.12, 0.6, 0.12}, BONE, 1}, // right arm
 }
 
+@(private = "file")
+PSKIN :: Vec3{0.86, 0.70, 0.56}
+@(private = "file")
+PSHIRT :: Vec3{0.20, 0.55, 0.75}
+
+@(private = "file")
+player_parts := [6]MobPart {
+	{{-0.11, 0.45, 0}, {0.14, 0.9, 0.14}, PANTS, 0}, // left leg
+	{{0.11, 0.45, 0}, {0.14, 0.9, 0.14}, PANTS, 0}, // right leg
+	{{0, 1.2, 0}, {0.4, 0.62, 0.22}, PSHIRT, 0}, // body
+	{{0, 1.66, 0}, {0.42, 0.42, 0.42}, PSKIN, 0}, // head
+	{{-0.31, 1.2, 0}, {0.14, 0.6, 0.14}, PSKIN, 0}, // left arm
+	{{0.31, 1.2, 0}, {0.14, 0.6, 0.14}, PSKIN, 0}, // right arm
+}
+
+@(private = "file")
+remotes_buf: [dynamic]RemotePlayer
+
+// Draw other networked players as blue humanoids.
+remotes_render_frame :: proc(vp: Mat4, ambient: f32) {
+	if !net_active() do return
+	net_remotes_snapshot(&remotes_buf)
+	if len(remotes_buf) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
+	gl.BindVertexArray(e_vao)
+	for rp in remotes_buf {
+		base :=
+			linalg.matrix4_translate_f32(rp.pos) *
+			linalg.matrix4_rotate_f32(-rp.yaw, Vec3{0, 1, 0})
+		for pt in player_parts {
+			model :=
+				base *
+				linalg.matrix4_translate_f32(pt.offset) *
+				linalg.matrix4_scale_f32(pt.size)
+			ent_set_mat4(e_mvp, vp * model)
+			gl.Uniform3f(e_color, pt.color.r, pt.color.g, pt.color.b)
+			gl.DrawArrays(gl.TRIANGLES, 0, 36)
+		}
+	}
+	gl.BindVertexArray(0)
+}
+
 mob_parts :: proc(k: MobKind) -> []MobPart {
 	switch k {
 	case .Pig:

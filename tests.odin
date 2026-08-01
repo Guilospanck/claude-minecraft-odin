@@ -227,6 +227,11 @@ test_arrow_hits_player :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_net_protocol :: proc(t: ^testing.T) {
+	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
+}
+
+@(test)
 test_mob_drops_food :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

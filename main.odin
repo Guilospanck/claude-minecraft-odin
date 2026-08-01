@@ -72,11 +72,47 @@ main :: proc() {
 	audio_init()
 	defer audio_shutdown()
 
+	// multiplayer: --server [port] | --connect host[:port]
+	net_role := ""
+	net_port := 25565
+	net_addr := ""
+	{
+		a := os.args
+		for i := 1; i < len(a); i += 1 {
+			switch a[i] {
+			case "--server":
+				net_role = "server"
+				if i + 1 < len(a) {
+					if v, ok := strconv.parse_int(a[i + 1]); ok {net_port = v;i += 1}
+				}
+			case "--connect":
+				net_role = "client"
+				if i + 1 < len(a) {net_addr = a[i + 1];i += 1}
+			}
+		}
+	}
+
 	save_ensure_dir()
-	seed, ok := load_meta()
-	if !ok {
-		seed = hash_u64(u64(time.to_unix_nanoseconds(time.now())))
-		save_meta(seed)
+	seed: u64
+	if net_role == "client" {
+		addr := net_addr
+		if !strings.contains(addr, ":") do addr = fmt.tprintf("%s:%d", addr, net_port)
+		s, ok := net_connect(addr)
+		if !ok {
+			fmt.eprintln("could not connect to", addr)
+			return
+		}
+		seed = s
+	} else {
+		s, ok := load_meta()
+		if !ok {
+			s = hash_u64(u64(time.to_unix_nanoseconds(time.now())))
+			save_meta(s)
+		}
+		seed = s
+		if net_role == "server" {
+			net_start_server(net_port, seed)
+		}
 	}
 	fmt.println("world seed:", seed)
 	rng_seed(seed ~ 0xA5A5_5A5A_C3C3_3C3C)
@@ -268,7 +304,7 @@ main :: proc() {
 		}
 		return
 	}
-	if max_frames <= 0 {
+	if max_frames <= 0 && net_role == "" {
 		for !glfw.WindowShouldClose(win) && !g_input.start {
 			glfw.PollEvents()
 			render_title(g_input.fb_w, g_input.fb_h)
@@ -317,6 +353,11 @@ main :: proc() {
 			mobs_update(&world, &player, &world.mobs, dt)
 			items_update(&world, &player, &world.items, dt)
 			arrows_update(&world, &player, dt)
+		}
+
+		if net_active() {
+			net_send_pos(&player)
+			net_apply_edits(&world)
 		}
 
 		render_remesh(&world, player.pos)
