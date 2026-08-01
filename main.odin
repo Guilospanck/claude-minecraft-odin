@@ -119,6 +119,7 @@ main :: proc() {
 		if v, ok := strconv.parse_int(s); ok do max_frames = v
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
+	if os.get_env("MC_INV", context.temp_allocator) != "" do g_show_inventory = true
 
 	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
 	fixed_time: f32 = -1
@@ -243,15 +244,32 @@ main :: proc() {
 			glfw.SetWindowShouldClose(win, true)
 		}
 
-		process_input(&player, dt)
-		physics_update(&world, &player, dt)
-		player_tick(&player, dt)
-		handle_break_place(&world, &player)
-		world_stream(&world, player.pos)
-		mobs_update(&world, &player, &world.mobs, dt)
-		items_update(&world, &player, &world.items, dt)
+		if g_input.inv_toggle {
+			g_show_inventory = !g_show_inventory
+			g_input.inv_toggle = false
+		}
+
+		if g_show_inventory {
+			// paused: ignore look/click while the inventory is open
+			g_input.dx = 0
+			g_input.dy = 0
+			g_input.break_req = false
+			g_input.place_req = false
+		} else {
+			process_input(&player, dt)
+			physics_update(&world, &player, dt)
+			player_tick(&player, dt)
+			handle_break_place(&world, &player)
+			world_stream(&world, player.pos)
+			mobs_update(&world, &player, &world.mobs, dt)
+			items_update(&world, &player, &world.items, dt)
+		}
+
 		render_remesh(&world, player.pos)
 		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
+		if g_show_inventory {
+			ui_draw_inventory(&player, int(g_input.fb_w), int(g_input.fb_h))
+		}
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames
 		if is_last && shot_path != "" {

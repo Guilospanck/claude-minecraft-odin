@@ -36,6 +36,17 @@ hud_init :: proc() {
 	gl.BindVertexArray(0)
 }
 
+// Public filled NDC rect with its own program + blend state (for UI panels).
+hud_quad :: proc(x0, y0, x1, y1: f32, col: Vec4) {
+	gl.UseProgram(h_prog)
+	gl.Disable(gl.DEPTH_TEST)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	hud_rect(x0, y0, x1, y1, col)
+	gl.Disable(gl.BLEND)
+	gl.Enable(gl.DEPTH_TEST)
+}
+
 @(private = "file")
 hud_rect :: proc(x0, y0, x1, y1: f32, col: Vec4) {
 	verts := [6]Vec2{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}}

@@ -16,20 +16,23 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 - Raycast (Amanatides–Woo) block **break** / **place** with a targeting outline.
 - Translucent water pass, distance fog, textured atlas, crosshair HUD.
 - World **save/load** (per-chunk RLE files) with a persistent seed.
-- **Animals** — pigs, sheep, cows, and chickens as blocky multi-box models
-  with leg animation, wandering AI, gravity/collision, step auto-jump, and
-  ring spawning / distance despawn. Left click punches (and can kill) them.
+- **Mobs** — passive pigs, sheep, cows, chickens, and rabbits, plus hostile
+  zombies and skeletons; blocky multi-box models with leg animation,
+  wandering/chase AI, gravity/collision, step auto-jump, spawn/despawn.
 - **Day-night cycle** — a 5-minute clock drives sky colour and ambient
-  brightness (night → dawn/dusk glow → day).
+  brightness (night → dawn/dusk glow → day), with a **sun, moon, and stars**.
 - **Block lighting** — place **glowstone** (hotbar slot 9) for flood-filled
   point light (0–15, blocked by solids) that lights the night.
 - **Sound** — procedurally synthesised SFX (break, place, footsteps, jump,
   mob hurt) via miniaudio; no audio files.
 - **Combat & health** — 20-HP player with a heart HUD, knockback, fall
-  damage, invulnerability frames, and death → respawn.
+  damage, invulnerability frames, slow regen, and death → respawn.
 - **Drops & inventory** — breaking a block drops a bobbing item you collect
   into a per-block inventory; placing consumes it (bedrock is unbreakable).
+  Press `E` for a full **inventory screen** (custom bitmap-font text UI).
 - **Crafting** — press `C` to craft (4 Sand + 1 Ore → 1 Glowstone).
+- **Furnace & smelting** — place a Furnace and press `V` nearby to smelt
+  Ore + Wood → Iron or Sand + Wood → Glass (translucent).
 
 ![animals](docs/mobs.png)
 ![night](docs/night.png)
@@ -63,6 +66,8 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 | Left click       | Break block / hit mob     |
 | Right click      | Place selected block      |
 | `C`              | Craft (4 Sand + 1 Ore → Glowstone) |
+| `V`              | Smelt near a furnace      |
+| `E`              | Toggle inventory screen   |
 | `Esc`            | Quit (saves the world)    |
 
 ## Tests
