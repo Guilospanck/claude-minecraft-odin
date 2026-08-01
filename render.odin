@@ -65,6 +65,7 @@ render_init :: proc(atlas: u32) {
 	gl.ClearColor(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1.0)
 
 	entity_render_init()
+	sky_init()
 
 	gl.GenVertexArrays(1, &r_outline_vao)
 	gl.GenBuffers(1, &r_outline_vbo)
@@ -209,6 +210,8 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	view := view_matrix(eye, p.yaw, p.pitch)
 	proj := proj_matrix(aspect)
 	vp := proj * view
+
+	sky_render(eye, vp, w.time_of_day)
 
 	gl.UseProgram(r_chunk_prog)
 	set_mat4(u_mvp, vp)
