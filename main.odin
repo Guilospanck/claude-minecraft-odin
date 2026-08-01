@@ -394,6 +394,7 @@ main :: proc() {
 	g_input.interact = false
 	g_input.confirm = false
 	g_input.portal = false
+	g_input.quit = false // an ESC on the title screen must not open quit-confirm on frame 0
 
 	frame := 0
 	last := glfw.GetTime()

@@ -442,3 +442,20 @@ test_sprite_mesh_emits_geometry :: proc(t: ^testing.T) {
 	testing.expect(t, len(md.opaque) == 24, "sprite emits a double-sided cross")
 	testing.expect(t, len(md.water) == 0, "sprite is not translucent")
 }
+
+@(test)
+test_crop_forget_on_harvest :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 3, 40, 3, .Wheat3)
+	append(&w.crops, Crop{pos = Ivec3{3, 40, 3}})
+	p: Player
+	harvest_crop(&w, &p, 3, 40, 3)
+	testing.expect(t, world_block(&w, 3, 40, 3) == .Air, "harvest clears the block")
+	testing.expect(t, p.wheat == 1, "harvest yields wheat")
+	testing.expect(t, len(w.crops) == 0, "harvest forgets the crop immediately (no stale entry)")
+	// replanting the same cell tracks exactly one crop (no duplicate double-growth)
+	world_set_block(&w, 3, 40, 3, .Wheat1)
+	append(&w.crops, Crop{pos = Ivec3{3, 40, 3}})
+	testing.expect(t, len(w.crops) == 1, "one entry after replant")
+}

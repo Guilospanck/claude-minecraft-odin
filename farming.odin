@@ -40,9 +40,22 @@ crops_tick :: proc(w: ^World, dt: f32) {
 	}
 }
 
+// Drop a position from the growth list (called whenever a crop block is cleared)
+// so a break+replant in the same spot can't leave a stale double-counted entry.
+crop_forget :: proc(w: ^World, pos: Ivec3) {
+	for i in 0 ..< len(w.crops) {
+		if w.crops[i].pos == pos {
+			w.crops[i] = w.crops[len(w.crops) - 1]
+			pop(&w.crops)
+			return
+		}
+	}
+}
+
 // Harvest a ripe crop: wheat + a seed or two back, and the block clears.
 harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
 	world_set_block(w, x, y, z, .Air)
+	crop_forget(w, Ivec3{x, y, z})
 	net_send_edit(x, y, z, .Air, w.dimension)
 	p.wheat += 1
 	p.seeds += 1 + rng_int(2)

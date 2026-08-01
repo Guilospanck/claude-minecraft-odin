@@ -259,6 +259,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 				if block_is_crop(broken) {
 					// harvest by breaking: ripe gives wheat, young gives seeds back
 					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
+					crop_forget(w, Ivec3{hit.bx, hit.by, hit.bz})
 					net_send_edit(hit.bx, hit.by, hit.bz, .Air, w.dimension)
 					audio_play(.Break)
 					p.seeds += 1
