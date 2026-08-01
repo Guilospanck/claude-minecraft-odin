@@ -70,23 +70,57 @@ ai_wander :: proc(m: ^Mob, dt: f32, move_chance: f32) {
 }
 
 @(private = "file")
+skeleton_shoot :: proc(w: ^World, m: ^Mob, p: ^Player) {
+	from := m.pos + Vec3{0, MOB_DIMS[.Skeleton].h * 0.85, 0}
+	to := p.pos + Vec3{0, EYE_HEIGHT * 0.6, 0}
+	dir := to - from
+	dist := math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) + 1e-4
+	dir = dir / dist
+	dir.y += clamp(dist * 0.02, 0, 0.35) // lead for gravity drop
+	dl := math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
+	dir = dir / dl
+	append(&w.arrows, Arrow{pos = from, vel = dir * 22.0, from_player = false})
+	audio_play(.Jump, 0.25)
+}
+
+@(private = "file")
 ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 	dx := p.pos.x - m.pos.x
 	dz := p.pos.z - m.pos.z
 	d2 := dx * dx + dz * dz
-	if d2 < ZOMBIE_DETECT * ZOMBIE_DETECT {
-		m.moving = true
-		m.yaw = math.atan2(dx, -dz) // face the player
-		m.attack_timer -= dt
-		if d2 < ZOMBIE_REACH * ZOMBIE_REACH &&
-		   math.abs(p.pos.y - m.pos.y) < 2.0 &&
-		   m.attack_timer <= 0 {
-			inv := 1.0 / math.sqrt(d2 + 1e-4)
-			player_damage(p, ZOMBIE_DMG, Vec3{dx * inv, 0, dz * inv})
-			m.attack_timer = 1.0
-		}
-	} else {
+	if d2 >= ZOMBIE_DETECT * ZOMBIE_DETECT {
 		ai_wander(m, dt, 0.4)
+		return
+	}
+	toward := math.atan2(dx, -dz)
+	m.attack_timer -= dt
+
+	if m.kind == .Skeleton {
+		d := math.sqrt(d2)
+		if d < 6 {
+			m.moving = true
+			m.yaw = math.atan2(-dx, dz) // kite away
+		} else if d > 11 {
+			m.moving = true
+			m.yaw = toward // close the gap
+		} else {
+			m.moving = false
+			m.yaw = toward // hold and shoot
+		}
+		if m.attack_timer <= 0 {
+			skeleton_shoot(w, m, p)
+			m.attack_timer = 1.6
+		}
+		return
+	}
+
+	// zombie melee
+	m.moving = true
+	m.yaw = toward
+	if d2 < ZOMBIE_REACH * ZOMBIE_REACH && math.abs(p.pos.y - m.pos.y) < 2.0 && m.attack_timer <= 0 {
+		inv := 1.0 / math.sqrt(d2 + 1e-4)
+		player_damage(p, ZOMBIE_DMG, Vec3{dx * inv, 0, dz * inv})
+		m.attack_timer = 1.0
 	}
 }
 

@@ -21,6 +21,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.chunks)
 	delete(w.mobs)
 	delete(w.items)
+	delete(w.arrows)
 }
 
 @(test)
@@ -207,6 +208,22 @@ test_smelt_iron :: proc(t: ^testing.T) {
 	p.inventory[.Sand] = 3
 	try_smelt(&w2, &p)
 	testing.expect(t, p.inventory[.Glass] == 0, "no smelt without a furnace")
+}
+
+@(test)
+test_arrow_hits_player :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	_ = c
+	p: Player
+	player_init(&p, Vec3{8.5, 40.0, 8.5})
+	append(&w.arrows, Arrow{pos = Vec3{8.5, 41.0, 6.4}, vel = Vec3{0, 0, 8}, from_player = false})
+	h0 := p.health
+	for _ in 0 ..< 30 {
+		arrows_update(&w, &p, 1.0 / 60.0)
+	}
+	testing.expect(t, p.health < h0, "arrow damages the player")
+	testing.expect(t, len(w.arrows) == 0, "arrow consumed on hit")
 }
 
 @(test)

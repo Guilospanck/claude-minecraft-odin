@@ -186,6 +186,33 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_SKELS=N spawns N skeletons ahead (they fire arrows).
+	if s := os.get_env("MC_SKELS", context.temp_allocator); s != "" {
+		if n, ok := strconv.parse_int(s); ok {
+			fwd := camera_front(player.yaw, 0)
+			c := player.pos + fwd * 9
+			for k in 0 ..< n {
+				x := int(c.x) + rng_int(6) - 3
+				z := int(c.z) + rng_int(6) - 3
+				world_ensure_chunk(&world, world_chunk_at(&world, x, z))
+				for y := CHUNK_H - 2; y >= 1; y -= 1 {
+					if block_is_solid(world_block(&world, x, y, z)) {
+						append(
+							&world.mobs,
+							Mob {
+								kind = .Skeleton,
+								pos = Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5},
+								health = 8,
+								ai_timer = rng_range(0, 1),
+							},
+						)
+						break
+					}
+				}
+			}
+		}
+	}
+
 	// Debug: MC_BUILD places a row of the special blocks ahead (2 tall).
 	if os.get_env("MC_BUILD", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -285,6 +312,7 @@ main :: proc() {
 			world_stream(&world, player.pos)
 			mobs_update(&world, &player, &world.mobs, dt)
 			items_update(&world, &player, &world.items, dt)
+			arrows_update(&world, &player, dt)
 		}
 
 		render_remesh(&world, player.pos)

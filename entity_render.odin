@@ -212,6 +212,40 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(0)
 }
 
+// Rotation whose local +Z points along `fwd`.
+@(private = "file")
+mat_from_forward :: proc(fwd: Vec3) -> Mat4 {
+	f := linalg.normalize(fwd)
+	up0 := math.abs(f.y) > 0.99 ? Vec3{1, 0, 0} : Vec3{0, 1, 0}
+	r := linalg.normalize(linalg.cross(up0, f))
+	u := linalg.cross(f, r)
+	m := linalg.MATRIX4F32_IDENTITY
+	m[0, 0] = r.x;m[1, 0] = r.y;m[2, 0] = r.z
+	m[0, 1] = u.x;m[1, 1] = u.y;m[2, 1] = u.z
+	m[0, 2] = f.x;m[1, 2] = f.y;m[2, 2] = f.z
+	return m
+}
+
+arrows_render_frame :: proc(arrows: ^[dynamic]Arrow, vp: Mat4, ambient: f32) {
+	if len(arrows^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
+	gl.Uniform3f(e_color, 0.82, 0.78, 0.70)
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(arrows^) {
+		a := &arrows^[i]
+		fwd := a.vel
+		if linalg.length(fwd) < 0.001 do fwd = Vec3{0, 0, 1}
+		model :=
+			linalg.matrix4_translate_f32(a.pos) *
+			mat_from_forward(fwd) *
+			linalg.matrix4_scale_f32(Vec3{0.06, 0.06, 0.45})
+		ent_set_mat4(e_mvp, vp * model)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+	}
+	gl.BindVertexArray(0)
+}
+
 // Dropped items as small bobbing, spinning cubes coloured by their block.
 items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
 	if len(items^) == 0 do return

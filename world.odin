@@ -8,6 +8,7 @@ World :: struct {
 	seed:        u64,
 	mobs:        [dynamic]Mob,
 	items:       [dynamic]Item,
+	arrows:      [dynamic]Arrow,
 	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
 }
 
@@ -19,6 +20,7 @@ world_init :: proc(w: ^World, seed: u64) {
 	w.seed = seed
 	w.mobs = make([dynamic]Mob, 0, MOB_CAP)
 	w.items = make([dynamic]Item, 0, 64)
+	w.arrows = make([dynamic]Arrow, 0, 32)
 	w.time_of_day = 0.30 // start mid-morning
 }
 
