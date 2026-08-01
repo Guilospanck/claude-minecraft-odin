@@ -15,6 +15,9 @@ BlockId :: enum u8 {
 	Bedrock,
 	Ore,
 	Glowstone,
+	Furnace,
+	Iron,
+	Glass,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -47,17 +50,24 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water:
+	case .Air, .Water, .Glass:
 		return false
 	}
 	return true
 }
 
+// Drawn in the translucent pass (blended, no depth write).
+block_is_translucent :: proc(b: BlockId) -> bool {
+	return b == .Water || b == .Glass
+}
+
 // Should a face of `cur` against neighbour `nb` be emitted?
 face_visible :: proc(cur, nb: BlockId) -> bool {
 	if cur == .Water {
-		// water only shows its surface / edges against air
-		return nb == .Air
+		return nb == .Air // water only shows its surface / edges
+	}
+	if cur == .Glass {
+		return !block_is_opaque(nb) && nb != .Glass // hide glass-glass seams
 	}
 	return !block_is_opaque(nb)
 }
@@ -90,6 +100,12 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.ORE
 	case .Glowstone:
 		return ad.GLOWSTONE
+	case .Furnace:
+		return ad.FURNACE
+	case .Iron:
+		return ad.IRON
+	case .Glass:
+		return ad.GLASS
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -121,6 +137,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.55, 0.50, 0.35}
 	case .Glowstone:
 		return {0.95, 0.85, 0.45}
+	case .Furnace:
+		return {0.34, 0.34, 0.36}
+	case .Iron:
+		return {0.78, 0.78, 0.82}
+	case .Glass:
+		return {0.70, 0.85, 0.95}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -153,6 +175,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "Ore"
 	case .Glowstone:
 		return "Glowstone"
+	case .Furnace:
+		return "Furnace"
+	case .Iron:
+		return "Iron"
+	case .Glass:
+		return "Glass"
 	}
 	return "?"
 }

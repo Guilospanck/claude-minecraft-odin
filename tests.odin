@@ -187,6 +187,29 @@ test_craft_glowstone :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_smelt_iron :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 40, 8, .Furnace)
+	p: Player
+	player_init(&p, Vec3{8.5, 40.0, 8.5}) // standing on the furnace cell
+	p.inventory = {}
+	p.inventory[.Wood] = 2
+	p.inventory[.Ore] = 1
+	try_smelt(&w, &p)
+	testing.expect(t, p.inventory[.Iron] == 1, "ore + wood smelts to iron")
+	testing.expect(t, p.inventory[.Wood] == 1, "one wood fuel consumed")
+	testing.expect(t, p.inventory[.Ore] == 0, "ore consumed")
+
+	// no furnace nearby -> no smelt
+	w2, _ := make_test_world()
+	defer free_test_world(&w2)
+	p.inventory[.Sand] = 3
+	try_smelt(&w2, &p)
+	testing.expect(t, p.inventory[.Glass] == 0, "no smelt without a furnace")
+}
+
+@(test)
 test_mesher_single_block :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

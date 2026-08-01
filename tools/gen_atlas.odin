@@ -78,6 +78,19 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				// bright warm cells with a darker mortar grid
 				grid := (px % 8 == 0) || (py % 8 == 0)
 				c = grid ? Color{200, 150, 40, 255} : shade(Color{250, 224, 120, 255}, jitter(gx, gy, 14))
+			case "furnace":
+				// dark stone with a black opening in the lower-front
+				if px >= 4 && px <= 11 && py >= 8 && py <= 13 {
+					c = Color{18, 16, 16, 255}
+				} else {
+					c = shade(Color{86, 86, 90, 255}, jitter(gx, gy, 12))
+				}
+			case "iron":
+				band := (py % 6 < 3)
+				c = shade(Color{198, 198, 205, 255}, jitter(gx, gy, 10) + (band ? 6 : -8))
+			case "glass":
+				edge := px == 0 || py == 0 || px == 15 || py == 15
+				c = edge ? Color{210, 232, 244, 255} : shade(Color{176, 214, 232, 255}, jitter(gx, gy, 6))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
 			case:
@@ -113,6 +126,9 @@ main :: proc() {
 	paint(ad.BEDROCK, Color{42, 42, 48, 255}, "bedrock")
 	paint(ad.ORE, Color{128, 128, 132, 255}, "ore")
 	paint(ad.GLOWSTONE, Color{240, 210, 110, 255}, "glow")
+	paint(ad.FURNACE, Color{86, 86, 90, 255}, "furnace")
+	paint(ad.IRON, Color{198, 198, 205, 255}, "iron")
+	paint(ad.GLASS, Color{176, 214, 232, 255}, "glass")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

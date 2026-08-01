@@ -185,6 +185,26 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_BUILD places a row of the special blocks ahead (2 tall).
+	if os.get_env("MC_BUILD", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 7
+		blocks := [?]BlockId{.Glass, .Furnace, .Iron, .Glowstone, .Stone}
+		for b, k in blocks {
+			x := int(base.x + right.x * f32(k * 2 - 4))
+			z := int(base.z + right.z * f32(k * 2 - 4))
+			world_ensure_chunk(&world, world_chunk_at(&world, x, z))
+			for y := CHUNK_H - 2; y >= 1; y -= 1 {
+				if block_is_solid(world_block(&world, x, y, z)) {
+					world_set_block(&world, x, y + 1, z, b)
+					world_set_block(&world, x, y + 2, z, b)
+					break
+				}
+			}
+		}
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)

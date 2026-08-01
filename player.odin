@@ -27,11 +27,11 @@ HOTBAR := [9]BlockId {
 	.Grass,
 	.Dirt,
 	.Stone,
-	.Sand,
 	.Wood,
-	.Leaves,
-	.Snow,
-	.Water,
+	.Sand,
+	.Glass,
+	.Furnace,
+	.Iron,
 	.Glowstone,
 }
 
@@ -53,6 +53,8 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.inventory[.Wood] = 16
 	p.inventory[.Sand] = 16
 	p.inventory[.Glowstone] = 8
+	p.inventory[.Furnace] = 2
+	p.inventory[.Ore] = 6
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
@@ -222,9 +224,53 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 		try_craft(p)
 		g_input.craft = false
 	}
+	if g_input.smelt {
+		try_smelt(w, p)
+		g_input.smelt = false
+	}
 
 	g_input.break_req = false
 	g_input.place_req = false
+}
+
+@(private = "file")
+near_furnace :: proc(w: ^World, p: ^Player) -> bool {
+	px := int(math.floor(p.pos.x))
+	py := int(math.floor(p.pos.y))
+	pz := int(math.floor(p.pos.z))
+	for dy in -2 ..= 2 {
+		for dz in -3 ..= 3 {
+			for dx in -3 ..= 3 {
+				if world_block(w, px + dx, py + dy, pz + dz) == .Furnace do return true
+			}
+		}
+	}
+	return false
+}
+
+// Smelting near a placed furnace: Wood is fuel; Ore -> Iron, Sand -> Glass.
+try_smelt :: proc(w: ^World, p: ^Player) {
+	if !near_furnace(w, p) {
+		fmt.println("smelt: stand next to a placed Furnace")
+		return
+	}
+	if p.inventory[.Wood] < 1 {
+		fmt.println("smelt: need Wood as fuel")
+		return
+	}
+	if p.inventory[.Ore] >= 1 {
+		p.inventory[.Wood] -= 1
+		p.inventory[.Ore] -= 1
+		p.inventory[.Iron] += 1
+		fmt.println("smelted Iron (1 Ore + 1 Wood) — now have", p.inventory[.Iron])
+	} else if p.inventory[.Sand] >= 1 {
+		p.inventory[.Wood] -= 1
+		p.inventory[.Sand] -= 1
+		p.inventory[.Glass] += 1
+		fmt.println("smelted Glass (1 Sand + 1 Wood) — now have", p.inventory[.Glass])
+	} else {
+		fmt.println("smelt: need Ore or Sand")
+	}
 }
 
 // Minimal crafting: press C to turn 4 Sand + 1 Ore into 1 Glowstone.

@@ -162,7 +162,7 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 					fn := FACES[face].n
 					nb := world_block(w, wx + fn.x, y + fn.y, wz + fn.z)
 					if !face_visible(b, nb) do continue
-					arr := b == .Water ? &md.water : &md.opaque
+					arr := block_is_translucent(b) ? &md.water : &md.opaque
 					// block light of the cell this face opens into
 					bl := f32(chunk_light_at(c, x + fn.x, y + fn.y, z + fn.z)) / 15.0
 					emit_face(w, arr, b, face, wx, y, wz, bl)

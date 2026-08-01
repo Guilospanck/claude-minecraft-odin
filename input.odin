@@ -13,6 +13,7 @@ InputState :: struct {
 	break_req, place_req: bool, // one-shot mouse clicks
 	fly_toggle:           bool, // one-shot F press
 	craft:                bool, // one-shot C press
+	smelt:                bool, // one-shot V press
 	select:               int, // 1..9, or 0 for none
 	quit:                 bool,
 	fb_w, fb_h:           i32,
@@ -49,6 +50,8 @@ key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int) 
 		g_input.fly_toggle = true
 	case glfw.KEY_C:
 		g_input.craft = true
+	case glfw.KEY_V:
+		g_input.smelt = true
 	case glfw.KEY_1 ..= glfw.KEY_9:
 		g_input.select = int(key - glfw.KEY_1) + 1
 	}

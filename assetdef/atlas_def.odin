@@ -22,3 +22,6 @@ SNOW       :: Tile{9, 0}
 BEDROCK    :: Tile{10, 0}
 ORE        :: Tile{11, 0}
 GLOWSTONE  :: Tile{12, 0}
+FURNACE    :: Tile{13, 0}
+IRON       :: Tile{14, 0}
+GLASS      :: Tile{15, 0}
