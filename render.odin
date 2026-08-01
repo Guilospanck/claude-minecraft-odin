@@ -1,0 +1,258 @@
+package main
+
+import "core:fmt"
+import "core:math"
+import "core:slice"
+import "core:strings"
+import gl "vendor:OpenGL"
+import stbiw "vendor:stb/image"
+
+// programs / texture
+r_chunk_prog: u32
+r_line_prog: u32
+r_atlas: u32
+
+// chunk shader uniforms
+u_mvp: i32
+u_campos: i32
+u_tex: i32
+u_alpha: i32
+u_fogcol: i32
+u_fogstart: i32
+u_fogend: i32
+
+// line shader uniforms
+lu_mvp: i32
+lu_color: i32
+
+// block-outline buffers
+r_outline_vao: u32
+r_outline_vbo: u32
+
+@(private = "file")
+set_mat4 :: proc(loc: i32, m: Mat4) {
+	mm := m
+	gl.UniformMatrix4fv(loc, 1, false, transmute([^]f32)(&mm[0, 0]))
+}
+
+render_init :: proc(atlas: u32) {
+	r_atlas = atlas
+
+	ok: bool
+	if r_chunk_prog, ok = gl.load_shaders_source(CHUNK_VERT, CHUNK_FRAG); !ok {
+		fmt.panicf("chunk shader failed to compile/link")
+	}
+	if r_line_prog, ok = gl.load_shaders_source(LINE_VERT, LINE_FRAG); !ok {
+		fmt.panicf("line shader failed to compile/link")
+	}
+
+	u_mvp = gl.GetUniformLocation(r_chunk_prog, "uMVP")
+	u_campos = gl.GetUniformLocation(r_chunk_prog, "uCamPos")
+	u_tex = gl.GetUniformLocation(r_chunk_prog, "uTex")
+	u_alpha = gl.GetUniformLocation(r_chunk_prog, "uAlpha")
+	u_fogcol = gl.GetUniformLocation(r_chunk_prog, "uFogColor")
+	u_fogstart = gl.GetUniformLocation(r_chunk_prog, "uFogStart")
+	u_fogend = gl.GetUniformLocation(r_chunk_prog, "uFogEnd")
+	lu_mvp = gl.GetUniformLocation(r_line_prog, "uMVP")
+	lu_color = gl.GetUniformLocation(r_line_prog, "uColor")
+
+	gl.Enable(gl.DEPTH_TEST)
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.BACK)
+	gl.FrontFace(gl.CCW)
+	gl.ClearColor(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1.0)
+
+	gl.GenVertexArrays(1, &r_outline_vao)
+	gl.GenBuffers(1, &r_outline_vbo)
+	gl.BindVertexArray(r_outline_vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, r_outline_vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, 24 * size_of(Vec3), nil, gl.DYNAMIC_DRAW)
+	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vec3)), 0)
+	gl.BindVertexArray(0)
+}
+
+@(private = "file")
+setup_chunk_vao :: proc(vao, vbo: u32) {
+	gl.BindVertexArray(vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, pos))
+	gl.EnableVertexAttribArray(1)
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, uv))
+	gl.EnableVertexAttribArray(2)
+	gl.VertexAttribPointer(2, 1, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, light))
+	gl.BindVertexArray(0)
+}
+
+@(private = "file")
+upload_buffer :: proc(vbo: u32, verts: [dynamic]Vertex) {
+	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+	if len(verts) > 0 {
+		gl.BufferData(
+			gl.ARRAY_BUFFER,
+			len(verts) * size_of(Vertex),
+			raw_data(verts),
+			gl.DYNAMIC_DRAW,
+		)
+	} else {
+		gl.BufferData(gl.ARRAY_BUFFER, 0, nil, gl.DYNAMIC_DRAW)
+	}
+}
+
+chunk_upload :: proc(c: ^Chunk, md: ^MeshData) {
+	if !c.gl_init {
+		gl.GenVertexArrays(1, &c.opaque_vao)
+		gl.GenBuffers(1, &c.opaque_vbo)
+		gl.GenVertexArrays(1, &c.water_vao)
+		gl.GenBuffers(1, &c.water_vbo)
+		setup_chunk_vao(c.opaque_vao, c.opaque_vbo)
+		setup_chunk_vao(c.water_vao, c.water_vbo)
+		c.gl_init = true
+	}
+	c.opaque_count = i32(len(md.opaque))
+	upload_buffer(c.opaque_vbo, md.opaque)
+	c.water_count = i32(len(md.water))
+	upload_buffer(c.water_vbo, md.water)
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+}
+
+chunk_gl_free :: proc(c: ^Chunk) {
+	if !c.gl_init do return
+	gl.DeleteBuffers(1, &c.opaque_vbo)
+	gl.DeleteVertexArrays(1, &c.opaque_vao)
+	gl.DeleteBuffers(1, &c.water_vbo)
+	gl.DeleteVertexArrays(1, &c.water_vao)
+	c.gl_init = false
+}
+
+// Rebuild + upload up to MAX_MESH_PER_FRAME dirty chunks, nearest first.
+render_remesh :: proc(w: ^World, cam: Vec3) {
+	g_center = world_chunk_at(w, int(math.floor(cam.x)), int(math.floor(cam.z)))
+	dirty := make([dynamic]Ivec2, 0, 32)
+	defer delete(dirty)
+	for coord, c in w.chunks {
+		if c.generated && c.dirty do append(&dirty, coord)
+	}
+	slice.sort_by(dirty[:], proc(a, b: Ivec2) -> bool {
+		da := (a.x - g_center.x) * (a.x - g_center.x) + (a.y - g_center.y) * (a.y - g_center.y)
+		db := (b.x - g_center.x) * (b.x - g_center.x) + (b.y - g_center.y) * (b.y - g_center.y)
+		return da < db
+	})
+	n := 0
+	for coord in dirty {
+		if n >= MAX_MESH_PER_FRAME do break
+		c := w.chunks[coord]
+		md := mesh_chunk(w, c)
+		chunk_upload(c, &md)
+		mesh_free(&md)
+		c.dirty = false
+		n += 1
+	}
+}
+
+@(private = "file")
+draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
+	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
+	hit := raycast(w, eye, camera_front(p.yaw, p.pitch), REACH)
+	if !hit.hit do return
+
+	e: f32 = 0.002
+	lo := Vec3{f32(hit.bx) - e, f32(hit.by) - e, f32(hit.bz) - e}
+	hi := Vec3{f32(hit.bx + 1) + e, f32(hit.by + 1) + e, f32(hit.bz + 1) + e}
+	corners := [8]Vec3 {
+		{lo.x, lo.y, lo.z},
+		{hi.x, lo.y, lo.z},
+		{hi.x, lo.y, hi.z},
+		{lo.x, lo.y, hi.z},
+		{lo.x, hi.y, lo.z},
+		{hi.x, hi.y, lo.z},
+		{hi.x, hi.y, hi.z},
+		{lo.x, hi.y, hi.z},
+	}
+	edges := [24]int{0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7}
+	verts: [24]Vec3
+	for i in 0 ..< 24 {
+		verts[i] = corners[edges[i]]
+	}
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, r_outline_vbo)
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, 24 * size_of(Vec3), &verts[0])
+	gl.UseProgram(r_line_prog)
+	set_mat4(lu_mvp, vp)
+	gl.Uniform4f(lu_color, 0.05, 0.05, 0.05, 1.0)
+	gl.BindVertexArray(r_outline_vao)
+	gl.DrawArrays(gl.LINES, 0, 24)
+}
+
+render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
+	gl.Viewport(0, 0, fbw, fbh)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
+	view := view_matrix(eye, p.yaw, p.pitch)
+	proj := proj_matrix(aspect)
+	vp := proj * view
+
+	gl.UseProgram(r_chunk_prog)
+	set_mat4(u_mvp, vp)
+	gl.Uniform3f(u_campos, eye.x, eye.y, eye.z)
+	gl.Uniform1i(u_tex, 0)
+	gl.Uniform3f(u_fogcol, SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b)
+	gl.Uniform1f(u_fogstart, FOG_START)
+	gl.Uniform1f(u_fogend, FOG_END)
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, r_atlas)
+
+	// opaque pass
+	gl.Disable(gl.BLEND)
+	gl.DepthMask(true)
+	gl.Uniform1f(u_alpha, 1.0)
+	for _, c in w.chunks {
+		if c.gl_init && c.opaque_count > 0 {
+			gl.BindVertexArray(c.opaque_vao)
+			gl.DrawArrays(gl.TRIANGLES, 0, c.opaque_count)
+		}
+	}
+
+	// translucent water pass
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.DepthMask(false)
+	gl.Uniform1f(u_alpha, 0.65)
+	for _, c in w.chunks {
+		if c.gl_init && c.water_count > 0 {
+			gl.BindVertexArray(c.water_vao)
+			gl.DrawArrays(gl.TRIANGLES, 0, c.water_count)
+		}
+	}
+	gl.DepthMask(true)
+	gl.Disable(gl.BLEND)
+
+	draw_outline(w, p, vp)
+	hud_draw(fbw, fbh)
+	gl.BindVertexArray(0)
+}
+
+// Read the back buffer and write it to a PNG (rows flipped to top-down).
+render_screenshot :: proc(path: string, w, h: i32) {
+	n := int(w) * int(h) * 4
+	buf := make([]u8, n)
+	defer delete(buf)
+	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
+	gl.ReadPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(buf))
+
+	row := int(w) * 4
+	flip := make([]u8, n)
+	defer delete(flip)
+	for y in 0 ..< int(h) {
+		src := y * row
+		dst := (int(h) - 1 - y) * row
+		copy(flip[dst:dst + row], buf[src:src + row])
+	}
+
+	cpath := strings.clone_to_cstring(path, context.temp_allocator)
+	_ = stbiw.write_png(cpath, w, h, 4, raw_data(flip), i32(row))
+	fmt.println("screenshot ->", path)
+}

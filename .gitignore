@@ -1,0 +1,5 @@
+/mc
+/saves/
+/tools/tools
+*.o
+*.bin
