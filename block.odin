@@ -96,6 +96,37 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 	return ad.STONE
 }
 
+// Representative colour for a block, used to draw dropped-item cubes.
+block_color :: proc(b: BlockId) -> Vec3 {
+	switch b {
+	case .Grass:
+		return {0.40, 0.72, 0.35}
+	case .Dirt:
+		return {0.48, 0.35, 0.22}
+	case .Stone:
+		return {0.50, 0.50, 0.52}
+	case .Sand:
+		return {0.85, 0.80, 0.58}
+	case .Water:
+		return {0.20, 0.40, 0.80}
+	case .Wood:
+		return {0.45, 0.33, 0.20}
+	case .Leaves:
+		return {0.22, 0.50, 0.20}
+	case .Snow:
+		return {0.92, 0.94, 0.97}
+	case .Bedrock:
+		return {0.20, 0.20, 0.22}
+	case .Ore:
+		return {0.55, 0.50, 0.35}
+	case .Glowstone:
+		return {0.95, 0.85, 0.45}
+	case .Air:
+		return {0, 0, 0}
+	}
+	return {1, 0, 1}
+}
+
 block_name :: proc(b: BlockId) -> string {
 	switch b {
 	case .Air:

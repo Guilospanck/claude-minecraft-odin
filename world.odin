@@ -7,6 +7,7 @@ World :: struct {
 	chunks:      map[Ivec2]^Chunk,
 	seed:        u64,
 	mobs:        [dynamic]Mob,
+	items:       [dynamic]Item,
 	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
 }
 
@@ -17,6 +18,7 @@ world_init :: proc(w: ^World, seed: u64) {
 	w.chunks = make(map[Ivec2]^Chunk)
 	w.seed = seed
 	w.mobs = make([dynamic]Mob, 0, MOB_CAP)
+	w.items = make([dynamic]Item, 0, 64)
 	w.time_of_day = 0.30 // start mid-morning
 }
 

@@ -183,3 +183,24 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 	}
 	gl.BindVertexArray(0)
 }
+
+// Dropped items as small bobbing, spinning cubes coloured by their block.
+items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
+	if len(items^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(items^) {
+		it := &items^[i]
+		bob := 0.25 + math.sin(it.age * 3) * 0.07
+		model :=
+			linalg.matrix4_translate_f32(it.pos + Vec3{0, bob, 0}) *
+			linalg.matrix4_rotate_f32(it.spin, Vec3{0, 1, 0}) *
+			linalg.matrix4_scale_f32(Vec3{0.3, 0.3, 0.3})
+		ent_set_mat4(e_mvp, vp * model)
+		col := block_color(it.block)
+		gl.Uniform3f(e_color, col.r, col.g, col.b)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+	}
+	gl.BindVertexArray(0)
+}

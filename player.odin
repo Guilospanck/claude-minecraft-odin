@@ -18,6 +18,7 @@ Player :: struct {
 	hurt_timer: f32, // brief invulnerability after taking damage
 	fall_speed: f32, // tracked while airborne for fall damage
 	respawn:    Vec3,
+	inventory:  [BlockId]int,
 }
 
 HOTBAR := [9]BlockId {
@@ -42,6 +43,14 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.selected = .Grass
 	p.health = MAX_HEALTH
 	p.respawn = pos
+
+	// starting kit so you can build right away; gather more by mining
+	p.inventory[.Grass] = 32
+	p.inventory[.Dirt] = 32
+	p.inventory[.Stone] = 32
+	p.inventory[.Wood] = 16
+	p.inventory[.Sand] = 16
+	p.inventory[.Glowstone] = 8
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
@@ -91,7 +100,7 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 	if g_input.select > 0 {
 		p.selected = HOTBAR[g_input.select - 1]
-		fmt.println("selected:", block_name(p.selected))
+		fmt.println("selected:", block_name(p.selected), "x", p.inventory[p.selected])
 		g_input.select = 0
 	}
 
@@ -165,8 +174,16 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 			if mob_idx >= 0 && mob_t <= block_dist {
 				mob_hit(&w.mobs, mob_idx, dir)
 			} else if hit.hit {
-				world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
-				audio_play(.Break)
+				broken := world_block(w, hit.bx, hit.by, hit.bz)
+				if broken != .Bedrock { // bedrock is unbreakable
+					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
+					audio_play(.Break)
+					item_spawn(
+						&w.items,
+						broken,
+						Vec3{f32(hit.bx) + 0.5, f32(hit.by) + 0.3, f32(hit.bz) + 0.5},
+					)
+				}
 			}
 		}
 
@@ -177,12 +194,32 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 			if ty >= 0 &&
 			   ty < CHUNK_H &&
 			   world_block(w, tx, ty, tz) == .Air &&
-			   !block_hits_player(p, tx, ty, tz) {
+			   !block_hits_player(p, tx, ty, tz) &&
+			   p.inventory[p.selected] > 0 {
 				world_set_block(w, tx, ty, tz, p.selected)
+				p.inventory[p.selected] -= 1
 				audio_play(.Place)
 			}
 		}
 	}
+
+	if g_input.craft {
+		try_craft(p)
+		g_input.craft = false
+	}
+
 	g_input.break_req = false
 	g_input.place_req = false
+}
+
+// Minimal crafting: press C to turn 4 Sand + 1 Ore into 1 Glowstone.
+try_craft :: proc(p: ^Player) {
+	if p.inventory[.Sand] >= 4 && p.inventory[.Ore] >= 1 {
+		p.inventory[.Sand] -= 4
+		p.inventory[.Ore] -= 1
+		p.inventory[.Glowstone] += 1
+		fmt.println("crafted Glowstone (4 Sand + 1 Ore) — now have", p.inventory[.Glowstone])
+	} else {
+		fmt.println("craft needs 4 Sand + 1 Ore; have", p.inventory[.Sand], "Sand,", p.inventory[.Ore], "Ore")
+	}
 }

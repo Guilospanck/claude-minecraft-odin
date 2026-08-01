@@ -65,6 +65,21 @@ hud_draw_health :: proc(health, fbw, fbh: int) {
 	gl.Enable(gl.DEPTH_TEST)
 }
 
+// A swatch of the currently selected block, bottom-centre.
+hud_draw_selected :: proc(sel: BlockId, fbw, fbh: int) {
+	gl.UseProgram(h_prog)
+	gl.Disable(gl.DEPTH_TEST)
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	sz: f32 = 0.09
+	w := sz / aspect
+	y0: f32 = -0.985
+	b: f32 = 0.006
+	hud_rect(-w / 2 - b, y0 - b, w / 2 + b, y0 + sz + b, Vec4{0.9, 0.9, 0.9, 1}) // border
+	col := block_color(sel)
+	hud_rect(-w / 2, y0, w / 2, y0 + sz, Vec4{col.r, col.g, col.b, 1})
+	gl.Enable(gl.DEPTH_TEST)
+}
+
 // Screen-space crosshair (two short lines) drawn directly in NDC.
 hud_draw :: proc(fbw, fbh: i32) {
 	aspect := f32(fbw) / f32(max(fbh, 1))

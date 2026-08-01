@@ -161,6 +161,30 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_ITEMS=N drops N assorted item cubes ahead.
+	if s := os.get_env("MC_ITEMS", context.temp_allocator); s != "" {
+		if n, ok := strconv.parse_int(s); ok {
+			fwd := camera_front(player.yaw, 0)
+			c := player.pos + fwd * 6
+			kinds := [?]BlockId{.Grass, .Stone, .Wood, .Sand, .Ore, .Glowstone}
+			for k in 0 ..< n {
+				x := int(c.x) + rng_int(6) - 3
+				z := int(c.z) + rng_int(6) - 3
+				world_ensure_chunk(&world, world_chunk_at(&world, x, z))
+				for y := CHUNK_H - 2; y >= 1; y -= 1 {
+					if block_is_solid(world_block(&world, x, y, z)) {
+						item_spawn(
+							&world.items,
+							kinds[k % len(kinds)],
+							Vec3{f32(x) + 0.5, f32(y + 1) + 0.4, f32(z) + 0.5},
+						)
+						break
+					}
+				}
+			}
+		}
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -205,6 +229,7 @@ main :: proc() {
 		handle_break_place(&world, &player)
 		world_stream(&world, player.pos)
 		mobs_update(&world, &player, &world.mobs, dt)
+		items_update(&world, &player, &world.items, dt)
 		render_remesh(&world, player.pos)
 		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
 

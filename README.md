@@ -25,6 +25,11 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
   point light (0–15, blocked by solids) that lights the night.
 - **Sound** — procedurally synthesised SFX (break, place, footsteps, jump,
   mob hurt) via miniaudio; no audio files.
+- **Combat & health** — 20-HP player with a heart HUD, knockback, fall
+  damage, invulnerability frames, and death → respawn.
+- **Drops & inventory** — breaking a block drops a bobbing item you collect
+  into a per-block inventory; placing consumes it (bedrock is unbreakable).
+- **Crafting** — press `C` to craft (4 Sand + 1 Ore → 1 Glowstone).
 
 ![animals](docs/mobs.png)
 ![night](docs/night.png)
@@ -55,8 +60,9 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 | `Left Shift`     | Fly down                  |
 | `F`              | Toggle fly (noclip)       |
 | `1`–`9`          | Select hotbar block       |
-| Left click       | Break block / punch animal |
+| Left click       | Break block / hit mob     |
 | Right click      | Place selected block      |
+| `C`              | Craft (4 Sand + 1 Ore → Glowstone) |
 | `Esc`            | Quit (saves the world)    |
 
 ## Tests
@@ -73,6 +79,7 @@ odin test .           # noise, chunk indexing, raycast, collision, meshing, save
 - `MC_TIME=t` – pin the time of day (0=midnight, 0.5=noon).
 - `MC_MOBS=N` – force-spawn N animals in front of the camera.
 - `MC_GLOW=1` – drop a few glowstone blocks ahead (to see block lighting).
+- `MC_ZOMBIES=N` / `MC_ITEMS=N` – spawn zombies / dropped items ahead.
 - `MC_SCAN=1` – generate a region, print nearby biome coordinates, and exit.
 
 ## Layout

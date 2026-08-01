@@ -20,6 +20,7 @@ free_test_world :: proc(w: ^World) {
 	}
 	delete(w.chunks)
 	delete(w.mobs)
+	delete(w.items)
 }
 
 @(test)
@@ -148,6 +149,41 @@ test_no_tunnel_terminal_velocity :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, p.pos.y >= 40.9, "must not tunnel through the 1-block floor")
 	testing.expect(t, p.on_ground, "should come to rest on the floor")
+}
+
+@(test)
+test_item_pickup :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for x in 0 ..< CHUNK_W {
+		for z in 0 ..< CHUNK_D {
+			chunk_set(c, x, 10, z, .Stone)
+		}
+	}
+	p: Player
+	player_init(&p, Vec3{8.5, 11.0, 8.5})
+	before := p.inventory[.Stone]
+	item_spawn(&w.items, .Stone, Vec3{8.5, 11.2, 8.5})
+	for _ in 0 ..< 90 {
+		items_update(&w, &p, &w.items, 1.0 / 60.0)
+	}
+	testing.expect(t, p.inventory[.Stone] == before + 1, "item picked up into inventory")
+	testing.expect(t, len(w.items) == 0, "item removed after pickup")
+}
+
+@(test)
+test_craft_glowstone :: proc(t: ^testing.T) {
+	p: Player
+	p.inventory[.Sand] = 5
+	p.inventory[.Ore] = 2
+	try_craft(&p)
+	testing.expect(t, p.inventory[.Glowstone] == 1, "crafted one glowstone")
+	testing.expect(t, p.inventory[.Sand] == 1, "consumed 4 sand")
+	testing.expect(t, p.inventory[.Ore] == 1, "consumed 1 ore")
+
+	// not enough materials: no change
+	try_craft(&p)
+	testing.expect(t, p.inventory[.Glowstone] == 1, "no craft without materials")
 }
 
 @(test)

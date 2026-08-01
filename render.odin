@@ -247,10 +247,12 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	gl.Disable(gl.BLEND)
 
 	entity_render_frame(&w.mobs, vp, ambient)
+	items_render_frame(&w.items, vp, ambient)
 
 	draw_outline(w, p, vp)
 	hud_draw(fbw, fbh)
 	hud_draw_health(p.health, int(fbw), int(fbh))
+	hud_draw_selected(p.selected, int(fbw), int(fbh))
 	gl.BindVertexArray(0)
 }
 
