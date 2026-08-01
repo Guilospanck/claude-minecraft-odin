@@ -325,6 +325,18 @@ main :: proc() {
 		}
 	}
 
+	// Drain any keys pressed on the title screen so they don't leak into play.
+	g_input.craft = false
+	g_input.smelt = false
+	g_input.eat = false
+	g_input.fly_toggle = false
+	g_input.break_req = false
+	g_input.place_req = false
+	g_input.select = 0
+	g_input.inv_toggle = false
+	g_input.settings_toggle = false
+	g_input.craft_toggle = false
+
 	frame := 0
 	last := glfw.GetTime()
 	for !glfw.WindowShouldClose(win) {
@@ -364,10 +376,15 @@ main :: proc() {
 
 		paused := g_show_inventory || g_show_settings || g_show_crafting
 		if paused {
+			// discard buffered gameplay one-shots so they don't fire on close
 			g_input.dx = 0
 			g_input.dy = 0
 			g_input.break_req = false
 			g_input.place_req = false
+			g_input.craft = false
+			g_input.smelt = false
+			g_input.eat = false
+			g_input.fly_toggle = false
 			if g_show_settings {
 				if g_input.nav_up do g_settings_sel = (g_settings_sel + SETTINGS_COUNT - 1) % SETTINGS_COUNT
 				if g_input.nav_down do g_settings_sel = (g_settings_sel + 1) % SETTINGS_COUNT
