@@ -80,11 +80,17 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			mfac := wg_smoothstep(0.30, 0.75, mountain)
 			h += int(mfac * 44.0 * (0.5 + 0.5 * rough))
 
-			// Rivers: winding channels along a low-frequency zero-crossing.
+			// Rivers: winding channels along a low-frequency zero-crossing, only
+			// in lowlands (so they don't gouge canyons through mountains) with
+			// banks that slope smoothly into the channel.
 			river := fbm2(seed + 99, fx * 0.0035, fz * 0.0035, 2)
-			is_river := abs(river) < 0.035
-			if is_river && h > SEA_LEVEL - 2 {
-				h = SEA_LEVEL - 2
+			ra := abs(river)
+			if ra < 0.05 && h < SEA_LEVEL + 16 {
+				target := SEA_LEVEL - 3
+				if h > target {
+					depth := (0.05 - ra) / 0.05 // 0 at bank .. 1 at centre
+					h = int(f32(h) * (1 - depth) + f32(target) * depth)
+				}
 			}
 
 			if h < 4 do h = 4
