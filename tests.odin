@@ -71,6 +71,17 @@ test_raycast_hits_block :: proc(t: ^testing.T) {
 
 	miss := raycast(&w, Vec3{2.5, 2.5, 10.0}, Vec3{0, 1, 0}, 20.0)
 	testing.expect(t, !miss.hit, "ray into empty space misses")
+
+	// entry distance: from z=10 moving -z, the ray enters the z=2 voxel at z=3
+	testing.expect(t, hit.t > 6.999 && hit.t < 7.001, "raycast entry distance == 7")
+}
+
+@(test)
+test_ray_aabb_distance :: proc(t: ^testing.T) {
+	// unit ray hits a box whose near face is at distance 4
+	ok, dist := ray_aabb(Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{4, -1, -1}, Vec3{5, 1, 1})
+	testing.expect(t, ok, "ray should hit the box")
+	testing.expect(t, dist > 3.999 && dist < 4.001, "near-face distance == 4")
 }
 
 @(test)

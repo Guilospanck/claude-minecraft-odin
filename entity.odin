@@ -93,6 +93,7 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	sy, surf := surface_y(w, wx, wz)
 	if sy < 0 do return
 	if surf != .Grass && surf != .Sand && surf != .Snow do return
+	if world_block(w, wx, sy + 1, wz) == .Water do return // don't spawn on seabed
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
 	kind := MobKind(rng_int(MOB_KIND_COUNT))
@@ -116,6 +117,7 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 		world_ensure_chunk(w, Ivec2{floor_div(wx, CHUNK_W), floor_div(wz, CHUNK_D)})
 		sy, _ := surface_y(w, wx, wz)
 		if sy < 0 do continue
+		if world_block(w, wx, sy + 1, wz) == .Water do continue
 		if block_is_solid(world_block(w, wx, sy + 1, wz)) do continue
 		append(
 			mobs,

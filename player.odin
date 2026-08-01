@@ -106,10 +106,8 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 		eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
 		dir := camera_front(p.yaw, p.pitch)
 		hit := raycast(w, eye, dir, REACH)
-		block_dist :=
-			hit.hit \
-			? linalg.length(Vec3{f32(hit.bx) + 0.5, f32(hit.by) + 0.5, f32(hit.bz) + 0.5} - eye) \
-			: REACH
+		// Along-ray entry distance, consistent with mob_pick's ray_aabb t.
+		block_dist := hit.hit ? hit.t : REACH
 
 		if g_input.break_req {
 			// A left click punches a mob if one is under the crosshair and
