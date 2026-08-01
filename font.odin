@@ -7,7 +7,7 @@ import gl "vendor:OpenGL"
 // baked into a single-channel GL texture at startup. text_draw batches a
 // string into textured quads in NDC space.
 
-FONT_CHARS :: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:-./"
+FONT_CHARS :: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:-./+()>"
 GLYPH_W :: 5
 GLYPH_H :: 7
 CELL_W :: 6 // glyph + 1px advance gap
@@ -55,6 +55,10 @@ FONT_GLYPHS := [FONT_N][7]u8 {
 	{0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000}, // -
 	{0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100}, // .
 	{0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000}, // /
+	{0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000}, // +
+	{0b00010, 0b00100, 0b01000, 0b01000, 0b01000, 0b00100, 0b00010}, // (
+	{0b01000, 0b00100, 0b00010, 0b00010, 0b00010, 0b00100, 0b01000}, // )
+	{0b10000, 0b01000, 0b00100, 0b00010, 0b00100, 0b01000, 0b10000}, // >
 }
 
 font_tex: u32

@@ -202,25 +202,40 @@ draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
 
 render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	sky, ambient, _ := daynight(w.time_of_day)
-	gl.ClearColor(sky.r, sky.g, sky.b, 1.0)
+
+	// When the camera is submerged, murk the fog and dim the light.
+	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
+	underwater :=
+		world_block(w, int(math.floor(eye.x)), int(math.floor(eye.y)), int(math.floor(eye.z))) ==
+		.Water
+	fog_col := sky
+	fog_start := FOG_START
+	fog_end := FOG_END
+	if underwater {
+		fog_col = Vec3{0.10, 0.24, 0.42}
+		fog_start = 1.5
+		fog_end = 22.0
+		ambient *= 0.72
+	}
+
+	gl.ClearColor(fog_col.r, fog_col.g, fog_col.b, 1.0)
 	gl.Viewport(0, 0, fbw, fbh)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
 	view := view_matrix(eye, p.yaw, p.pitch)
 	proj := proj_matrix(aspect)
 	vp := proj * view
 
-	sky_render(eye, vp, w.time_of_day)
+	if !underwater do sky_render(eye, vp, w.time_of_day)
 
 	gl.UseProgram(r_chunk_prog)
 	set_mat4(u_mvp, vp)
 	gl.Uniform3f(u_campos, eye.x, eye.y, eye.z)
 	gl.Uniform1i(u_tex, 0)
-	gl.Uniform3f(u_fogcol, sky.r, sky.g, sky.b)
-	gl.Uniform1f(u_fogstart, FOG_START)
-	gl.Uniform1f(u_fogend, FOG_END)
+	gl.Uniform3f(u_fogcol, fog_col.r, fog_col.g, fog_col.b)
+	gl.Uniform1f(u_fogstart, fog_start)
+	gl.Uniform1f(u_fogend, fog_end)
 	gl.Uniform1f(u_ambient, ambient)
 	gl.ActiveTexture(gl.TEXTURE0)
 	gl.BindTexture(gl.TEXTURE_2D, r_atlas)
@@ -256,10 +271,15 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	remotes_render_frame(vp, ambient)
 
 	draw_outline(w, p, vp)
+
+	if underwater {
+		hud_quad(-1, -1, 1, 1, Vec4{0.12, 0.30, 0.55, 0.38}) // submerged tint
+	}
+
 	hud_draw(fbw, fbh)
 	hud_draw_health(p.health, int(fbw), int(fbh))
 	hud_draw_hunger(int(p.hunger), int(fbw), int(fbh))
-	hud_draw_selected(p.selected, int(fbw), int(fbh))
+	ui_draw_hotbar(p, int(fbw), int(fbh))
 	gl.BindVertexArray(0)
 }
 

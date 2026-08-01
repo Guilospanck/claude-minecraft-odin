@@ -227,6 +227,37 @@ test_arrow_hits_player :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_place_block :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 12, 3, .Stone) // a wall block to aim at
+	p: Player
+	player_init(&p, Vec3{8.5, 11.0, 8.5})
+	p.yaw = 0 // look toward -z
+	p.pitch = 0
+	p.selected = .Stone
+	p.inventory = {}
+	p.inventory[.Stone] = 5
+
+	g_input = {}
+	g_input.place_req = true
+	handle_break_place(&w, &p)
+	g_input = {}
+
+	testing.expect(t, world_block(&w, 8, 12, 4) == .Stone, "block placed against the wall")
+	testing.expect(t, p.inventory[.Stone] == 4, "inventory decremented on place")
+
+	// empty slot: nothing happens
+	p.selected = .Iron
+	p.inventory[.Iron] = 0
+	g_input = {}
+	g_input.place_req = true
+	handle_break_place(&w, &p)
+	g_input = {}
+	testing.expect(t, world_block(&w, 8, 12, 5) != .Iron, "no place from an empty slot")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }

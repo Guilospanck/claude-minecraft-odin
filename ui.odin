@@ -33,12 +33,57 @@ render_title :: proc(fbw, fbh: i32) {
 	)
 }
 
+// Minecraft-style hotbar: 9 slots (keys 1-9) with block swatch, count, and a
+// highlight on the selected slot.
+ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	sz: f32 = 0.11
+	w := sz / aspect
+	gap: f32 = 0.012
+	total := f32(9) * (w + gap) - gap
+	x0 := -total * 0.5
+	y0: f32 = -0.97
+
+	sel := -1
+	for i in 0 ..< 9 do if HOTBAR[i] == p.selected do sel = i
+
+	ch_h: f32 = 0.032
+	cw := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+
+	for i in 0 ..< 9 {
+		bx := x0 + f32(i) * (w + gap)
+		b := HOTBAR[i]
+		cnt := p.inventory[b]
+
+		border := i == sel ? Vec4{1, 1, 1, 0.95} : Vec4{0.12, 0.12, 0.15, 0.75}
+		hud_quad(bx - 0.006, y0 - 0.006, bx + w + 0.006, y0 + sz + 0.006, border)
+
+		col := block_color(b)
+		a: f32 = cnt > 0 ? 1.0 : 0.35
+		hud_quad(bx, y0, bx + w, y0 + sz, Vec4{col.r, col.g, col.b, a})
+
+		num := fmt.tprintf("%d", i + 1)
+		text_draw(num, bx + 0.004, y0 + sz - 0.004, cw * 0.8, ch_h * 0.8, Vec4{0.95, 0.95, 0.6, 0.9})
+		if cnt > 0 {
+			s := fmt.tprintf("%d", cnt)
+			text_draw(
+				s,
+				bx + w - text_width(s, cw) - 0.004,
+				y0 + ch_h + 0.004,
+				cw,
+				ch_h,
+				Vec4{1, 1, 1, 1},
+			)
+		}
+	}
+}
+
 // Full-screen inventory panel: title, every owned block with a colour swatch
 // and count, and a controls footer. Toggled with E.
 ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
 
-	hud_quad(-0.72, -0.86, 0.72, 0.86, Vec4{0.05, 0.05, 0.08, 0.88})
+	hud_quad(-0.86, -0.88, 0.86, 0.88, Vec4{0.05, 0.05, 0.08, 0.9})
 
 	ch_h: f32 = 0.05
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
@@ -71,10 +116,37 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		)
 	}
 
+	// --- right column: how to get / make things ---
+	hx: f32 = 0.06
+	hy: f32 = 0.74
+	text_draw("HOW TO", hx, hy, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+	hy -= ch_h * 2.2
+	help := [?]string {
+		"MINE: HOLD LMB ON A BLOCK",
+		"PLACE: RMB (USES A SLOT)",
+		"1-9: PICK A HOTBAR SLOT",
+		"",
+		"CRAFT (C):",
+		"  8 STONE -> FURNACE",
+		"  4 SAND + 1 ORE -> GLOWSTONE",
+		"",
+		"SMELT (V, NEAR A FURNACE):",
+		"  ORE + WOOD -> IRON",
+		"  SAND + WOOD -> GLASS",
+		"",
+		"KILL ANIMALS -> FOOD (EAT: G)",
+	}
+	for line in help {
+		if line != "" {
+			text_draw(line, hx, hy, ch_w * 0.82, ch_h * 0.82, Vec4{0.85, 0.9, 0.96, 1})
+		}
+		hy -= ch_h * 1.15
+	}
+
 	text_draw(
 		"1-9 SELECT   C CRAFT   V SMELT   E CLOSE",
 		x,
-		-0.74,
+		-0.78,
 		ch_w * 0.85,
 		ch_h * 0.85,
 		Vec4{0.75, 0.82, 0.92, 1},

@@ -59,6 +59,8 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.inventory[.Glowstone] = 8
 	p.inventory[.Furnace] = 2
 	p.inventory[.Ore] = 6
+	p.inventory[.Glass] = 8 // so every hotbar slot starts placeable
+	p.inventory[.Iron] = 8
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
@@ -310,14 +312,22 @@ try_smelt :: proc(w: ^World, p: ^Player) {
 	}
 }
 
-// Minimal crafting: press C to turn 4 Sand + 1 Ore into 1 Glowstone.
+// Crafting (press C). Tries recipes in order and makes the first you can afford:
+//   8 Stone            -> 1 Furnace
+//   4 Sand + 1 Ore     -> 1 Glowstone
 try_craft :: proc(p: ^Player) {
+	if p.inventory[.Stone] >= 8 {
+		p.inventory[.Stone] -= 8
+		p.inventory[.Furnace] += 1
+		fmt.println("crafted Furnace (8 Stone) — now have", p.inventory[.Furnace])
+		return
+	}
 	if p.inventory[.Sand] >= 4 && p.inventory[.Ore] >= 1 {
 		p.inventory[.Sand] -= 4
 		p.inventory[.Ore] -= 1
 		p.inventory[.Glowstone] += 1
 		fmt.println("crafted Glowstone (4 Sand + 1 Ore) — now have", p.inventory[.Glowstone])
-	} else {
-		fmt.println("craft needs 4 Sand + 1 Ore; have", p.inventory[.Sand], "Sand,", p.inventory[.Ore], "Ore")
+		return
 	}
+	fmt.println("craft: 8 Stone -> Furnace, or 4 Sand + 1 Ore -> Glowstone")
 }
