@@ -125,12 +125,20 @@ build_edit :: proc(buf: []u8, x, y, z: int, block: BlockId) {
 }
 
 // ---- server ----
+// Snapshot the target sockets under the mutex, then send OUTSIDE the lock so a
+// slow/stalled peer can never freeze other threads (or deadlock the server).
+// Callers must NOT hold g_net.mutex.
 @(private = "file")
 broadcast :: proc(buf: []u8, except: u32) {
-	// caller holds the mutex
+	socks := make([dynamic]net.TCP_Socket, 0, 8)
+	defer delete(socks)
+	sync.mutex_lock(&g_net.mutex)
 	for c in g_net.clients {
-		if c.id == except do continue
-		_ = send_all(c.sock, buf)
+		if c.id != except do append(&socks, c.sock)
+	}
+	sync.mutex_unlock(&g_net.mutex)
+	for s in socks {
+		_ = send_all(s, buf)
 	}
 }
 
@@ -153,20 +161,21 @@ server_reader :: proc() {
 		payload: [20]u8
 		if size > 0 && !recv_exact(conn.sock, payload[:size]) do break
 
-		sync.mutex_lock(&g_net.mutex)
 		switch t[0] {
 		case MSG_POS:
+			sync.mutex_lock(&g_net.mutex)
 			g_net.remotes[conn.id] = RemotePlayer {
 				pos = Vec3{get_f32(payload[4:]), get_f32(payload[8:]), get_f32(payload[12:])},
 				yaw = get_f32(payload[16:]),
 			}
-			// relay to everyone else with the sender's id
+			sync.mutex_unlock(&g_net.mutex)
 			out: [21]u8
 			out[0] = MSG_POS
-			put_u32(out[1:], conn.id)
+			put_u32(out[1:], conn.id) // relay with the sender's id
 			copy(out[5:], payload[4:20])
 			broadcast(out[:], conn.id)
 		case MSG_EDIT:
+			sync.mutex_lock(&g_net.mutex)
 			append(
 				&g_net.edits,
 				NetEdit {
@@ -176,12 +185,12 @@ server_reader :: proc() {
 					block = BlockId(payload[12]),
 				},
 			)
+			sync.mutex_unlock(&g_net.mutex)
 			relay: [14]u8
 			relay[0] = MSG_EDIT
 			copy(relay[1:], payload[:13])
 			broadcast(relay[:], conn.id)
 		}
-		sync.mutex_unlock(&g_net.mutex)
 	}
 
 	// disconnect
@@ -193,11 +202,11 @@ server_reader :: proc() {
 		}
 	}
 	delete_key(&g_net.remotes, conn.id)
+	sync.mutex_unlock(&g_net.mutex)
 	leave: [5]u8
 	leave[0] = MSG_LEAVE
 	put_u32(leave[1:], conn.id)
 	broadcast(leave[:], conn.id)
-	sync.mutex_unlock(&g_net.mutex)
 	net.close(conn.sock)
 }
 
@@ -210,15 +219,24 @@ server_accept :: proc() {
 		sync.mutex_lock(&g_net.mutex)
 		id := g_net.next_id
 		g_net.next_id += 1
+		seed := g_net.seed
+		sync.mutex_unlock(&g_net.mutex)
+
+		// Fully write HELLO BEFORE the socket becomes a broadcast target, so no
+		// POS/EDIT can interleave ahead of the handshake bytes.
 		hello: [13]u8
 		hello[0] = MSG_HELLO
-		put_u64(hello[1:], g_net.seed)
+		put_u64(hello[1:], seed)
 		put_u32(hello[9:], id)
+		if !send_all(client, hello[:]) {
+			net.close(client)
+			continue
+		}
+
+		sync.mutex_lock(&g_net.mutex)
 		append(&g_net.clients, Conn{sock = client, id = id})
 		append(&g_net.pending, Conn{sock = client, id = id})
 		sync.mutex_unlock(&g_net.mutex)
-
-		_ = send_all(client, hello[:])
 		thread.create_and_start(server_reader)
 		fmt.println("[server] client", id, "connected")
 	}
@@ -315,27 +333,25 @@ net_send_pos :: proc(p: ^Player) {
 	if g_net.mode == .Off do return
 	buf: [21]u8
 	build_pos(buf[:], g_net.my_id, p.pos, p.yaw)
-	sync.mutex_lock(&g_net.mutex)
 	if g_net.mode == .Server {
-		broadcast(buf[:], g_net.my_id)
+		broadcast(buf[:], g_net.my_id) // self-locks
 	} else {
-		_ = send_all(g_net.server_sock, buf[:])
+		_ = send_all(g_net.server_sock, buf[:]) // only the main thread sends here
 	}
-	sync.mutex_unlock(&g_net.mutex)
 }
 
 net_send_edit :: proc(x, y, z: int, block: BlockId) {
 	if g_net.mode == .Off do return
 	buf: [14]u8
 	build_edit(buf[:], x, y, z, block)
-	sync.mutex_lock(&g_net.mutex)
 	if g_net.mode == .Server {
 		broadcast(buf[:], g_net.my_id)
 	} else {
 		_ = send_all(g_net.server_sock, buf[:])
 	}
-	sync.mutex_unlock(&g_net.mutex)
 }
+
+net_is_client :: proc() -> bool {return g_net.mode == .Client}
 
 // Apply queued inbound edits to the world (main thread).
 net_apply_edits :: proc(w: ^World) {

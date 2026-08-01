@@ -135,7 +135,7 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, spruce: bool) {
 			r := dy <= -2 ? 2 : (dy <= 0 ? 1 : 0)
 			for dz in -r ..= r {
 				for dx in -r ..= r {
-					if abs(dx) == r && abs(dz) == r do continue // clip corners
+					if r > 0 && abs(dx) == r && abs(dz) == r do continue // clip corners
 					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
 						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
 					}

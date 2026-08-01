@@ -93,7 +93,13 @@ mark_dirty :: proc(w: ^World, coord: Ivec2) {
 // Load from disk or generate; returns the (now loaded) chunk.
 world_ensure_chunk :: proc(w: ^World, coord: Ivec2) -> ^Chunk {
 	if c, ok := w.chunks[coord]; ok do return c
-	c, ok := load_chunk(coord)
+	c: ^Chunk
+	ok: bool
+	// Clients always generate from the server seed and never touch the local
+	// single-player save (which may belong to a different seed).
+	if !net_is_client() {
+		c, ok = load_chunk(coord)
+	}
 	if !ok {
 		c = chunk_make(coord)
 		worldgen_fill(c, w.seed)
@@ -149,15 +155,16 @@ world_stream :: proc(w: ^World, cam: Vec3) {
 	}
 	for coord in remove {
 		c := w.chunks[coord]
-		if !save_chunk(c) do continue // keep it loaded and retry next frame
+		if !net_is_client() && !save_chunk(c) do continue // keep loaded, retry
 		chunk_gl_free(c)
 		chunk_free(c)
 		delete_key(&w.chunks, coord)
 	}
 }
 
-// Save every loaded chunk (used on quit).
+// Save every loaded chunk (used on quit). Clients don't own the local save.
 world_save_all :: proc(w: ^World) {
+	if net_is_client() do return
 	for _, c in w.chunks {
 		save_chunk(c)
 	}

@@ -83,6 +83,8 @@ player_respawn :: proc(p: ^Player) {
 	p.pos = p.respawn
 	p.vel = Vec3{0, 0, 0}
 	p.health = MAX_HEALTH
+	p.hunger = HUNGER_MAX
+	p.starve = 0
 	p.hurt_timer = 1.0
 	p.fall_speed = 0
 }
