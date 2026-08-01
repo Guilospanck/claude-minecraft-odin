@@ -23,6 +23,7 @@ EntVert :: struct {
 e_prog: u32
 e_mvp: i32
 e_color: i32
+e_ambient: i32
 e_vao: u32
 e_vbo: u32
 
@@ -107,6 +108,7 @@ entity_render_init :: proc() {
 	}
 	e_mvp = gl.GetUniformLocation(e_prog, "uMVP")
 	e_color = gl.GetUniformLocation(e_prog, "uColor")
+	e_ambient = gl.GetUniformLocation(e_prog, "uAmbient")
 
 	// Unit cube centred at the origin (-0.5..0.5), reusing the world face
 	// tables for correct CCW winding and per-face shading.
@@ -139,9 +141,10 @@ entity_render_init :: proc() {
 	gl.BindVertexArray(0)
 }
 
-entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4) {
+entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 	if len(mobs^) == 0 do return
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(mobs^) {
 		m := &mobs^[i]

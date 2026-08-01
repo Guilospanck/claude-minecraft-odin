@@ -118,6 +118,12 @@ main :: proc() {
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
 
+	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
+	fixed_time: f32 = -1
+	if s := os.get_env("MC_TIME", context.temp_allocator); s != "" {
+		if v, ok := strconv.parse_f32(s); ok do fixed_time = v
+	}
+
 	// Debug: MC_MOBS=N force-spawns N animals in front of the camera.
 	if s := os.get_env("MC_MOBS", context.temp_allocator); s != "" {
 		if n, ok := strconv.parse_int(s); ok {
@@ -133,6 +139,13 @@ main :: proc() {
 		dt := f32(now - last)
 		last = now
 		if dt > 0.05 do dt = 0.05 // clamp to avoid tunnelling after hitches
+
+		if fixed_time >= 0 {
+			world.time_of_day = fixed_time
+		} else {
+			world.time_of_day += dt / DAY_LENGTH
+			if world.time_of_day >= 1 do world.time_of_day -= 1
+		}
 
 		glfw.PollEvents()
 		if g_input.quit {

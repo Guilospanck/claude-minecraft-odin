@@ -8,13 +8,14 @@ uniform float uAlpha;
 uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
+uniform float uAmbient;
 
 out vec4 FragColor;
 
 void main() {
     vec4 tex = texture(uTex, vUV);
     if (tex.a < 0.5) discard; // cutout support (unused while all blocks opaque)
-    vec3 c = tex.rgb * vLight;
+    vec3 c = tex.rgb * vLight * uAmbient;
     float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
     c = mix(c, uFogColor, fog);
     FragColor = vec4(c, uAlpha);

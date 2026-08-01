@@ -20,6 +20,7 @@ u_alpha: i32
 u_fogcol: i32
 u_fogstart: i32
 u_fogend: i32
+u_ambient: i32
 
 // line shader uniforms
 lu_mvp: i32
@@ -53,6 +54,7 @@ render_init :: proc(atlas: u32) {
 	u_fogcol = gl.GetUniformLocation(r_chunk_prog, "uFogColor")
 	u_fogstart = gl.GetUniformLocation(r_chunk_prog, "uFogStart")
 	u_fogend = gl.GetUniformLocation(r_chunk_prog, "uFogEnd")
+	u_ambient = gl.GetUniformLocation(r_chunk_prog, "uAmbient")
 	lu_mvp = gl.GetUniformLocation(r_line_prog, "uMVP")
 	lu_color = gl.GetUniformLocation(r_line_prog, "uColor")
 
@@ -188,6 +190,8 @@ draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
 }
 
 render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
+	sky, ambient, _ := daynight(w.time_of_day)
+	gl.ClearColor(sky.r, sky.g, sky.b, 1.0)
 	gl.Viewport(0, 0, fbw, fbh)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -201,9 +205,10 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	set_mat4(u_mvp, vp)
 	gl.Uniform3f(u_campos, eye.x, eye.y, eye.z)
 	gl.Uniform1i(u_tex, 0)
-	gl.Uniform3f(u_fogcol, SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b)
+	gl.Uniform3f(u_fogcol, sky.r, sky.g, sky.b)
 	gl.Uniform1f(u_fogstart, FOG_START)
 	gl.Uniform1f(u_fogend, FOG_END)
+	gl.Uniform1f(u_ambient, ambient)
 	gl.ActiveTexture(gl.TEXTURE0)
 	gl.BindTexture(gl.TEXTURE_2D, r_atlas)
 
@@ -232,7 +237,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	gl.DepthMask(true)
 	gl.Disable(gl.BLEND)
 
-	entity_render_frame(&w.mobs, vp)
+	entity_render_frame(&w.mobs, vp, ambient)
 
 	draw_outline(w, p, vp)
 	hud_draw(fbw, fbh)

@@ -4,9 +4,10 @@ import "core:math"
 import "core:slice"
 
 World :: struct {
-	chunks: map[Ivec2]^Chunk,
-	seed:   u64,
-	mobs:   [dynamic]Mob,
+	chunks:      map[Ivec2]^Chunk,
+	seed:        u64,
+	mobs:        [dynamic]Mob,
+	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
 }
 
 // Set before sorting chunk work lists; the comparators read it (single-threaded).
@@ -16,6 +17,7 @@ world_init :: proc(w: ^World, seed: u64) {
 	w.chunks = make(map[Ivec2]^Chunk)
 	w.seed = seed
 	w.mobs = make([dynamic]Mob, 0, MOB_CAP)
+	w.time_of_day = 0.30 // start mid-morning
 }
 
 world_chunk_at :: proc(w: ^World, wx, wz: int) -> Ivec2 {
