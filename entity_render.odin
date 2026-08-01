@@ -39,6 +39,12 @@ DARK :: Vec3{0.22, 0.20, 0.20}
 ORANGE :: Vec3{0.95, 0.66, 0.16}
 @(private = "file")
 CREAM :: Vec3{0.86, 0.78, 0.62}
+@(private = "file")
+ZGREEN :: Vec3{0.30, 0.55, 0.32}
+@(private = "file")
+ZSKIN :: Vec3{0.26, 0.46, 0.30}
+@(private = "file")
+PANTS :: Vec3{0.26, 0.30, 0.52}
 
 @(private = "file")
 pig_parts := [7]MobPart {
@@ -81,6 +87,16 @@ chicken_parts := [5]MobPart {
 	{{0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, -1},
 }
 
+@(private = "file")
+zombie_parts := [6]MobPart {
+	{{-0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PANTS, 1}, // left leg
+	{{0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PANTS, -1}, // right leg
+	{{0, 1.2, 0}, {0.5, 0.62, 0.28}, ZGREEN, 0}, // body
+	{{0, 1.68, 0}, {0.42, 0.42, 0.42}, ZSKIN, 0}, // head
+	{{-0.36, 1.2, 0.28}, {0.16, 0.6, 0.16}, ZGREEN, -1}, // left arm
+	{{0.36, 1.2, -0.28}, {0.16, 0.6, 0.16}, ZGREEN, 1}, // right arm
+}
+
 mob_parts :: proc(k: MobKind) -> []MobPart {
 	switch k {
 	case .Pig:
@@ -91,6 +107,8 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return cow_parts[:]
 	case .Chicken:
 		return chicken_parts[:]
+	case .Zombie:
+		return zombie_parts[:]
 	}
 	return pig_parts[:]
 }

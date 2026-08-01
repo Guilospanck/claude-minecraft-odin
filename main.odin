@@ -134,6 +134,33 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_ZOMBIES=N spawns N zombies ahead (for screenshots/testing).
+	if s := os.get_env("MC_ZOMBIES", context.temp_allocator); s != "" {
+		if n, ok := strconv.parse_int(s); ok {
+			fwd := camera_front(player.yaw, 0)
+			c := player.pos + fwd * 10
+			for k in 0 ..< n {
+				x := int(c.x) + rng_int(8) - 4
+				z := int(c.z) + rng_int(8) - 4
+				world_ensure_chunk(&world, world_chunk_at(&world, x, z))
+				for y := CHUNK_H - 2; y >= 1; y -= 1 {
+					if block_is_solid(world_block(&world, x, y, z)) {
+						append(
+							&world.mobs,
+							Mob {
+								kind = .Zombie,
+								pos = Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5},
+								health = 12,
+								ai_timer = rng_range(0, 1),
+							},
+						)
+						break
+					}
+				}
+			}
+		}
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -174,10 +201,10 @@ main :: proc() {
 
 		process_input(&player, dt)
 		physics_update(&world, &player, dt)
-		player_update_audio(&player, dt)
+		player_tick(&player, dt)
 		handle_break_place(&world, &player)
 		world_stream(&world, player.pos)
-		mobs_update(&world, &world.mobs, player.pos, dt)
+		mobs_update(&world, &player, &world.mobs, dt)
 		render_remesh(&world, player.pos)
 		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
 

@@ -74,7 +74,23 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.fly {
 		p.pos += p.vel * dt // noclip free-fly
 		p.on_ground = false
+		p.fall_speed = 0
 		return
 	}
+
+	if !p.on_ground && p.vel.y < 0 {
+		fs := -p.vel.y
+		if fs > p.fall_speed do p.fall_speed = fs
+	}
+	was_air := !p.on_ground
+
 	p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt)
+
+	if p.on_ground {
+		if was_air && p.fall_speed > FALL_SAFE {
+			dmg := int((p.fall_speed - FALL_SAFE) * 0.5)
+			if dmg > 0 do player_damage(p, dmg, Vec3{0, 0, 0})
+		}
+		p.fall_speed = 0
+	}
 }

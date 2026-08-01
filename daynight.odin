@@ -33,3 +33,11 @@ daynight :: proc(t: f32) -> (sky: Vec3, ambient: f32, sun_height: f32) {
 	sky = sky * (1 - glow) + DUSK_SKY * glow
 	return
 }
+
+is_night :: proc(t: f32) -> bool {
+	return math.sin((t - 0.25) * 2 * math.PI) < -0.05
+}
+
+is_day :: proc(t: f32) -> bool {
+	return math.sin((t - 0.25) * 2 * math.PI) > 0.20
+}

@@ -10,10 +10,14 @@ Player :: struct {
 	vel:       Vec3,
 	yaw:       f32,
 	pitch:     f32,
-	on_ground: bool,
-	fly:       bool,
-	selected:  BlockId,
+	on_ground:  bool,
+	fly:        bool,
+	selected:   BlockId,
 	step_accum: f32, // distance walked since the last footstep sound
+	health:     int,
+	hurt_timer: f32, // brief invulnerability after taking damage
+	fall_speed: f32, // tracked while airborne for fall damage
+	respawn:    Vec3,
 }
 
 HOTBAR := [9]BlockId {
@@ -36,6 +40,33 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.on_ground = false
 	p.fly = false
 	p.selected = .Grass
+	p.health = MAX_HEALTH
+	p.respawn = pos
+}
+
+// Apply damage with brief invulnerability + optional horizontal knockback.
+player_damage :: proc(p: ^Player, amount: int, dir: Vec3) {
+	if p.hurt_timer > 0 do return
+	p.health -= amount
+	p.hurt_timer = 0.5
+	if dir.x != 0 || dir.z != 0 {
+		p.vel.x += dir.x * 5
+		p.vel.z += dir.z * 5
+		if !p.fly do p.vel.y = 5
+	}
+	audio_play(.Hurt, 0.8)
+	if p.health <= 0 {
+		player_respawn(p)
+	}
+}
+
+player_respawn :: proc(p: ^Player) {
+	fmt.println("you died - respawning")
+	p.pos = p.respawn
+	p.vel = Vec3{0, 0, 0}
+	p.health = MAX_HEALTH
+	p.hurt_timer = 1.0
+	p.fall_speed = 0
 }
 
 @(private = "file")
@@ -90,8 +121,10 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 }
 
-// Footstep sounds: accumulate horizontal distance while grounded.
-player_update_audio :: proc(p: ^Player, dt: f32) {
+// Per-frame player upkeep: invulnerability timer + footstep sounds.
+player_tick :: proc(p: ^Player, dt: f32) {
+	if p.hurt_timer > 0 do p.hurt_timer -= dt
+
 	if p.on_ground && !p.fly {
 		sp := math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
 		p.step_accum += sp * dt

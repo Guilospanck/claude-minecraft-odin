@@ -7,20 +7,31 @@ MobKind :: enum {
 	Sheep,
 	Cow,
 	Chicken,
+	Zombie,
 }
 
 MOB_KIND_COUNT :: len(MobKind)
+PASSIVE_COUNT :: 4 // Pig..Chicken; Zombie is hostile and spawns separately
+
+ZOMBIE_DETECT :: f32(18.0)
+ZOMBIE_REACH :: f32(1.5)
+ZOMBIE_DMG :: 3
+
+mob_is_hostile :: proc(k: MobKind) -> bool {
+	return k == .Zombie
+}
 
 Mob :: struct {
-	kind:       MobKind,
-	pos:        Vec3, // feet centre
-	vel:        Vec3,
-	yaw:        f32,
-	on_ground:  bool,
-	moving:     bool,
-	walk_phase: f32, // drives leg animation
-	ai_timer:   f32,
-	health:     int,
+	kind:         MobKind,
+	pos:          Vec3, // feet centre
+	vel:          Vec3,
+	yaw:          f32,
+	on_ground:    bool,
+	moving:       bool,
+	walk_phase:   f32, // drives leg animation
+	ai_timer:     f32,
+	attack_timer: f32, // hostile melee cooldown
+	health:       int,
 }
 
 MobDims :: struct {
@@ -34,22 +45,53 @@ MOB_DIMS := [MobKind]MobDims {
 	.Sheep   = {0.45, 1.2, 2.0},
 	.Cow     = {0.5, 1.4, 1.9},
 	.Chicken = {0.3, 0.7, 2.6},
+	.Zombie  = {0.35, 1.9, 3.2},
 }
 
 MOB_CAP :: 22
 MOB_DESPAWN_DIST :: f32(60)
 
 // --- AI + physics for one mob ---
-mob_update :: proc(w: ^World, m: ^Mob, dt: f32) {
-	dims := MOB_DIMS[m.kind]
-
+@(private = "file")
+ai_wander :: proc(m: ^Mob, dt: f32, move_chance: f32) {
 	m.ai_timer -= dt
 	if m.ai_timer <= 0 {
 		m.ai_timer = rng_range(1.5, 4.0)
-		m.moving = rng_f32() < 0.6
+		m.moving = rng_f32() < move_chance
 		if m.moving {
 			m.yaw = rng_range(0, 2 * math.PI)
 		}
+	}
+}
+
+@(private = "file")
+ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
+	dx := p.pos.x - m.pos.x
+	dz := p.pos.z - m.pos.z
+	d2 := dx * dx + dz * dz
+	if d2 < ZOMBIE_DETECT * ZOMBIE_DETECT {
+		m.moving = true
+		m.yaw = math.atan2(dx, -dz) // face the player
+		m.attack_timer -= dt
+		if d2 < ZOMBIE_REACH * ZOMBIE_REACH &&
+		   math.abs(p.pos.y - m.pos.y) < 2.0 &&
+		   m.attack_timer <= 0 {
+			inv := 1.0 / math.sqrt(d2 + 1e-4)
+			player_damage(p, ZOMBIE_DMG, Vec3{dx * inv, 0, dz * inv})
+			m.attack_timer = 1.0
+		}
+	} else {
+		ai_wander(m, dt, 0.4)
+	}
+}
+
+mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
+	dims := MOB_DIMS[m.kind]
+
+	if mob_is_hostile(m.kind) {
+		ai_hostile(w, p, m, dt)
+	} else {
+		ai_wander(m, dt, 0.6)
 	}
 
 	if m.moving {
@@ -96,7 +138,7 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if world_block(w, wx, sy + 1, wz) == .Water do return // don't spawn on seabed
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
-	kind := MobKind(rng_int(MOB_KIND_COUNT))
+	kind := MobKind(rng_int(PASSIVE_COUNT))
 	append(
 		mobs,
 		Mob {
@@ -105,6 +147,32 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 			yaw = rng_range(0, 2 * math.PI),
 			ai_timer = rng_range(0, 2),
 			health = 6,
+		},
+	)
+}
+
+// Hostile spawn: zombies appear at night on any solid surface with headroom.
+zombie_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
+	if len(mobs^) >= MOB_CAP do return
+	ang := rng_range(0, 2 * math.PI)
+	dist := rng_range(24, 46)
+	wx := int(player_pos.x + math.cos(ang) * dist)
+	wz := int(player_pos.z + math.sin(ang) * dist)
+
+	sy, surf := surface_y(w, wx, wz)
+	if sy < 0 do return
+	if surf == .Water do return
+	if world_block(w, wx, sy + 1, wz) == .Water do return
+	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return
+
+	append(
+		mobs,
+		Mob {
+			kind = .Zombie,
+			pos = Vec3{f32(wx) + 0.5, f32(sy + 1), f32(wz) + 0.5},
+			yaw = rng_range(0, 2 * math.PI),
+			ai_timer = rng_range(0, 2),
+			health = 12,
 		},
 	)
 }
@@ -132,21 +200,29 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 	}
 }
 
-// Update all mobs: occasional spawn, per-mob AI, and far-away despawn.
-mobs_update :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3, dt: f32) {
+// Update all mobs: spawning (passive anytime, zombies at night), per-mob AI,
+// daylight burn for zombies, and far-away / dead despawn.
+mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
+	player_pos := p.pos
 	if rng_f32() < 0.03 do mob_try_spawn(w, mobs, player_pos)
+	if is_night(w.time_of_day) && rng_f32() < 0.05 do zombie_try_spawn(w, mobs, player_pos)
 
 	i := 0
 	for i < len(mobs^) {
 		m := &mobs^[i]
+		if mob_is_hostile(m.kind) && is_day(w.time_of_day) {
+			m.health -= 1 // burn up in daylight
+		}
 		dx := m.pos.x - player_pos.x
 		dz := m.pos.z - player_pos.z
-		if dx * dx + dz * dz > MOB_DESPAWN_DIST * MOB_DESPAWN_DIST || m.pos.y < -8 {
+		if dx * dx + dz * dz > MOB_DESPAWN_DIST * MOB_DESPAWN_DIST ||
+		   m.pos.y < -8 ||
+		   m.health <= 0 {
 			mobs^[i] = mobs^[len(mobs^) - 1]
 			pop(mobs)
 			continue
 		}
-		mob_update(w, m, dt)
+		mob_update(w, p, m, dt)
 		i += 1
 	}
 }

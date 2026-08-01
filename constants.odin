@@ -5,6 +5,7 @@ import "core:math/linalg"
 // ---- type aliases ----
 Vec2 :: [2]f32
 Vec3 :: [3]f32
+Vec4 :: [4]f32
 Ivec2 :: [2]int
 Ivec3 :: [3]int
 Mat4 :: linalg.Matrix4f32
@@ -37,6 +38,10 @@ JUMP_SPEED :: 8.5
 WALK_SPEED :: 5.5
 FLY_SPEED :: 18.0
 TERMINAL_VEL :: 60.0
+
+// ---- health / combat ----
+MAX_HEALTH :: 20
+FALL_SAFE :: f32(14.0) // fall speed below this does no damage
 
 // ---- render ----
 FOG_START :: f32(CHUNK_W * (LOAD_RADIUS - 2))
