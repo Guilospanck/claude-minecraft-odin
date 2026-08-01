@@ -61,7 +61,7 @@ minimap_init :: proc() {
 
 @(private = "file")
 surface_color :: proc(w: ^World, wx, wz: int) -> [3]u8 {
-	for y := 112; y >= 0; y -= 1 {
+	for y := CHUNK_H - 1; y >= 0; y -= 1 {
 		b := world_block(w, wx, y, wz)
 		if b == .Air do continue
 		base := b == .Water ? Vec3{0.20, 0.42, 0.72} : block_color(b)
