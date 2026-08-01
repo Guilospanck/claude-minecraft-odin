@@ -197,6 +197,7 @@ mob_hit :: proc(mobs: ^[dynamic]Mob, idx: int, dir: Vec3) {
 	m.vel.x += dir.x * 6.0
 	m.vel.z += dir.z * 6.0
 	m.vel.y = 6.0
+	audio_play(.Hurt, 0.7)
 	if m.health <= 0 {
 		mobs^[idx] = mobs^[len(mobs^) - 1]
 		pop(mobs)

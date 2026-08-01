@@ -65,6 +65,8 @@ main :: proc() {
 
 	render_init(atlas_load())
 	hud_init()
+	audio_init()
+	defer audio_shutdown()
 
 	save_ensure_dir()
 	seed, ok := load_meta()
@@ -154,6 +156,7 @@ main :: proc() {
 
 		process_input(&player, dt)
 		physics_update(&world, &player, dt)
+		player_update_audio(&player, dt)
 		handle_break_place(&world, &player)
 		world_stream(&world, player.pos)
 		mobs_update(&world, &world.mobs, player.pos, dt)

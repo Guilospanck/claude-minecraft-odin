@@ -13,6 +13,7 @@ Player :: struct {
 	on_ground: bool,
 	fly:       bool,
 	selected:  BlockId,
+	step_accum: f32, // distance walked since the last footstep sound
 }
 
 HOTBAR := [9]BlockId {
@@ -85,6 +86,21 @@ process_input :: proc(p: ^Player, dt: f32) {
 		p.vel.y = vy * f32(FLY_SPEED)
 	} else if key_down(glfw.KEY_SPACE) && p.on_ground {
 		p.vel.y = JUMP_SPEED
+		audio_play(.Jump, 0.5)
+	}
+}
+
+// Footstep sounds: accumulate horizontal distance while grounded.
+player_update_audio :: proc(p: ^Player, dt: f32) {
+	if p.on_ground && !p.fly {
+		sp := math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
+		p.step_accum += sp * dt
+		if p.step_accum > 2.2 {
+			audio_play(.Step, 0.6)
+			p.step_accum = 0
+		}
+	} else {
+		p.step_accum = 0
 	}
 }
 
@@ -117,6 +133,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 				mob_hit(&w.mobs, mob_idx, dir)
 			} else if hit.hit {
 				world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
+				audio_play(.Break)
 			}
 		}
 
@@ -129,6 +146,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 			   world_block(w, tx, ty, tz) == .Air &&
 			   !block_hits_player(p, tx, ty, tz) {
 				world_set_block(w, tx, ty, tz, p.selected)
+				audio_play(.Place)
 			}
 		}
 	}

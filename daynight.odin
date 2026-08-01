@@ -22,7 +22,9 @@ smoothstep :: proc(e0, e1, x: f32) -> f32 {
 daynight :: proc(t: f32) -> (sky: Vec3, ambient: f32, sun_height: f32) {
 	sun_height = math.sin((t - 0.25) * 2 * math.PI)
 	day := smoothstep(-0.05, 0.25, sun_height)
-	ambient = 0.20 + 0.80 * day
+	// Night keeps a visible floor (~0.35) so you can still see; block lights
+	// (glowstone) provide real brightness on top of this.
+	ambient = 0.35 + 0.65 * day
 	sky = NIGHT_SKY * (1 - day) + DAY_SKY * day
 
 	// warm tint while the sun is near the horizon (dawn / dusk)
