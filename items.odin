@@ -5,6 +5,7 @@ package main
 
 Item :: struct {
 	block:     BlockId,
+	food:      bool, // dropped meat (goes to the food counter, not inventory)
 	pos:       Vec3, // feet centre of a small AABB
 	vel:       Vec3,
 	spin:      f32,
@@ -29,6 +30,18 @@ item_spawn :: proc(items: ^[dynamic]Item, block: BlockId, pos: Vec3) {
 	)
 }
 
+item_spawn_food :: proc(items: ^[dynamic]Item, pos: Vec3) {
+	append(
+		items,
+		Item {
+			food = true,
+			pos = pos + Vec3{0, 0.5, 0},
+			vel = Vec3{rng_range(-1.5, 1.5), 2.5, rng_range(-1.5, 1.5)},
+			spin = rng_range(0, 2 * 3.14159265),
+		},
+	)
+}
+
 // Physics + pickup for all items.
 items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 	i := 0
@@ -42,7 +55,11 @@ items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 		dy := it.pos.y - (p.pos.y + 0.9)
 		dz := it.pos.z - p.pos.z
 		if it.age > 0.4 && dx * dx + dy * dy + dz * dz < ITEM_PICKUP * ITEM_PICKUP {
-			p.inventory[it.block] += 1
+			if it.food {
+				p.food_count += 1
+			} else {
+				p.inventory[it.block] += 1
+			}
 			audio_play(.Place, 0.35)
 			items^[i] = items^[len(items^) - 1]
 			pop(items)

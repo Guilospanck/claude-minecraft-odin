@@ -256,6 +256,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	draw_outline(w, p, vp)
 	hud_draw(fbw, fbh)
 	hud_draw_health(p.health, int(fbw), int(fbh))
+	hud_draw_hunger(int(p.hunger), int(fbw), int(fbh))
 	hud_draw_selected(p.selected, int(fbw), int(fbh))
 	gl.BindVertexArray(0)
 }

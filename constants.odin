@@ -41,6 +41,7 @@ TERMINAL_VEL :: 60.0
 
 // ---- health / combat ----
 MAX_HEALTH :: 20
+HUNGER_MAX :: 20
 FALL_SAFE :: f32(14.0) // fall speed below this does no damage
 
 // ---- render ----

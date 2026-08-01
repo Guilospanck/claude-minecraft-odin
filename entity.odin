@@ -279,16 +279,20 @@ mob_pick :: proc(mobs: ^[dynamic]Mob, eye, dir: Vec3, reach: f32) -> (int, f32) 
 	return best, best_t
 }
 
-// Hit a mob: knockback + damage; remove if it dies.
-mob_hit :: proc(mobs: ^[dynamic]Mob, idx: int, dir: Vec3) {
-	m := &mobs^[idx]
+// Hit a mob: knockback + damage; on death drop food (passive) and remove.
+mob_hit :: proc(w: ^World, idx: int, dir: Vec3) {
+	m := &w.mobs[idx]
 	m.health -= 3
 	m.vel.x += dir.x * 6.0
 	m.vel.z += dir.z * 6.0
 	m.vel.y = 6.0
 	audio_play(.Hurt, 0.7)
 	if m.health <= 0 {
-		mobs^[idx] = mobs^[len(mobs^) - 1]
-		pop(mobs)
+		if !mob_is_hostile(m.kind) {
+			item_spawn_food(&w.items, m.pos)
+			item_spawn_food(&w.items, m.pos)
+		}
+		w.mobs[idx] = w.mobs[len(w.mobs) - 1]
+		pop(&w.mobs)
 	}
 }

@@ -210,6 +210,21 @@ test_smelt_iron :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_mob_drops_food :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	_ = c
+	append(&w.mobs, Mob{kind = .Pig, pos = Vec3{8, 40, 8}, health = 1})
+	mob_hit(&w, 0, Vec3{0, 0, 0})
+	testing.expect(t, len(w.mobs) == 0, "mob dies")
+	food := 0
+	for it in w.items {
+		if it.food do food += 1
+	}
+	testing.expect(t, food == 2, "passive death drops two food items")
+}
+
+@(test)
 test_mesher_single_block :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

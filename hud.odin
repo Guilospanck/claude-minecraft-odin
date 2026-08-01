@@ -76,6 +76,25 @@ hud_draw_health :: proc(health, fbw, fbh: int) {
 	gl.Enable(gl.DEPTH_TEST)
 }
 
+// Ten hunger pips at the bottom-right (each = 2 hunger points).
+hud_draw_hunger :: proc(hunger, fbw, fbh: int) {
+	gl.UseProgram(h_prog)
+	gl.Disable(gl.DEPTH_TEST)
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	sz: f32 = 0.04
+	w := sz / aspect
+	gap: f32 = 0.006
+	y0: f32 = -0.90
+	x_end: f32 = 0.96
+	for i in 0 ..< 10 {
+		x1 := x_end - f32(i) * (w + gap)
+		filled := hunger > i * 2
+		col := filled ? Vec4{0.80, 0.52, 0.16, 1} : Vec4{0.22, 0.20, 0.18, 1}
+		hud_rect(x1 - w, y0, x1, y0 + sz, col)
+	}
+	gl.Enable(gl.DEPTH_TEST)
+}
+
 // A swatch of the currently selected block, bottom-centre.
 hud_draw_selected :: proc(sel: BlockId, fbw, fbh: int) {
 	gl.UseProgram(h_prog)

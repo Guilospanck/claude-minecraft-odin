@@ -21,6 +21,9 @@ Player :: struct {
 	fall_speed:  f32, // tracked while airborne for fall damage
 	respawn:     Vec3,
 	inventory:   [BlockId]int,
+	hunger:      f32, // 0..HUNGER_MAX
+	food_count:  int, // collected food you can eat
+	starve:      f32, // starvation damage timer
 }
 
 HOTBAR := [9]BlockId {
@@ -44,6 +47,7 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.fly = false
 	p.selected = .Grass
 	p.health = MAX_HEALTH
+	p.hunger = HUNGER_MAX
 	p.respawn = pos
 
 	// starting kit so you can build right away; gather more by mining
@@ -139,12 +143,41 @@ process_input :: proc(p: ^Player, dt: f32) {
 player_tick :: proc(p: ^Player, dt: f32) {
 	if p.hurt_timer > 0 do p.hurt_timer -= dt
 
-	// regenerate 1 HP every 1.5s once unharmed for 4s
+	// hunger drains over time, faster while walking
+	drain: f32 = 0.25
+	if p.on_ground && !p.fly && (abs(p.vel.x) + abs(p.vel.z)) > 0.1 do drain += 0.30
+	p.hunger -= drain * dt
+	if p.hunger < 0 do p.hunger = 0
+
+	// starve for damage when empty
+	if p.hunger <= 0 {
+		p.starve += dt
+		if p.starve > 2.0 {
+			player_damage(p, 1, Vec3{0, 0, 0})
+			p.starve = 0
+		}
+	} else {
+		p.starve = 0
+	}
+
+	// eat collected food
+	if g_input.eat {
+		if p.food_count > 0 && p.hunger < f32(HUNGER_MAX) {
+			p.food_count -= 1
+			p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
+			audio_play(.Place, 0.4)
+			fmt.println("ate food — hunger", int(p.hunger), " food left", p.food_count)
+		}
+		g_input.eat = false
+	}
+
+	// regenerate 1 HP every 1.5s when unharmed for 4s and not too hungry
 	p.safe_timer += dt
-	if p.safe_timer > 4.0 && p.health < MAX_HEALTH {
+	if p.safe_timer > 4.0 && p.health < MAX_HEALTH && p.hunger > 6 {
 		p.regen_timer += dt
 		if p.regen_timer > 1.5 {
 			p.health += 1
+			p.hunger -= 0.5 // regen costs a little hunger
 			p.regen_timer = 0
 		}
 	} else {
@@ -189,7 +222,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 			// nearer than the targeted block; otherwise it breaks the block.
 			mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
 			if mob_idx >= 0 && mob_t <= block_dist {
-				mob_hit(&w.mobs, mob_idx, dir)
+				mob_hit(w, mob_idx, dir)
 			} else if hit.hit {
 				broken := world_block(w, hit.bx, hit.by, hit.bz)
 				if broken != .Bedrock { // bedrock is unbreakable

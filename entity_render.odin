@@ -226,7 +226,7 @@ items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
 			linalg.matrix4_rotate_f32(it.spin, Vec3{0, 1, 0}) *
 			linalg.matrix4_scale_f32(Vec3{0.3, 0.3, 0.3})
 		ent_set_mat4(e_mvp, vp * model)
-		col := block_color(it.block)
+		col := it.food ? Vec3{0.72, 0.28, 0.22} : block_color(it.block)
 		gl.Uniform3f(e_color, col.r, col.g, col.b)
 		gl.DrawArrays(gl.TRIANGLES, 0, 36)
 	}

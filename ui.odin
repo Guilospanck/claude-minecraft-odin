@@ -59,6 +59,18 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		if y < -0.62 do break
 	}
 
+	if p.food_count > 0 {
+		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.72, 0.28, 0.22, 1})
+		text_draw(
+			fmt.tprintf("FOOD X%d  (G TO EAT)", p.food_count),
+			x + ch_w * 2.0,
+			y,
+			ch_w,
+			ch_h,
+			Vec4{0.95, 0.8, 0.75, 1},
+		)
+	}
+
 	text_draw(
 		"1-9 SELECT   C CRAFT   V SMELT   E CLOSE",
 		x,
