@@ -103,6 +103,11 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			heights[lx + lz * CHUNK_W] = h
 			biomes[lx + lz * CHUNK_W] = biome
 
+			// ravines (winding surface gorges) + rare cave-mouth spots
+			ravine := fbm2(seed + 404, fx * 0.0032, fz * 0.0032, 2)
+			rav_a := abs(ravine)
+			cave_mouth := value_noise2(seed + 888, fx * 0.05, fz * 0.05) > 0.80
+
 			surf := surface_block(biome, h)
 			sub := subsurface_block(biome)
 
@@ -122,25 +127,29 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 					b = .Water
 				}
 
-				// Caves stay well below the surface so coastlines / hilltops
-				// don't become thin bridges. Deep down, low-frequency 3D noise
-				// opens larger caverns with overhangs.
-				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h - 5 {
-					cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)
-					if cave > 0.72 {
-						b = .Air
-					} else if y < 34 {
-						cav := fbm3(seed + 321, fx * 0.02, f32(y) * 0.03, fz * 0.02, 2)
-						if cav > 0.6 {
-							b = .Air // deep cavern / overhang
+				// Caves, ravines, and rare surface cave mouths.
+				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h {
+					deep := y < h - 5
+					if rav_a < 0.016 && y > 8 {
+						b = .Air // ravine: narrow gorge open to the surface
+					} else if deep || cave_mouth {
+						cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)
+						if cave > 0.72 {
+							b = .Air
+						} else if deep && y < 34 {
+							cav := fbm3(seed + 321, fx * 0.02, f32(y) * 0.03, fz * 0.02, 2)
+							if cav > 0.6 {
+								b = .Air // deep cavern / overhang
+							}
 						}
 					}
 				}
 
-				// Ore in connected veins, only deep underground.
+				// Ore in connected veins, only deep underground (shows in
+				// cave/ravine walls since it's placed after carving).
 				if b == .Stone && y < 42 {
 					ov := fbm3(seed + 777, fx * 0.08, f32(y) * 0.08, fz * 0.08, 2)
-					if ov > 0.76 {
+					if ov > 0.74 {
 						b = .Ore
 					}
 				}
@@ -150,7 +159,37 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 		}
 	}
 
+	generate_waterfalls(c, seed, base_x, base_z, heights[:])
 	generate_trees(c, seed, base_x, base_z, heights[:], biomes[:])
+}
+
+// Water strands down cliff faces: at the foot of a tall in-chunk cliff, fill
+// the air column with water so it reads as a waterfall. Rare + interior-only.
+@(private = "file")
+generate_waterfalls :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int) {
+	for lz in 1 ..< CHUNK_D - 1 {
+		for lx in 1 ..< CHUNK_W - 1 {
+			h := heights[lx + lz * CHUNK_W]
+			if h <= SEA_LEVEL + 1 do continue
+			nh := max(
+				heights[(lx - 1) + lz * CHUNK_W],
+				heights[(lx + 1) + lz * CHUNK_W],
+				heights[lx + (lz - 1) * CHUNK_W],
+				heights[lx + (lz + 1) * CHUNK_W],
+			)
+			if nh < h + 8 do continue // needs a real cliff above
+			wx := base_x + lx
+			wz := base_z + lz
+			if value_noise2(seed + 999, f32(wx) * 0.08, f32(wz) * 0.08) <= 0.72 do continue
+
+			top := min(nh - 1, h + 18)
+			for y in h ..= top {
+				if chunk_get(c, lx, y, lz) == .Air {
+					chunk_set(c, lx, y, lz, .Water)
+				}
+			}
+		}
+	}
 }
 
 // Build a tree (round oak or conical spruce). chunk_set clips any leaves that

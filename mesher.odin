@@ -7,6 +7,19 @@ Vertex :: struct {
 	uv:         Vec2,
 	shade:      f32, // face directional shade * AO (dimmed by day-night ambient)
 	blocklight: f32, // local block light 0..1 (immune to day-night)
+	tint:       Vec3, // per-block colour tint (biome grass gradient; white otherwise)
+}
+
+// Biome grass tint: warmer/yellower when hot-dry, cooler/blue-green when cold-wet.
+@(private = "file")
+grass_tint :: proc(seed: u64, wx, wz: int) -> Vec3 {
+	temp := fbm2(seed + 101, f32(wx) * 0.004, f32(wz) * 0.004, 3)
+	moist := fbm2(seed + 202, f32(wx) * 0.004, f32(wz) * 0.004, 3)
+	return Vec3 {
+		clamp(1.0 + 0.20 * temp - 0.05 * moist, 0.65, 1.3),
+		clamp(1.0 - 0.03 * abs(temp) + 0.06 * moist, 0.70, 1.15),
+		clamp(1.0 - 0.18 * temp + 0.12 * moist, 0.50, 1.25),
+	}
 }
 
 MeshData :: struct {
@@ -107,11 +120,13 @@ emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, 
 	u0, v0, u1, v1 := tile_uv(tile)
 	shade := FACE_SHADE[face]
 	n := fd.n
+	tint := (b == .Grass || b == .Leaves) ? grass_tint(w.seed, wx, wz) : Vec3{1, 1, 1}
 
 	verts: [4]Vertex
 	for i in 0 ..< 4 {
 		off := fd.pos[i]
 		verts[i].pos = Vec3{f32(wx + off.x), f32(wy + off.y), f32(wz + off.z)}
+		verts[i].tint = tint
 
 		sel := fd.uv[i]
 		verts[i].uv = Vec2{sel[0] == 0 ? u0 : u1, sel[1] == 0 ? v0 : v1}

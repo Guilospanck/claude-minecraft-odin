@@ -3,6 +3,7 @@ in vec2 vUV;
 in float vShade;
 in float vBlock;
 in float vDist;
+in vec3 vTint;
 
 uniform sampler2D uTex;
 uniform float uAlpha;
@@ -19,7 +20,7 @@ void main() {
     // sky ambient (day-night) and block light combine by max, then the face's
     // directional shade + AO modulates the result.
     float light = max(uAmbient, vBlock);
-    vec3 c = tex.rgb * vShade * light;
+    vec3 c = tex.rgb * vTint * vShade * light;
     float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
     c = mix(c, uFogColor, fog);
     FragColor = vec4(c, uAlpha);
