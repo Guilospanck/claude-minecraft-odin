@@ -107,7 +107,7 @@ world_ensure_chunk :: proc(w: ^World, coord: Ivec2) -> ^Chunk {
 	// Clients always generate from the server seed and never touch the local
 	// single-player save (which may belong to a different seed).
 	if !net_is_client() {
-		c, ok = load_chunk(coord)
+		c, ok = load_chunk(coord, w.dimension)
 	}
 	if !ok {
 		c = chunk_make(coord)
@@ -171,7 +171,7 @@ world_stream :: proc(w: ^World, cam: Vec3) {
 	}
 	for coord in remove {
 		c := w.chunks[coord]
-		if !net_is_client() && !save_chunk(c) do continue // keep loaded, retry
+		if !net_is_client() && !save_chunk(c, w.dimension) do continue // keep loaded, retry
 		chunk_gl_free(c)
 		chunk_free(c)
 		delete_key(&w.chunks, coord)
@@ -182,6 +182,6 @@ world_stream :: proc(w: ^World, cam: Vec3) {
 world_save_all :: proc(w: ^World) {
 	if net_is_client() do return
 	for _, c in w.chunks {
-		save_chunk(c)
+		save_chunk(c, w.dimension)
 	}
 }

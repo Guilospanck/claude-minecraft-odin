@@ -12,7 +12,7 @@ import "core:thread"
 
 MSG_HELLO :: u8(1) // server->client: [seed u64][id u32]
 MSG_POS :: u8(2) // both:          [id u32][x y z yaw f32]
-MSG_EDIT :: u8(3) // both:          [x y z i32][block u8]
+MSG_EDIT :: u8(3) // both:          [x y z i32][block u8][dim u8]
 MSG_LEAVE :: u8(4) // server->client: [id u32]
 
 NetMode :: enum {
@@ -29,6 +29,7 @@ RemotePlayer :: struct {
 NetEdit :: struct {
 	x, y, z: int,
 	block:   BlockId,
+	dim:     Dimension,
 }
 
 @(private = "file")
@@ -81,7 +82,7 @@ msg_size :: proc(t: u8) -> int {
 	case MSG_POS:
 		return 20
 	case MSG_EDIT:
-		return 13
+		return 14
 	case MSG_LEAVE:
 		return 4
 	}
@@ -118,10 +119,11 @@ build_pos :: proc(buf: []u8, id: u32, p: Vec3, yaw: f32) {
 	put_f32(buf[5:], p.x);put_f32(buf[9:], p.y);put_f32(buf[13:], p.z);put_f32(buf[17:], yaw)
 }
 @(private = "file")
-build_edit :: proc(buf: []u8, x, y, z: int, block: BlockId) {
+build_edit :: proc(buf: []u8, x, y, z: int, block: BlockId, dim: Dimension) {
 	buf[0] = MSG_EDIT
 	put_u32(buf[1:], u32(i32(x)));put_u32(buf[5:], u32(i32(y)));put_u32(buf[9:], u32(i32(z)))
 	buf[13] = u8(block)
+	buf[14] = u8(dim)
 }
 
 // ---- server ----
@@ -183,12 +185,13 @@ server_reader :: proc() {
 					y = int(i32(get_u32(payload[4:]))),
 					z = int(i32(get_u32(payload[8:]))),
 					block = BlockId(payload[12]),
+					dim = Dimension(payload[13]),
 				},
 			)
 			sync.mutex_unlock(&g_net.mutex)
-			relay: [14]u8
+			relay: [15]u8
 			relay[0] = MSG_EDIT
-			copy(relay[1:], payload[:13])
+			copy(relay[1:], payload[:14])
 			broadcast(relay[:], conn.id)
 		}
 	}
@@ -296,6 +299,7 @@ client_reader :: proc() {
 					y = int(i32(get_u32(payload[4:]))),
 					z = int(i32(get_u32(payload[8:]))),
 					block = BlockId(payload[12]),
+					dim = Dimension(payload[13]),
 				},
 			)
 		case MSG_LEAVE:
@@ -340,10 +344,10 @@ net_send_pos :: proc(p: ^Player) {
 	}
 }
 
-net_send_edit :: proc(x, y, z: int, block: BlockId) {
+net_send_edit :: proc(x, y, z: int, block: BlockId, dim: Dimension) {
 	if g_net.mode == .Off do return
-	buf: [14]u8
-	build_edit(buf[:], x, y, z, block)
+	buf: [15]u8
+	build_edit(buf[:], x, y, z, block, dim)
 	if g_net.mode == .Server {
 		broadcast(buf[:], g_net.my_id)
 	} else {
@@ -353,11 +357,14 @@ net_send_edit :: proc(x, y, z: int, block: BlockId) {
 
 net_is_client :: proc() -> bool {return g_net.mode == .Client}
 
-// Apply queued inbound edits to the world (main thread).
-net_apply_edits :: proc(w: ^World) {
+// Apply queued inbound edits to the world they belong to (main thread). Each
+// edit carries its source dimension so a peer's overworld edit never lands in
+// the nether (or vice-versa), whatever dimension the local player is in.
+net_apply_edits :: proc(overworld, nether: ^World) {
 	if g_net.mode == .Off do return
 	sync.mutex_lock(&g_net.mutex)
 	for e in g_net.edits {
+		w := e.dim == .Nether ? nether : overworld
 		world_set_block(w, e.x, e.y, e.z, e.block)
 	}
 	clear(&g_net.edits)
@@ -375,13 +382,14 @@ net_test_roundtrip :: proc() -> bool {
 	if get_f32(buf[13:]) != 300.125 do return false
 	if get_f32(buf[17:]) != 0.75 do return false
 
-	eb: [14]u8
-	build_edit(eb[:], -5, 70, 12345, .Glowstone)
+	eb: [15]u8
+	build_edit(eb[:], -5, 70, 12345, .Glowstone, .Nether)
 	if eb[0] != MSG_EDIT do return false
 	if int(i32(get_u32(eb[1:]))) != -5 do return false
 	if int(i32(get_u32(eb[5:]))) != 70 do return false
 	if int(i32(get_u32(eb[9:]))) != 12345 do return false
 	if BlockId(eb[13]) != .Glowstone do return false
+	if Dimension(eb[14]) != .Nether do return false
 	return true
 }
 

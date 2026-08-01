@@ -124,6 +124,7 @@ main :: proc() {
 	// The Nether: a second world reached through portals.
 	nether: World
 	world_init(&nether, seed ~ 0x4E45_5448_4552_0001, .Nether)
+	defer world_save_all(&nether)
 	cur := &world // the dimension currently being played/rendered
 
 	// One-off: locate nearby biomes for this seed, print, and exit.
@@ -411,7 +412,7 @@ main :: proc() {
 				if g_input.nav_right do settings_adjust(1)
 			}
 			if g_show_crafting && g_input.select > 0 {
-				recipe_try(&player, &world, g_input.select - 1)
+				recipe_try(&player, cur, g_input.select - 1)
 			}
 			g_input.select = 0
 		} else {
@@ -473,7 +474,7 @@ main :: proc() {
 
 		if net_active() {
 			net_send_pos(&player)
-			net_apply_edits(cur)
+			net_apply_edits(&world, &nether)
 		}
 
 		render_remesh(cur, player.pos)
@@ -481,7 +482,7 @@ main :: proc() {
 		fw, fh := int(g_input.fb_w), int(g_input.fb_h)
 		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
 		else if g_show_settings do ui_draw_settings(fw, fh)
-		else if g_show_crafting do ui_draw_crafting(&player, &world, fw, fh)
+		else if g_show_crafting do ui_draw_crafting(&player, cur, fw, fh)
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames
 		if is_last && shot_path != "" {

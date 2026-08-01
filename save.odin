@@ -3,23 +3,32 @@ package main
 import "core:fmt"
 import "core:os"
 
-WORLD_DIR :: "saves/world"
+WORLD_DIR :: "saves/world" // overworld chunks + meta
+NETHER_DIR :: "saves/nether" // nether chunks
 
-save_ensure_dir :: proc() {
+// Each dimension gets its own directory so chunks at the same (x,z) never
+// collide on disk.
+@(private = "file")
+dim_dir :: proc(dim: Dimension) -> string {
+	return dim == .Nether ? NETHER_DIR : WORLD_DIR
+}
+
+save_ensure_dir :: proc(dim: Dimension = .Overworld) {
 	if !os.exists("saves") do os.make_directory("saves")
-	if !os.exists(WORLD_DIR) do os.make_directory(WORLD_DIR)
+	d := dim_dir(dim)
+	if !os.exists(d) do os.make_directory(d)
 }
 
 @(private = "file")
-chunk_path :: proc(coord: Ivec2) -> string {
-	return fmt.tprintf("%s/%d_%d.chunk", WORLD_DIR, coord.x, coord.y)
+chunk_path :: proc(coord: Ivec2, dim: Dimension) -> string {
+	return fmt.tprintf("%s/%d_%d.chunk", dim_dir(dim), coord.x, coord.y)
 }
 
 // Run-length encode the block array: [id u8][run u16 little-endian] records.
 // Returns false (and logs) if the write failed, so callers can avoid dropping
 // the chunk's edits.
-save_chunk :: proc(c: ^Chunk) -> bool {
-	save_ensure_dir()
+save_chunk :: proc(c: ^Chunk, dim: Dimension) -> bool {
+	save_ensure_dir(dim)
 	buf := make([dynamic]u8, 0, 4096)
 	defer delete(buf)
 
@@ -33,15 +42,15 @@ save_chunk :: proc(c: ^Chunk) -> bool {
 		append(&buf, u8(b), u8(run & 0xff), u8((run >> 8) & 0xff))
 		i += run
 	}
-	if err := os.write_entire_file(chunk_path(c.coord), buf[:]); err != nil {
-		fmt.eprintln("save_chunk failed:", chunk_path(c.coord), err)
+	if err := os.write_entire_file(chunk_path(c.coord, dim), buf[:]); err != nil {
+		fmt.eprintln("save_chunk failed:", chunk_path(c.coord, dim), err)
 		return false
 	}
 	return true
 }
 
-load_chunk :: proc(coord: Ivec2) -> (^Chunk, bool) {
-	path := chunk_path(coord)
+load_chunk :: proc(coord: Ivec2, dim: Dimension) -> (^Chunk, bool) {
+	path := chunk_path(coord, dim)
 	if !os.exists(path) do return nil, false
 	data, err := os.read_entire_file(path, context.allocator)
 	if err != nil do return nil, false

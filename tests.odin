@@ -313,9 +313,9 @@ test_save_load_roundtrip :: proc(t: ^testing.T) {
 	for i in 0 ..< CHUNK_BLOCKS {
 		c.blocks[i] = BlockId(u8(i % 11))
 	}
-	save_chunk(c)
+	save_chunk(c, .Overworld)
 
-	c2, ok := load_chunk(Ivec2{3, -2})
+	c2, ok := load_chunk(Ivec2{3, -2}, .Overworld)
 	testing.expect(t, ok, "load must succeed")
 	if ok {
 		eq := true
@@ -328,6 +328,33 @@ test_save_load_roundtrip :: proc(t: ^testing.T) {
 		testing.expect(t, eq, "round-tripped blocks must match")
 		chunk_free(c2)
 	}
+}
+
+// Overworld and nether chunks at the same (x,z) must not collide on disk.
+@(test)
+test_dimension_save_isolation :: proc(t: ^testing.T) {
+	coord := Ivec2{5, 5}
+	ov := chunk_make(coord)
+	defer chunk_free(ov)
+	nt := chunk_make(coord)
+	defer chunk_free(nt)
+	for i in 0 ..< CHUNK_BLOCKS {
+		ov.blocks[i] = .Stone
+		nt.blocks[i] = .Netherrack
+	}
+	save_chunk(ov, .Overworld)
+	save_chunk(nt, .Nether)
+
+	// re-load each and confirm the nether write did NOT clobber the overworld file
+	ol, ook := load_chunk(coord, .Overworld)
+	nl, nok := load_chunk(coord, .Nether)
+	testing.expect(t, ook && nok, "both dimensions must load")
+	if ook && nok {
+		testing.expect(t, ol.blocks[0] == .Stone, "overworld chunk stays Stone")
+		testing.expect(t, nl.blocks[0] == .Netherrack, "nether chunk stays Netherrack")
+	}
+	if ook do chunk_free(ol)
+	if nok do chunk_free(nl)
 }
 
 @(test)

@@ -37,9 +37,13 @@ player_in_lava :: proc(w: ^World, pos: Vec3) -> bool {
 // Ensure a return portal exists in `w` near (x,z) and return a safe spot beside
 // it (2 blocks in front so you don't immediately re-enter).
 portal_destination :: proc(w: ^World, x, z: int) -> Vec3 {
-	world_ensure_chunk(w, world_chunk_at(w, x, z))
-	world_ensure_chunk(w, world_chunk_at(w, x + 3, z + 2))
-	world_ensure_chunk(w, world_chunk_at(w, x - 1, z - 1))
+	// Ensure every chunk the frame + landing can touch (x..x+3, z..z+3), so no
+	// write lands in an unloaded chunk and gets silently dropped.
+	for cz in floor_div(z, CHUNK_D) ..= floor_div(z + 3, CHUNK_D) {
+		for cx in floor_div(x, CHUNK_W) ..= floor_div(x + 3, CHUNK_W) {
+			world_ensure_chunk(w, Ivec2{cx, cz})
+		}
+	}
 
 	sy := -1
 	for y := CHUNK_H - 6; y >= 1; y -= 1 {
