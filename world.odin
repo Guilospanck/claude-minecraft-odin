@@ -147,8 +147,7 @@ world_stream :: proc(w: ^World, cam: Vec3) {
 		c := w.chunks[coord]
 		if !save_chunk(c) do continue // keep it loaded and retry next frame
 		chunk_gl_free(c)
-		delete(c.blocks)
-		free(c)
+		chunk_free(c)
 		delete_key(&w.chunks, coord)
 	}
 }

@@ -85,7 +85,16 @@ setup_chunk_vao :: proc(vao, vbo: u32) {
 	gl.EnableVertexAttribArray(1)
 	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, uv))
 	gl.EnableVertexAttribArray(2)
-	gl.VertexAttribPointer(2, 1, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, light))
+	gl.VertexAttribPointer(2, 1, gl.FLOAT, false, i32(size_of(Vertex)), offset_of(Vertex, shade))
+	gl.EnableVertexAttribArray(3)
+	gl.VertexAttribPointer(
+		3,
+		1,
+		gl.FLOAT,
+		false,
+		i32(size_of(Vertex)),
+		offset_of(Vertex, blocklight),
+	)
 	gl.BindVertexArray(0)
 }
 

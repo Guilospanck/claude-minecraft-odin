@@ -5,6 +5,7 @@ package main
 Chunk :: struct {
 	coord:        Ivec2, // (cx, cz)
 	blocks:       []BlockId, // len == CHUNK_BLOCKS
+	light:        []u8, // block-light level 0..15, recomputed on remesh
 	generated:    bool,
 	dirty:        bool, // mesh is stale, needs rebuild
 
@@ -40,6 +41,14 @@ chunk_make :: proc(coord: Ivec2) -> ^Chunk {
 	c := new(Chunk)
 	c.coord = coord
 	c.blocks = make([]BlockId, CHUNK_BLOCKS)
+	c.light = make([]u8, CHUNK_BLOCKS)
 	c.dirty = true
 	return c
+}
+
+// Free CPU allocations for a chunk (GL buffers must already be freed).
+chunk_free :: proc(c: ^Chunk) {
+	delete(c.blocks)
+	delete(c.light)
+	free(c)
 }

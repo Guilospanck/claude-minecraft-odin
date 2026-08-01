@@ -1,6 +1,7 @@
 #version 410 core
 in vec2 vUV;
-in float vLight;
+in float vShade;
+in float vBlock;
 in float vDist;
 
 uniform sampler2D uTex;
@@ -15,7 +16,10 @@ out vec4 FragColor;
 void main() {
     vec4 tex = texture(uTex, vUV);
     if (tex.a < 0.5) discard; // cutout support (unused while all blocks opaque)
-    vec3 c = tex.rgb * vLight * uAmbient;
+    // sky ambient (day-night) and block light combine by max, then the face's
+    // directional shade + AO modulates the result.
+    float light = max(uAmbient, vBlock);
+    vec3 c = tex.rgb * vShade * light;
     float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
     c = mix(c, uFogColor, fog);
     FragColor = vec4(c, uAlpha);

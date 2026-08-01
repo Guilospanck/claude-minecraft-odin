@@ -61,8 +61,7 @@ load_chunk :: proc(coord: Ivec2) -> (^Chunk, bool) {
 		i += 3
 	}
 	if idx != CHUNK_BLOCKS {
-		delete(c.blocks)
-		free(c)
+		chunk_free(c)
 		return nil, false
 	}
 	return c, true

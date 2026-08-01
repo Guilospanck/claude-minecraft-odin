@@ -14,6 +14,16 @@ BlockId :: enum u8 {
 	Snow,
 	Bedrock,
 	Ore,
+	Glowstone,
+}
+
+// Block light emitted (0..15). Opaque emitters still light the air around them.
+block_emission :: proc(b: BlockId) -> u8 {
+	#partial switch b {
+	case .Glowstone:
+		return 15
+	}
+	return 0
 }
 
 Face :: enum {
@@ -78,6 +88,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.BEDROCK
 	case .Ore:
 		return ad.ORE
+	case .Glowstone:
+		return ad.GLOWSTONE
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -108,6 +120,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Bedrock"
 	case .Ore:
 		return "Ore"
+	case .Glowstone:
+		return "Glowstone"
 	}
 	return "?"
 }

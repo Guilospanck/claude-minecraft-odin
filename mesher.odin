@@ -3,9 +3,10 @@ package main
 import ad "assetdef"
 
 Vertex :: struct {
-	pos:   Vec3,
-	uv:    Vec2,
-	light: f32,
+	pos:        Vec3,
+	uv:         Vec2,
+	shade:      f32, // face directional shade * AO (dimmed by day-night ambient)
+	blocklight: f32, // local block light 0..1 (immune to day-night)
 }
 
 MeshData :: struct {
@@ -100,7 +101,7 @@ vertex_ao :: proc(s1, s2, cor: bool) -> int {
 }
 
 @(private = "file")
-emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, wy, wz: int) {
+emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, wy, wz: int, bl: f32) {
 	fd := FACES[face]
 	tile := block_tile(b, face)
 	u0, v0, u1, v1 := tile_uv(tile)
@@ -128,11 +129,12 @@ emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, 
 			wz + n.z + du.z + dv.z,
 		)
 		ao := vertex_ao(s1, s2, cc)
-		verts[i].light = shade * AO_LIGHT[ao]
+		verts[i].shade = shade * AO_LIGHT[ao]
+		verts[i].blocklight = bl
 	}
 
 	// Split along the diagonal that keeps AO gradients symmetric.
-	if verts[0].light + verts[2].light >= verts[1].light + verts[3].light {
+	if verts[0].shade + verts[2].shade >= verts[1].shade + verts[3].shade {
 		append(arr, verts[0], verts[1], verts[2], verts[0], verts[2], verts[3])
 	} else {
 		append(arr, verts[1], verts[2], verts[3], verts[1], verts[3], verts[0])
@@ -143,6 +145,8 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 	md: MeshData
 	md.opaque = make([dynamic]Vertex, 0, 4096)
 	md.water = make([dynamic]Vertex, 0, 256)
+
+	compute_light(c)
 
 	base_x := c.coord.x * CHUNK_W
 	base_z := c.coord.y * CHUNK_D
@@ -159,7 +163,9 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 					nb := world_block(w, wx + fn.x, y + fn.y, wz + fn.z)
 					if !face_visible(b, nb) do continue
 					arr := b == .Water ? &md.water : &md.opaque
-					emit_face(w, arr, b, face, wx, y, wz)
+					// block light of the cell this face opens into
+					bl := f32(chunk_light_at(c, x + fn.x, y + fn.y, z + fn.z)) / 15.0
+					emit_face(w, arr, b, face, wx, y, wz, bl)
 				}
 			}
 		}

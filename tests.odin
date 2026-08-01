@@ -16,10 +16,10 @@ make_test_world :: proc() -> (World, ^Chunk) {
 @(private = "file")
 free_test_world :: proc(w: ^World) {
 	for _, c in w.chunks {
-		delete(c.blocks)
-		free(c)
+		chunk_free(c)
 	}
 	delete(w.chunks)
+	delete(w.mobs)
 }
 
 @(test)
@@ -52,7 +52,7 @@ test_chunk_index :: proc(t: ^testing.T) {
 	testing.expect(t, chunk_index(0, 1, 0) == CHUNK_W * CHUNK_D)
 
 	c := chunk_make(Ivec2{0, 0})
-	defer {delete(c.blocks);free(c)}
+	defer chunk_free(c)
 	chunk_set(c, 3, 4, 5, .Stone)
 	testing.expect(t, chunk_get(c, 3, 4, 5) == .Stone)
 	testing.expect(t, chunk_get(c, -1, 0, 0) == .Air, "out of bounds reads as air")
@@ -165,7 +165,7 @@ test_mesher_single_block :: proc(t: ^testing.T) {
 @(test)
 test_save_load_roundtrip :: proc(t: ^testing.T) {
 	c := chunk_make(Ivec2{3, -2})
-	defer {delete(c.blocks);free(c)}
+	defer chunk_free(c)
 	for i in 0 ..< CHUNK_BLOCKS {
 		c.blocks[i] = BlockId(u8(i % 11))
 	}
@@ -182,7 +182,31 @@ test_save_load_roundtrip :: proc(t: ^testing.T) {
 			}
 		}
 		testing.expect(t, eq, "round-tripped blocks must match")
-		delete(c2.blocks)
-		free(c2)
+		chunk_free(c2)
 	}
+}
+
+@(test)
+test_block_light_propagation :: proc(t: ^testing.T) {
+	c := chunk_make(Ivec2{0, 0})
+	defer chunk_free(c)
+	chunk_set(c, 8, 40, 8, .Glowstone)
+	compute_light(c)
+	// emitter cell full, adjacent air one less, and it decays with distance
+	testing.expect(t, chunk_light_at(c, 8, 40, 8) == 15, "emitter is full")
+	testing.expect(t, chunk_light_at(c, 9, 40, 8) == 14, "adjacent air is 14")
+	testing.expect(t, chunk_light_at(c, 11, 40, 8) == 12, "3 blocks away is 12")
+	testing.expect(t, chunk_light_at(c, 8, 40 + 15, 8) == 0, "beyond range is dark")
+}
+
+@(test)
+test_light_blocked_by_solid :: proc(t: ^testing.T) {
+	c := chunk_make(Ivec2{0, 0})
+	defer chunk_free(c)
+	chunk_set(c, 8, 40, 8, .Glowstone)
+	chunk_set(c, 9, 40, 8, .Stone) // wall directly beside the emitter
+	compute_light(c)
+	// the opaque wall cell holds no propagated light, and light is blocked past it
+	testing.expect(t, chunk_light_at(c, 9, 40, 8) == 0, "opaque cell not lit")
+	testing.expect(t, chunk_light_at(c, 10, 40, 8) < 14, "light does not pass straight through")
 }

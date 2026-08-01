@@ -74,6 +74,10 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 			case "ore":
 				spec := ((jitter(gx * 3, gy * 3, 100) + 100) % 7) < 2
 				c = spec ? Color{210, 170, 60, 255} : shade(base, jitter(gx, gy, 10))
+			case "glow":
+				// bright warm cells with a darker mortar grid
+				grid := (px % 8 == 0) || (py % 8 == 0)
+				c = grid ? Color{200, 150, 40, 255} : shade(Color{250, 224, 120, 255}, jitter(gx, gy, 14))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
 			case:
@@ -108,6 +112,7 @@ main :: proc() {
 	paint(ad.SNOW, Color{234, 240, 246, 255}, "")
 	paint(ad.BEDROCK, Color{42, 42, 48, 255}, "bedrock")
 	paint(ad.ORE, Color{128, 128, 132, 255}, "ore")
+	paint(ad.GLOWSTONE, Color{240, 210, 110, 255}, "glow")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -21,3 +21,4 @@ LEAVES     :: Tile{8, 0}
 SNOW       :: Tile{9, 0}
 BEDROCK    :: Tile{10, 0}
 ORE        :: Tile{11, 0}
+GLOWSTONE  :: Tile{12, 0}

@@ -134,6 +134,24 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
+	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 6
+		offs := [5]Ivec2{{0, 0}, {3, 1}, {-3, 2}, {2, 5}, {-2, -2}}
+		for o in offs {
+			x := int(base.x) + o.x
+			z := int(base.z) + o.y
+			world_ensure_chunk(&world, world_chunk_at(&world, x, z))
+			for y := CHUNK_H - 2; y >= 1; y -= 1 {
+				if block_is_solid(world_block(&world, x, y, z)) {
+					world_set_block(&world, x, y + 1, z, .Glowstone)
+					break
+				}
+			}
+		}
+	}
+
 	frame := 0
 	last := glfw.GetTime()
 	for !glfw.WindowShouldClose(win) {

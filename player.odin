@@ -25,7 +25,7 @@ HOTBAR := [9]BlockId {
 	.Leaves,
 	.Snow,
 	.Water,
-	.Ore,
+	.Glowstone,
 }
 
 player_init :: proc(p: ^Player, pos: Vec3) {

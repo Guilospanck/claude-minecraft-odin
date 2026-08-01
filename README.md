@@ -19,8 +19,15 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 - **Animals** — pigs, sheep, cows, and chickens as blocky multi-box models
   with leg animation, wandering AI, gravity/collision, step auto-jump, and
   ring spawning / distance despawn. Left click punches (and can kill) them.
+- **Day-night cycle** — a 5-minute clock drives sky colour and ambient
+  brightness (night → dawn/dusk glow → day).
+- **Block lighting** — place **glowstone** (hotbar slot 9) for flood-filled
+  point light (0–15, blocked by solids) that lights the night.
+- **Sound** — procedurally synthesised SFX (break, place, footsteps, jump,
+  mob hurt) via miniaudio; no audio files.
 
 ![animals](docs/mobs.png)
+![night](docs/night.png)
 
 ## Requirements
 
@@ -63,7 +70,9 @@ odin test .           # noise, chunk indexing, raycast, collision, meshing, save
 - `MC_FRAMES=N` – render N frames then exit cleanly (headless smoke test).
 - `MC_SHOT=path.png` – write a screenshot of the final frame.
 - `MC_CAM="x,y,z,yaw,pitch"` – override the camera (enables fly).
+- `MC_TIME=t` – pin the time of day (0=midnight, 0.5=noon).
 - `MC_MOBS=N` – force-spawn N animals in front of the camera.
+- `MC_GLOW=1` – drop a few glowstone blocks ahead (to see block lighting).
 - `MC_SCAN=1` – generate a region, print nearby biome coordinates, and exit.
 
 ## Layout
