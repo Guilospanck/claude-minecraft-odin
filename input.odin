@@ -17,6 +17,10 @@ InputState :: struct {
 	inv_toggle:           bool, // one-shot E press
 	eat:                  bool, // one-shot G press
 	start:                bool, // Enter (title screen)
+	settings_toggle:      bool, // O
+	craft_toggle:         bool, // T
+	nav_up, nav_down:     bool, // arrow keys (menus)
+	nav_left, nav_right:  bool,
 	select:               int, // 1..9, or 0 for none
 	quit:                 bool,
 	fb_w, fb_h:           i32,
@@ -61,6 +65,18 @@ key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int) 
 		g_input.eat = true
 	case glfw.KEY_ENTER:
 		g_input.start = true
+	case glfw.KEY_O:
+		g_input.settings_toggle = true
+	case glfw.KEY_T:
+		g_input.craft_toggle = true
+	case glfw.KEY_UP:
+		g_input.nav_up = true
+	case glfw.KEY_DOWN:
+		g_input.nav_down = true
+	case glfw.KEY_LEFT:
+		g_input.nav_left = true
+	case glfw.KEY_RIGHT:
+		g_input.nav_right = true
 	case glfw.KEY_1 ..= glfw.KEY_9:
 		g_input.select = int(key - glfw.KEY_1) + 1
 	}

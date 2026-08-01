@@ -33,6 +33,12 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 - **Crafting** — press `C` to craft (4 Sand + 1 Ore → 1 Glowstone).
 - **Furnace & smelting** — place a Furnace and press `V` nearby to smelt
   Ore + Wood → Iron or Sand + Wood → Glass (translucent).
+- **Crafting menu** (`T`) — recipe grid with input→output swatches; press 1–4.
+- **Settings menu** (`O`) — live mouse sensitivity, FOV, render distance,
+  volume, and day length.
+- **Swimming** — buoyant water physics (space to surface, shift to dive), no
+  fall damage into water, and a submerged blue overlay.
+- **Break particles** — blocks shatter into coloured shards.
 
 ![animals](docs/mobs.png)
 ![night](docs/night.png)
@@ -67,7 +73,8 @@ A small voxel sandbox written in **pure Odin** with OpenGL 4.1 + GLFW.
 | Right click      | Place selected block      |
 | `C`              | Craft (4 Sand + 1 Ore → Glowstone) |
 | `V`              | Smelt near a furnace      |
-| `E`              | Toggle inventory screen   |
+| `E` / `T` / `O`  | Inventory / Crafting / Settings |
+| `G`              | Eat food                  |
 | `Esc`            | Quit (saves the world)    |
 
 ## Tests

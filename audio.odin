@@ -196,7 +196,7 @@ audio_play :: proc(s: Sound, gain: f32 = 1.0) {
 		if intrinsics.atomic_load(&v.active) do continue
 		v.samples = buf
 		v.pos = 0
-		v.gain = gain
+		v.gain = gain * g_settings.volume
 		intrinsics.atomic_store(&v.active, true)
 		return
 	}

@@ -1,0 +1,52 @@
+package main
+
+import "core:fmt"
+
+Ingredient :: struct {
+	block: BlockId,
+	count: int,
+}
+
+Recipe :: struct {
+	inputs:        [3]Ingredient,
+	n_in:          int,
+	out:           BlockId,
+	out_count:     int,
+	needs_furnace: bool,
+}
+
+RECIPES := [?]Recipe {
+	{inputs = {{.Stone, 8}, {}, {}}, n_in = 1, out = .Furnace, out_count = 1},
+	{inputs = {{.Sand, 4}, {.Ore, 1}, {}}, n_in = 2, out = .Glowstone, out_count = 1},
+	{inputs = {{.Ore, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Iron, out_count = 1, needs_furnace = true},
+	{inputs = {{.Sand, 1}, {.Wood, 1}, {}}, n_in = 2, out = .Glass, out_count = 1, needs_furnace = true},
+}
+
+g_show_crafting: bool
+
+recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {
+	for i in 0 ..< r.n_in {
+		if p.inventory[r.inputs[i].block] < r.inputs[i].count do return false
+	}
+	if r.needs_furnace && !near_furnace(w, p) do return false
+	return true
+}
+
+recipe_try :: proc(p: ^Player, w: ^World, idx: int) {
+	if idx < 0 || idx >= len(RECIPES) do return
+	r := RECIPES[idx]
+	if !recipe_can_make(p, w, r) {
+		if r.needs_furnace && !near_furnace(w, p) {
+			fmt.println("craft: stand next to a Furnace for that")
+		} else {
+			fmt.println("craft: not enough materials")
+		}
+		return
+	}
+	for i in 0 ..< r.n_in {
+		p.inventory[r.inputs[i].block] -= r.inputs[i].count
+	}
+	p.inventory[r.out] += r.out_count
+	fmt.println("made", r.out_count, block_name(r.out))
+	audio_play(.Place, 0.5)
+}

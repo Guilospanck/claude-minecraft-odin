@@ -22,6 +22,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.mobs)
 	delete(w.items)
 	delete(w.arrows)
+	delete(w.particles)
 }
 
 @(test)

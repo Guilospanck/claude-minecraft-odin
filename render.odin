@@ -209,8 +209,8 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		world_block(w, int(math.floor(eye.x)), int(math.floor(eye.y)), int(math.floor(eye.z))) ==
 		.Water
 	fog_col := sky
-	fog_start := FOG_START
-	fog_end := FOG_END
+	fog_start := f32(CHUNK_W * (g_settings.render_radius - 2))
+	fog_end := f32(CHUNK_W * g_settings.render_radius)
 	if underwater {
 		fog_col = Vec3{0.10, 0.24, 0.42}
 		fog_start = 1.5
@@ -268,6 +268,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	entity_render_frame(&w.mobs, vp, ambient)
 	items_render_frame(&w.items, vp, ambient)
 	arrows_render_frame(&w.arrows, vp, ambient)
+	particles_render_frame(&w.particles, vp, ambient)
 	remotes_render_frame(vp, ambient)
 
 	draw_outline(w, p, vp)

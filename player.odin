@@ -11,6 +11,7 @@ Player :: struct {
 	yaw:       f32,
 	pitch:     f32,
 	on_ground:  bool,
+	in_water:   bool,
 	fly:        bool,
 	selected:   BlockId,
 	step_accum: f32, // distance walked since the last footstep sound
@@ -98,7 +99,7 @@ key_down :: proc(k: i32) -> bool {
 
 // Mouse-look, block selection, fly toggle, and desired horizontal velocity.
 process_input :: proc(p: ^Player, dt: f32) {
-	sens: f32 = 0.0022
+	sens := g_settings.mouse_sens
 	p.yaw += f32(g_input.dx) * sens
 	p.pitch -= f32(g_input.dy) * sens
 	LIMIT: f32 = 1.55
@@ -128,7 +129,7 @@ process_input :: proc(p: ^Player, dt: f32) {
 		wish = linalg.normalize(wish)
 	}
 
-	speed := p.fly ? f32(FLY_SPEED) : f32(WALK_SPEED)
+	speed := p.fly ? f32(FLY_SPEED) : (p.in_water ? f32(WALK_SPEED) * 0.6 : f32(WALK_SPEED))
 	p.vel.x = wish.x * speed
 	p.vel.z = wish.z * speed
 
@@ -137,6 +138,10 @@ process_input :: proc(p: ^Player, dt: f32) {
 		if key_down(glfw.KEY_SPACE) do vy += 1
 		if key_down(glfw.KEY_LEFT_SHIFT) do vy -= 1
 		p.vel.y = vy * f32(FLY_SPEED)
+	} else if p.in_water {
+		// swim: space rises, shift dives, otherwise gently sink (physics)
+		if key_down(glfw.KEY_SPACE) do p.vel.y = 4.0
+		if key_down(glfw.KEY_LEFT_SHIFT) do p.vel.y = -4.0
 	} else if key_down(glfw.KEY_SPACE) && p.on_ground {
 		p.vel.y = JUMP_SPEED
 		audio_play(.Jump, 0.5)
@@ -232,6 +237,7 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 				if broken != .Bedrock { // bedrock is unbreakable
 					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
 					net_send_edit(hit.bx, hit.by, hit.bz, .Air)
+					particle_spawn_break(&w.particles, broken, hit.bx, hit.by, hit.bz)
 					audio_play(.Break)
 					item_spawn(
 						&w.items,
@@ -272,7 +278,6 @@ handle_break_place :: proc(w: ^World, p: ^Player) {
 	g_input.place_req = false
 }
 
-@(private = "file")
 near_furnace :: proc(w: ^World, p: ^Player) -> bool {
 	px := int(math.floor(p.pos.x))
 	py := int(math.floor(p.pos.y))

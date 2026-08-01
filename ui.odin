@@ -25,12 +25,92 @@ render_title :: proc(fbw, fbh: i32) {
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
 	text_center(
-		"E INVENTORY   C CRAFT   V SMELT   G EAT   F FLY",
+		"E INVENTORY   T CRAFT   O SETTINGS   G EAT   F FLY",
 		-0.64,
 		cw(0.04, aspect),
 		0.04,
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
+}
+
+// Settings menu (O): up/down select, left/right adjust.
+ui_draw_settings :: proc(fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	hud_quad(-0.62, -0.62, 0.62, 0.72, Vec4{0.05, 0.05, 0.08, 0.92})
+	ch_h: f32 = 0.055
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	text_center("SETTINGS", 0.58, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+
+	rows := [SETTINGS_COUNT]string {
+		fmt.tprintf("MOUSE SENS: %d", int(g_settings.mouse_sens * 10000)),
+		fmt.tprintf("FOV: %d", int(g_settings.fov_deg)),
+		fmt.tprintf("RENDER DIST: %d", g_settings.render_radius),
+		fmt.tprintf("VOLUME: %d", int(g_settings.volume * 100)),
+		fmt.tprintf("DAY LENGTH: %dS", int(g_settings.day_length)),
+	}
+	y: f32 = 0.36
+	for i in 0 ..< SETTINGS_COUNT {
+		selected := i == g_settings_sel
+		col := selected ? Vec4{1, 1, 0.5, 1} : Vec4{0.85, 0.9, 0.95, 1}
+		text_draw(
+			fmt.tprintf("%s%s", selected ? "> " : "  ", rows[i]),
+			-0.5,
+			y,
+			ch_w,
+			ch_h,
+			col,
+		)
+		y -= ch_h * 1.5
+	}
+	text_center(
+		"UP/DOWN SELECT   LEFT/RIGHT ADJUST   O CLOSE",
+		-0.5,
+		ch_w * 0.6,
+		ch_h * 0.6,
+		Vec4{0.7, 0.8, 0.9, 1},
+	)
+}
+
+// Crafting menu (T): recipes with input->output swatches; press 1-4 to craft.
+ui_draw_crafting :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	hud_quad(-0.82, -0.68, 0.82, 0.78, Vec4{0.05, 0.05, 0.08, 0.92})
+	ch_h: f32 = 0.05
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	sw := ch_h / aspect * 1.1
+	text_center("CRAFTING", 0.66, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+
+	y: f32 = 0.44
+	for i in 0 ..< len(RECIPES) {
+		r := RECIPES[i]
+		a: f32 = recipe_can_make(p, w, r) ? 1.0 : 0.4
+		x: f32 = -0.72
+		text_draw(fmt.tprintf("%d", i + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, a})
+		x += ch_w * 2.5
+		for j in 0 ..< r.n_in {
+			ing := r.inputs[j]
+			col := block_color(ing.block)
+			hud_quad(x, y - ch_h, x + sw, y, Vec4{col.r, col.g, col.b, a})
+			text_draw(fmt.tprintf("X%d", ing.count), x + sw + 0.006, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.9, 0.9, a})
+			x += sw + ch_w * 3.5
+		}
+		text_draw("->", x, y, ch_w, ch_h, Vec4{1, 1, 1, a})
+		x += ch_w * 3.5
+		oc := block_color(r.out)
+		hud_quad(x, y - ch_h, x + sw, y, Vec4{oc.r, oc.g, oc.b, a})
+		x += sw + 0.01
+		note := r.needs_furnace ? " (FURNACE)" : ""
+		text_draw(
+			fmt.tprintf("%s%s", block_name(r.out), note),
+			x,
+			y,
+			ch_w * 0.85,
+			ch_h * 0.85,
+			Vec4{0.9, 0.95, 1, a},
+		)
+		y -= ch_h * 1.9
+	}
+	text_center("PRESS 1-4 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
 }
 
 // Minecraft-style hotbar: 9 slots (keys 1-9) with block swatch, count, and a

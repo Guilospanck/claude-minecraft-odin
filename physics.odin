@@ -53,8 +53,9 @@ body_move_axis :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, disp: f32, axis: int, 
 }
 
 // Integrate gravity + axis-separated collision for any AABB. Returns on_ground.
-body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32) -> bool {
-	vel.y -= GRAVITY * dt
+// `gravity` lets callers use reduced pull (e.g. buoyancy in water).
+body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32, gravity: f32 = GRAVITY) -> bool {
+	vel.y -= gravity * dt
 	if vel.y < -TERMINAL_VEL do vel.y = -TERMINAL_VEL
 
 	body_move_axis(w, pos, vel, vel.x * dt, 0, hw, h)
@@ -70,11 +71,33 @@ body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32) -> bool 
 	return grounded
 }
 
+// Is the player's feet or chest in a water block?
+player_in_water :: proc(w: ^World, pos: Vec3) -> bool {
+	x := int(math.floor(pos.x))
+	z := int(math.floor(pos.z))
+	return(
+		world_block(w, x, int(math.floor(pos.y + 0.2)), z) == .Water ||
+		world_block(w, x, int(math.floor(pos.y + 1.2)), z) == .Water \
+	)
+}
+
 physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.fly {
 		p.pos += p.vel * dt // noclip free-fly
 		p.on_ground = false
+		p.in_water = false
 		p.fall_speed = 0
+		return
+	}
+
+	p.in_water = player_in_water(w, p.pos)
+
+	if p.in_water {
+		// buoyant, reduced-gravity water; swim velocity is set in process_input
+		p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt, 6.0)
+		if p.vel.y < -3 do p.vel.y = -3 // slow sink
+		if p.vel.y > 5 do p.vel.y = 5
+		p.fall_speed = 0 // splashing down never hurts
 		return
 	}
 

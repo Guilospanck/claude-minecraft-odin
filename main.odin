@@ -160,6 +160,8 @@ main :: proc() {
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
 	if os.get_env("MC_INV", context.temp_allocator) != "" do g_show_inventory = true
+	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
+	if os.get_env("MC_CRAFT", context.temp_allocator) != "" do g_show_crafting = true
 
 	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
 	fixed_time: f32 = -1
@@ -273,6 +275,16 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_PARTICLES bursts break-particles ahead.
+	if os.get_env("MC_PARTICLES", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		c := player.pos + fwd * 4
+		for k in 0 ..< 4 {
+			particle_spawn_break(&world.particles, .Grass, int(c.x), int(c.y) + k, int(c.z))
+			particle_spawn_break(&world.particles, .Stone, int(c.x) + 1, int(c.y) + k, int(c.z) + 1)
+		}
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -324,7 +336,7 @@ main :: proc() {
 		if fixed_time >= 0 {
 			world.time_of_day = fixed_time
 		} else {
-			world.time_of_day += dt / DAY_LENGTH
+			world.time_of_day += dt / g_settings.day_length
 			if world.time_of_day >= 1 do world.time_of_day -= 1
 		}
 
@@ -333,17 +345,39 @@ main :: proc() {
 			glfw.SetWindowShouldClose(win, true)
 		}
 
+		// menu toggles (mutually exclusive)
 		if g_input.inv_toggle {
 			g_show_inventory = !g_show_inventory
+			if g_show_inventory {g_show_settings = false;g_show_crafting = false}
 			g_input.inv_toggle = false
 		}
+		if g_input.settings_toggle {
+			g_show_settings = !g_show_settings
+			if g_show_settings {g_show_inventory = false;g_show_crafting = false}
+			g_input.settings_toggle = false
+		}
+		if g_input.craft_toggle {
+			g_show_crafting = !g_show_crafting
+			if g_show_crafting {g_show_inventory = false;g_show_settings = false}
+			g_input.craft_toggle = false
+		}
 
-		if g_show_inventory {
-			// paused: ignore look/click while the inventory is open
+		paused := g_show_inventory || g_show_settings || g_show_crafting
+		if paused {
 			g_input.dx = 0
 			g_input.dy = 0
 			g_input.break_req = false
 			g_input.place_req = false
+			if g_show_settings {
+				if g_input.nav_up do g_settings_sel = (g_settings_sel + SETTINGS_COUNT - 1) % SETTINGS_COUNT
+				if g_input.nav_down do g_settings_sel = (g_settings_sel + 1) % SETTINGS_COUNT
+				if g_input.nav_left do settings_adjust(-1)
+				if g_input.nav_right do settings_adjust(1)
+			}
+			if g_show_crafting && g_input.select > 0 {
+				recipe_try(&player, &world, g_input.select - 1)
+			}
+			g_input.select = 0
 		} else {
 			process_input(&player, dt)
 			physics_update(&world, &player, dt)
@@ -353,7 +387,9 @@ main :: proc() {
 			mobs_update(&world, &player, &world.mobs, dt)
 			items_update(&world, &player, &world.items, dt)
 			arrows_update(&world, &player, dt)
+			particles_update(&world, &world.particles, dt)
 		}
+		g_input.nav_up = false;g_input.nav_down = false;g_input.nav_left = false;g_input.nav_right = false
 
 		if net_active() {
 			net_send_pos(&player)
@@ -362,9 +398,10 @@ main :: proc() {
 
 		render_remesh(&world, player.pos)
 		render_frame(&world, &player, g_input.fb_w, g_input.fb_h)
-		if g_show_inventory {
-			ui_draw_inventory(&player, int(g_input.fb_w), int(g_input.fb_h))
-		}
+		fw, fh := int(g_input.fb_w), int(g_input.fb_h)
+		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
+		else if g_show_settings do ui_draw_settings(fw, fh)
+		else if g_show_crafting do ui_draw_crafting(&player, &world, fw, fh)
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames
 		if is_last && shot_path != "" {

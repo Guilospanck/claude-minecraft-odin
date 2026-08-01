@@ -289,6 +289,24 @@ arrows_render_frame :: proc(arrows: ^[dynamic]Arrow, vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(0)
 }
 
+// Break-particle shards as tiny coloured cubes.
+particles_render_frame :: proc(ps: ^[dynamic]Particle, vp: Mat4, ambient: f32) {
+	if len(ps^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(ps^) {
+		pt := &ps^[i]
+		model :=
+			linalg.matrix4_translate_f32(pt.pos) *
+			linalg.matrix4_scale_f32(Vec3{pt.size, pt.size, pt.size})
+		ent_set_mat4(e_mvp, vp * model)
+		gl.Uniform3f(e_color, pt.color.r, pt.color.g, pt.color.b)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+	}
+	gl.BindVertexArray(0)
+}
+
 // Dropped items as small bobbing, spinning cubes coloured by their block.
 items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
 	if len(items^) == 0 do return
