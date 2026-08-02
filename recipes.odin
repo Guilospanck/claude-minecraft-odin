@@ -23,6 +23,7 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Stone, 8}, {}, {}}, n_in = 1, out = .Obsidian, out_count = 4},
 	{inputs = {{.Wood, 1}, {}, {}}, n_in = 1, out = .Torch, out_count = 4},
 	{inputs = {{.Wood, 5}, {}, {}}, n_in = 1, out = .Bed, out_count = 1},
+	{inputs = {{.Wood, 8}, {}, {}}, n_in = 1, out = .Chest, out_count = 1},
 }
 
 g_show_crafting: bool

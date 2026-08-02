@@ -8,10 +8,13 @@ Arrow :: struct {
 	age:         f32,
 	stuck:       bool,
 	from_player: bool,
+	fire:        bool, // ghast fireball: flies flat, bursts on impact, hits harder
 }
 
 ARROW_DMG :: 2
+FIRE_DMG :: 5
 ARROW_GRAVITY :: f32(14.0) // arrows fall slower than the player
+FIRE_GRAVITY :: f32(1.5) // fireballs barely drop
 
 @(private = "file")
 arrow_hits_player :: proc(pos: Vec3, p: ^Player) -> bool {
@@ -41,7 +44,7 @@ arrows_update :: proc(w: ^World, p: ^Player, dt: f32) {
 			continue
 		}
 
-		a.vel.y -= ARROW_GRAVITY * dt
+		a.vel.y -= (a.fire ? FIRE_GRAVITY : ARROW_GRAVITY) * dt
 
 		removed := false
 		STEPS :: 4
@@ -52,14 +55,20 @@ arrows_update :: proc(w: ^World, p: ^Player, dt: f32) {
 			by := int(math.floor(a.pos.y))
 			bz := int(math.floor(a.pos.z))
 			if block_is_solid(world_block(w, bx, by, bz)) {
-				a.stuck = true
-				a.age = 0
+				if a.fire { 	// fireball bursts against terrain
+					w.arrows[i] = w.arrows[len(w.arrows) - 1]
+					pop(&w.arrows)
+					removed = true
+				} else {
+					a.stuck = true
+					a.age = 0
+				}
 				break
 			}
 			if !a.from_player && arrow_hits_player(a.pos, p) {
 				d := Vec3{a.vel.x, 0, a.vel.z}
 				dl := math.sqrt(d.x * d.x + d.z * d.z) + 1e-4
-				player_damage(p, ARROW_DMG, Vec3{d.x / dl, 0, d.z / dl})
+				player_damage(p, a.fire ? FIRE_DMG : ARROW_DMG, Vec3{d.x / dl, 0, d.z / dl})
 				w.arrows[i] = w.arrows[len(w.arrows) - 1]
 				pop(&w.arrows)
 				removed = true

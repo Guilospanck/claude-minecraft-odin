@@ -36,3 +36,4 @@ WHEAT2     :: Tile{7, 1}
 WHEAT3     :: Tile{8, 1}
 TORCH      :: Tile{9, 1} // sprite
 BED        :: Tile{10, 1}
+CHEST      :: Tile{11, 1}

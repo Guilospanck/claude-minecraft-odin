@@ -288,6 +288,10 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	}
 
 	hud_draw(fbw, fbh)
+	if p.mine_frac > 0 { 	// break-progress bar under the crosshair
+		hud_quad(-0.11, -0.125, 0.11, -0.09, Vec4{0.1, 0.1, 0.1, 0.7})
+		hud_quad(-0.10, -0.118, -0.10 + 0.20 * p.mine_frac, -0.097, Vec4{0.9, 0.9, 0.95, 0.95})
+	}
 	hud_draw_health(p.health, int(fbw), int(fbh))
 	hud_draw_hunger(int(p.hunger), int(fbw), int(fbh))
 	ui_draw_hotbar(p, int(fbw), int(fbh))

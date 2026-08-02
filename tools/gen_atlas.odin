@@ -137,6 +137,18 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(col, jitter(gx, gy, 10))
 					c.a = 255
 				}
+			case "chest":
+				// wooden box with a darker lid seam, iron latch, plank border
+				border := px == 0 || px == 15 || py == 0 || py == 15
+				latch := px >= 7 && px <= 8 && py >= 6 && py <= 9
+				seam := py == 5
+				if latch {
+					c = Color{60, 55, 50, 255}
+				} else if seam || border {
+					c = shade(Color{96, 66, 32, 255}, jitter(gx, gy, 6))
+				} else {
+					c = shade(Color{150, 106, 54, 255}, jitter(gx, gy, 10))
+				}
 			case "torch":
 				c = Color{0, 0, 0, 0}
 				if (px == 7 || px == 8) && py >= 5 { 	// stick
@@ -194,6 +206,7 @@ main :: proc() {
 	paint(ad.WHEAT3, Color{0, 0, 0, 0}, "wheat3")
 	paint(ad.TORCH, Color{0, 0, 0, 0}, "torch")
 	paint(ad.BED, Color{176, 44, 52, 255}, "bed")
+	paint(ad.CHEST, Color{150, 106, 54, 255}, "chest")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -24,6 +24,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.arrows)
 	delete(w.particles)
 	delete(w.crops)
+	delete(w.chests)
 }
 
 @(test)
@@ -243,7 +244,7 @@ test_place_block :: proc(t: ^testing.T) {
 
 	g_input = {}
 	g_input.place_req = true
-	handle_break_place(&w, &p)
+	handle_break_place(&w, &p, 0.016)
 	g_input = {}
 
 	testing.expect(t, world_block(&w, 8, 12, 4) == .Stone, "block placed against the wall")
@@ -254,7 +255,7 @@ test_place_block :: proc(t: ^testing.T) {
 	p.inventory[.Iron] = 0
 	g_input = {}
 	g_input.place_req = true
-	handle_break_place(&w, &p)
+	handle_break_place(&w, &p, 0.016)
 	g_input = {}
 	testing.expect(t, world_block(&w, 8, 12, 5) != .Iron, "no place from an empty slot")
 }
@@ -286,7 +287,7 @@ test_mob_drops_food :: proc(t: ^testing.T) {
 	defer free_test_world(&w)
 	_ = c
 	append(&w.mobs, Mob{kind = .Pig, pos = Vec3{8, 40, 8}, health = 1})
-	mob_hit(&w, 0, Vec3{0, 0, 0})
+	mob_hit(&w, 0, Vec3{0, 0, 0}, 3)
 	testing.expect(t, len(w.mobs) == 0, "mob dies")
 	food := 0
 	for it in w.items {
@@ -458,4 +459,102 @@ test_crop_forget_on_harvest :: proc(t: ^testing.T) {
 	world_set_block(&w, 3, 40, 3, .Wheat1)
 	append(&w.crops, Crop{pos = Ivec3{3, 40, 3}})
 	testing.expect(t, len(w.crops) == 1, "one entry after replant")
+}
+
+@(test)
+test_tool_mining_and_wear :: proc(t: ^testing.T) {
+	p: Player
+	// hand vs wood vs iron pickaxe on stone: better tier mines faster
+	hand := mining_time(&p, .Stone)
+	p.tool_tier[.Pickaxe] = 1
+	wood := mining_time(&p, .Stone)
+	p.tool_tier[.Pickaxe] = 3
+	iron := mining_time(&p, .Stone)
+	testing.expect(t, wood < hand && iron < wood, "better pickaxe mines stone faster")
+
+	// obsidian needs an iron pickaxe
+	p.tool_tier[.Pickaxe] = 2
+	testing.expect(t, !can_mine(&p, .Obsidian), "stone pick can't mine obsidian")
+	p.tool_tier[.Pickaxe] = 3
+	testing.expect(t, can_mine(&p, .Obsidian), "iron pick can mine obsidian")
+
+	// durability: wearing to zero breaks the tool
+	p.tool_tier[.Sword] = 1
+	p.tool_dur[.Sword] = 2
+	tool_wear(&p, .Sword)
+	testing.expect(t, p.tool_tier[.Sword] == 1 && p.tool_dur[.Sword] == 1, "one point spent")
+	tool_wear(&p, .Sword)
+	testing.expect(t, p.tool_tier[.Sword] == 0, "sword breaks at zero durability")
+}
+
+@(test)
+test_tool_craft_upgrades :: proc(t: ^testing.T) {
+	p: Player
+	p.inventory[.Wood] = 2
+	tool_craft(&p, .Axe)
+	testing.expect(t, p.tool_tier[.Axe] == 1, "wood axe crafted")
+	testing.expect(t, p.tool_dur[.Axe] == TOOL_DUR[1], "full durability")
+	testing.expect(t, p.inventory[.Wood] == 0, "wood consumed")
+	// can't afford stone tier
+	tool_craft(&p, .Axe)
+	testing.expect(t, p.tool_tier[.Axe] == 1, "no upgrade without stone")
+	p.inventory[.Stone] = 3
+	tool_craft(&p, .Axe)
+	testing.expect(t, p.tool_tier[.Axe] == 2, "upgraded to stone axe")
+	testing.expect(t, p.inventory[.Stone] == 0, "stone consumed")
+}
+
+@(test)
+test_chest_store_and_take :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	p.inventory[.Stone] = 30
+	chest_open(&w, Ivec3{1, 2, 3})
+	chest_deposit(&w, &p, .Stone)
+	testing.expect(t, p.inventory[.Stone] == 0, "stone left the player")
+	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 30, "stone is in the chest")
+	chest_withdraw_all(&w, &p)
+	testing.expect(t, p.inventory[.Stone] == 30, "stone returned")
+	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 0, "chest emptied")
+}
+
+@(test)
+test_chest_break_recovers_contents :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	pos := Ivec3{4, 5, 6}
+	w.chests[pos] = Chest{}
+	ch := w.chests[pos]
+	ch.items[.Iron] = 7
+	w.chests[pos] = ch
+	chest_break(&w, &p, pos)
+	testing.expect(t, p.inventory[.Iron] == 7, "broken chest returns its contents")
+	_, ok := w.chests[pos]
+	testing.expect(t, !ok, "chest entry removed")
+}
+
+@(test)
+test_chest_save_roundtrip :: proc(t: ^testing.T) {
+	w, _ := make_test_world() // overworld
+	defer free_test_world(&w)
+	pos := Ivec3{10, 20, -30}
+	ch: Chest
+	ch.items[.Wood] = 12
+	ch.items[.Glowstone] = 3
+	w.chests[pos] = ch
+	save_chests(&w)
+
+	w2, _ := make_test_world()
+	defer free_test_world(&w2)
+	load_chests(&w2)
+	rc, ok := w2.chests[pos]
+	testing.expect(t, ok, "chest loaded back")
+	if ok {
+		testing.expect(t, rc.items[.Wood] == 12 && rc.items[.Glowstone] == 3, "counts preserved")
+	}
+	// cleanup the on-disk file so the test is repeatable
+	clear(&w.chests)
+	save_chests(&w)
 }

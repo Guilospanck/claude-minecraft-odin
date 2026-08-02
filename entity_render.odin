@@ -122,6 +122,36 @@ skeleton_parts := [6]MobPart {
 }
 
 @(private = "file")
+PIGSKIN :: Vec3{0.84, 0.54, 0.55}
+@(private = "file")
+PIGCLOTH :: Vec3{0.42, 0.30, 0.32}
+@(private = "file")
+GHASTW :: Vec3{0.87, 0.85, 0.84}
+@(private = "file")
+GHASTFACE :: Vec3{0.20, 0.16, 0.22}
+
+@(private = "file")
+piglin_parts := [6]MobPart {
+	{{-0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PIGCLOTH, 1}, // left leg
+	{{0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PIGCLOTH, -1}, // right leg
+	{{0, 1.2, 0}, {0.5, 0.62, 0.28}, {0.55, 0.42, 0.44}, 0}, // body
+	{{0, 1.68, 0}, {0.52, 0.44, 0.44}, PIGSKIN, 0}, // big snouted head
+	{{-0.36, 1.2, 0}, {0.16, 0.6, 0.16}, PIGSKIN, -1}, // left arm
+	{{0.36, 1.2, 0}, {0.16, 0.6, 0.16}, PIGSKIN, 1}, // right arm
+}
+
+@(private = "file")
+ghast_parts := [7]MobPart {
+	{{0, 0.95, 0}, {1.3, 1.3, 1.3}, GHASTW, 0}, // body
+	{{0, 0.98, -0.66}, {0.52, 0.18, 0.06}, GHASTFACE, 0}, // mouth
+	{{-0.42, 0.18, -0.42}, {0.15, 0.55, 0.15}, GHASTW, 1}, // tentacles
+	{{0.42, 0.18, -0.42}, {0.15, 0.55, 0.15}, GHASTW, -1},
+	{{-0.42, 0.18, 0.42}, {0.15, 0.55, 0.15}, GHASTW, -1},
+	{{0.42, 0.18, 0.42}, {0.15, 0.55, 0.15}, GHASTW, 1},
+	{{0, 0.18, 0}, {0.15, 0.55, 0.15}, GHASTW, 1},
+}
+
+@(private = "file")
 PSKIN :: Vec3{0.86, 0.70, 0.56}
 @(private = "file")
 PSHIRT :: Vec3{0.20, 0.55, 0.75}
@@ -180,6 +210,10 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return zombie_parts[:]
 	case .Skeleton:
 		return skeleton_parts[:]
+	case .Piglin:
+		return piglin_parts[:]
+	case .Ghast:
+		return ghast_parts[:]
 	}
 	return pig_parts[:]
 }
@@ -273,17 +307,22 @@ arrows_render_frame :: proc(arrows: ^[dynamic]Arrow, vp: Mat4, ambient: f32) {
 	if len(arrows^) == 0 do return
 	gl.UseProgram(e_prog)
 	gl.Uniform1f(e_ambient, ambient)
-	gl.Uniform3f(e_color, 0.82, 0.78, 0.70)
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(arrows^) {
 		a := &arrows^[i]
 		fwd := a.vel
 		if linalg.length(fwd) < 0.001 do fwd = Vec3{0, 0, 1}
+		scale := a.fire ? Vec3{0.4, 0.4, 0.4} : Vec3{0.06, 0.06, 0.45}
 		model :=
 			linalg.matrix4_translate_f32(a.pos) *
 			mat_from_forward(fwd) *
-			linalg.matrix4_scale_f32(Vec3{0.06, 0.06, 0.45})
+			linalg.matrix4_scale_f32(scale)
 		ent_set_mat4(e_mvp, vp * model)
+		if a.fire {
+			gl.Uniform3f(e_color, 0.98, 0.5, 0.12) // molten fireball
+		} else {
+			gl.Uniform3f(e_color, 0.82, 0.78, 0.70)
+		}
 		gl.DrawArrays(gl.TRIANGLES, 0, 36)
 	}
 	gl.BindVertexArray(0)

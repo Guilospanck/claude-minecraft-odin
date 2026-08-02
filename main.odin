@@ -119,12 +119,16 @@ main :: proc() {
 
 	world: World
 	world_init(&world, seed)
+	load_chests(&world)
 	defer world_save_all(&world)
+	defer save_chests(&world)
 
 	// The Nether: a second world reached through portals.
 	nether: World
 	world_init(&nether, seed ~ 0x4E45_5448_4552_0001, .Nether)
+	load_chests(&nether)
 	defer world_save_all(&nether)
+	defer save_chests(&nether)
 	cur := &world // the dimension currently being played/rendered
 
 	// One-off: locate nearby biomes for this seed, print, and exit.
@@ -340,6 +344,44 @@ main :: proc() {
 		cur = &nether // camera positioned via MC_CAM
 	}
 
+	// Debug: MC_NMOBS=N spawns nether mobs (piglins + ghasts) ahead in cur.
+	if s := os.get_env("MC_NMOBS", context.temp_allocator); s != "" {
+		n := 4
+		if v, ok := strconv.parse_int(s); ok do n = v
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 9
+		for k in 0 ..< n {
+			gh := k % 2 == 1
+			pos := base + Vec3{f32((k % 3 - 1) * 3), gh ? 3 : 0, f32(k / 3 * 3)}
+			append(
+				&cur.mobs,
+				Mob {
+					kind = gh ? .Ghast : .Piglin,
+					pos = pos,
+					yaw = player.yaw + 3.14159265,
+					health = 10,
+				},
+			)
+		}
+	}
+
+	// Debug UI screenshots.
+	if os.get_env("MC_TOOLS", context.temp_allocator) != "" {
+		player.inventory[.Stone] = 20
+		player.inventory[.Iron] = 6
+		g_show_tools = true
+	}
+	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
+		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
+		ch: Chest
+		ch.items[.Stone] = 64
+		ch.items[.Iron] = 12
+		ch.items[.Glowstone] = 8
+		ch.items[.Wood] = 30
+		world.chests[g_chest_pos] = ch
+		g_show_chest = true
+	}
+
 	// Debug: MC_GLOW places a few glowstone blocks on the ground ahead.
 	if os.get_env("MC_GLOW", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
@@ -394,6 +436,7 @@ main :: proc() {
 	g_input.interact = false
 	g_input.confirm = false
 	g_input.portal = false
+	g_input.tools_toggle = false
 	g_input.quit = false // an ESC on the title screen must not open quit-confirm on frame 0
 
 	frame := 0
@@ -418,10 +461,12 @@ main :: proc() {
 			g_input.quit = false
 			if g_show_quit_confirm {
 				g_show_quit_confirm = false
-			} else if g_show_inventory || g_show_settings || g_show_crafting {
+			} else if g_show_inventory || g_show_settings || g_show_crafting || g_show_tools || g_show_chest {
 				g_show_inventory = false
 				g_show_settings = false
 				g_show_crafting = false
+				g_show_tools = false
+				g_show_chest = false
 			} else {
 				g_show_quit_confirm = true
 			}
@@ -435,23 +480,49 @@ main :: proc() {
 		if !g_show_quit_confirm {
 			if g_input.inv_toggle {
 				g_show_inventory = !g_show_inventory
-				if g_show_inventory {g_show_settings = false;g_show_crafting = false}
+				if g_show_inventory {
+					g_show_settings = false;g_show_crafting = false;g_show_tools = false;g_show_chest = false
+				}
 			}
 			if g_input.settings_toggle {
 				g_show_settings = !g_show_settings
-				if g_show_settings {g_show_inventory = false;g_show_crafting = false}
+				if g_show_settings {
+					g_show_inventory = false;g_show_crafting = false;g_show_tools = false;g_show_chest = false
+				}
 			}
 			if g_input.craft_toggle {
 				g_show_crafting = !g_show_crafting
-				if g_show_crafting {g_show_inventory = false;g_show_settings = false}
+				if g_show_crafting {
+					g_show_inventory = false;g_show_settings = false;g_show_tools = false;g_show_chest = false
+				}
+			}
+			if g_input.tools_toggle {
+				g_show_tools = !g_show_tools
+				if g_show_tools {
+					g_show_inventory = false;g_show_settings = false;g_show_crafting = false;g_show_chest = false
+				}
 			}
 		}
 		g_input.inv_toggle = false
 		g_input.settings_toggle = false
 		g_input.craft_toggle = false
+		g_input.tools_toggle = false
 
-		paused := g_show_inventory || g_show_settings || g_show_crafting || g_show_quit_confirm
+		paused :=
+			g_show_inventory ||
+			g_show_settings ||
+			g_show_crafting ||
+			g_show_tools ||
+			g_show_chest ||
+			g_show_quit_confirm
 		if paused {
+			// chest transfers: R takes everything, a hotbar number deposits it
+			if g_show_chest {
+				if g_input.interact do chest_withdraw_all(cur, &player)
+				if g_input.select >= 1 && g_input.select <= 9 {
+					chest_deposit(cur, &player, HOTBAR[g_input.select - 1])
+				}
+			}
 			// discard buffered gameplay one-shots so they don't fire on close
 			g_input.dx = 0
 			g_input.dy = 0
@@ -472,12 +543,15 @@ main :: proc() {
 			if g_show_crafting && g_input.select > 0 {
 				recipe_try(&player, cur, g_input.select - 1)
 			}
+			if g_show_tools && g_input.select >= 1 && g_input.select <= len(ToolKind) {
+				tool_craft(&player, ToolKind(g_input.select - 1))
+			}
 			g_input.select = 0
 		} else {
 			process_input(&player, dt)
 			physics_update(cur, &player, dt)
 			player_tick(&player, dt)
-			handle_break_place(cur, &player)
+			handle_break_place(cur, &player, dt)
 
 			// R: use/interact (till, plant, harvest, sleep)
 			if g_input.interact {
@@ -548,6 +622,8 @@ main :: proc() {
 		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
 		else if g_show_settings do ui_draw_settings(fw, fh)
 		else if g_show_crafting do ui_draw_crafting(&player, cur, fw, fh)
+		else if g_show_tools do ui_draw_tools(&player, fw, fh)
+		else if g_show_chest do ui_draw_chest(&player, cur, fw, fh)
 		if g_show_quit_confirm do ui_draw_quit_confirm(fw, fh)
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames

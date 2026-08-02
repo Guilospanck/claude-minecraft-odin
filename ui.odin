@@ -5,6 +5,47 @@ import gl "vendor:OpenGL"
 
 g_show_inventory: bool
 g_show_quit_confirm: bool
+g_show_tools: bool
+
+// Tools menu (X): shows each tool's tier + durability and its next upgrade;
+// press 1-4 to craft/upgrade.
+ui_draw_tools :: proc(p: ^Player, fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	hud_quad(-0.72, -0.5, 0.72, 0.62, Vec4{0.05, 0.05, 0.08, 0.94})
+	ch_h: f32 = 0.055
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	text_center("TOOLS", 0.52, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+
+	y: f32 = 0.32
+	for k in ToolKind {
+		tier := p.tool_tier[k]
+		have := tier > 0 \
+			? fmt.tprintf("%s %s  DUR %d", TIER_NAMES[tier], tool_name(k), p.tool_dur[k]) \
+			: fmt.tprintf("%s: none", tool_name(k))
+		text_draw(fmt.tprintf("%d", int(k) + 1), -0.62, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
+		text_draw(have, -0.5, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
+
+		next, block, count, ok := tool_next(p, k)
+		msg: string
+		col := Vec4{0.6, 0.7, 0.8, 1}
+		if ok {
+			afford := p.inventory[block] >= count
+			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
+			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
+		} else {
+			msg = "(max)"
+		}
+		text_draw(msg, 0.16, y, ch_w * 0.9, ch_h * 0.9, col)
+		y -= ch_h * 1.7
+	}
+	text_center(
+		"PRESS 1-4 TO CRAFT/UPGRADE   X CLOSE",
+		-0.4,
+		ch_w * 0.6,
+		ch_h * 0.6,
+		Vec4{0.7, 0.8, 0.9, 1},
+	)
+}
 
 // ESC confirmation overlay: Y quits, ESC resumes.
 ui_draw_quit_confirm :: proc(fbw, fbh: int) {
@@ -43,10 +84,17 @@ render_title :: proc(fbw, fbh: i32) {
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
 	text_center(
-		"E INV  T CRAFT  R USE/FARM  G EAT  F FLY  P PORTAL",
-		-0.64,
-		cw(0.04, aspect),
-		0.04,
+		"E INV  T CRAFT  X TOOLS  R USE  G EAT  F FLY  P PORTAL",
+		-0.62,
+		cw(0.038, aspect),
+		0.038,
+		Vec4{0.7, 0.75, 0.82, 1},
+	)
+	text_center(
+		"HOLD LMB TO MINE (RIGHT TOOL IS FASTER)",
+		-0.70,
+		cw(0.038, aspect),
+		0.038,
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
 }
@@ -176,6 +224,73 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 	}
 }
 
+// Chest panel (opened with R on a chest): stored contents on the left, your
+// blocks on the right. A hotbar number deposits that item; R takes everything.
+ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	hud_quad(-0.86, -0.72, 0.86, 0.82, Vec4{0.05, 0.05, 0.08, 0.93})
+	ch_h: f32 = 0.045
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	text_center("CHEST", 0.74, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+
+	ch, ok := w.chests[g_chest_pos]
+
+	// left column: stored contents
+	lx: f32 = -0.78
+	ly: f32 = 0.56
+	text_draw("STORED", lx, ly, ch_w * 1.1, ch_h * 1.1, Vec4{0.9, 0.82, 0.6, 1})
+	ly -= ch_h * 2.0
+	stored := false
+	if ok {
+		for b in BlockId {
+			if b == .Air || ch.items[b] <= 0 do continue
+			col := block_color(b)
+			hud_quad(lx, ly - ch_h, lx + ch_w * 1.1, ly, Vec4{col.r, col.g, col.b, 1})
+			text_draw(
+				fmt.tprintf("%s X%d", block_name(b), ch.items[b]),
+				lx + ch_w * 2.0,
+				ly,
+				ch_w,
+				ch_h,
+				Vec4{0.95, 0.95, 0.95, 1},
+			)
+			ly -= ch_h * 1.4
+			stored = true
+			if ly < -0.55 do break
+		}
+	}
+	if !stored do text_draw("(empty)", lx, ly, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
+
+	// right column: the player's blocks
+	rx: f32 = 0.12
+	ry: f32 = 0.56
+	text_draw("YOUR BLOCKS", rx, ry, ch_w * 1.1, ch_h * 1.1, Vec4{0.9, 0.82, 0.6, 1})
+	ry -= ch_h * 2.0
+	for b in BlockId {
+		if b == .Air || p.inventory[b] <= 0 do continue
+		col := block_color(b)
+		hud_quad(rx, ry - ch_h, rx + ch_w * 1.1, ry, Vec4{col.r, col.g, col.b, 1})
+		text_draw(
+			fmt.tprintf("%s X%d", block_name(b), p.inventory[b]),
+			rx + ch_w * 2.0,
+			ry,
+			ch_w,
+			ch_h,
+			Vec4{0.95, 0.95, 0.95, 1},
+		)
+		ry -= ch_h * 1.4
+		if ry < -0.55 do break
+	}
+
+	text_center(
+		"HOTBAR NUMBER = STORE ITEM    R = TAKE ALL    E CLOSE",
+		-0.66,
+		ch_w * 0.62,
+		ch_h * 0.62,
+		Vec4{0.72, 0.82, 0.92, 1},
+	)
+}
+
 // Full-screen inventory panel: title, every owned block with a colour swatch
 // and count, and a controls footer. Toggled with E.
 ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
@@ -279,6 +394,10 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		"  3 WHEAT -> BREAD (C)",
 		"",
 		"TORCH: LIGHT   BED: R TO SLEEP",
+		"CHEST: R TO OPEN/STORE",
+		"",
+		"TOOLS (X): PICK/AXE/SHOVEL/SWORD",
+		"  HOLD LMB TO MINE",
 	}
 	for line in help {
 		if line != "" {

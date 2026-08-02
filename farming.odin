@@ -72,6 +72,8 @@ try_interact :: proc(w: ^World, p: ^Player) {
 	tb := world_block(w, hit.bx, hit.by, hit.bz)
 
 	#partial switch tb {
+	case .Chest:
+		chest_open(w, Ivec3{hit.bx, hit.by, hit.bz})
 	case .Bed:
 		try_sleep(w, p)
 	case .Wheat3:

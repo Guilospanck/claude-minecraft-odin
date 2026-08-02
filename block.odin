@@ -29,6 +29,7 @@ BlockId :: enum u8 {
 	Wheat3, // crop stage 3 (ripe — harvestable)
 	Torch,
 	Bed,
+	Chest,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -165,6 +166,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.TORCH
 	case .Bed:
 		return ad.BED
+	case .Chest:
+		return ad.CHEST
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -224,6 +227,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.95, 0.80, 0.35}
 	case .Bed:
 		return {0.80, 0.20, 0.24}
+	case .Chest:
+		return {0.62, 0.44, 0.22}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -284,6 +289,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Torch"
 	case .Bed:
 		return "Bed"
+	case .Chest:
+		return "Chest"
 	}
 	return "?"
 }

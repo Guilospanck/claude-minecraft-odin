@@ -10,6 +10,8 @@ MobKind :: enum {
 	Rabbit,
 	Zombie,
 	Skeleton,
+	Piglin, // nether melee hostile
+	Ghast, // nether floating ranged hostile
 }
 
 MOB_KIND_COUNT :: len(MobKind)
@@ -18,8 +20,15 @@ PASSIVE_COUNT :: 5 // Pig..Rabbit; hostiles spawn separately
 ZOMBIE_DETECT :: f32(18.0)
 ZOMBIE_REACH :: f32(1.5)
 ZOMBIE_DMG :: 3
+PIGLIN_DMG :: 4
+GHAST_DETECT :: f32(30.0)
 
 mob_is_hostile :: proc(k: MobKind) -> bool {
+	return k == .Zombie || k == .Skeleton || k == .Piglin || k == .Ghast
+}
+
+// Nether mobs don't burn in daylight (the overworld undead do).
+mob_burns_in_day :: proc(k: MobKind) -> bool {
 	return k == .Zombie || k == .Skeleton
 }
 
@@ -51,6 +60,8 @@ MOB_DIMS := [MobKind]MobDims {
 	.Rabbit   = {0.25, 0.5, 2.8},
 	.Zombie   = {0.35, 1.9, 3.2},
 	.Skeleton = {0.33, 1.85, 3.8},
+	.Piglin   = {0.35, 1.9, 3.4},
+	.Ghast    = {0.7, 1.4, 2.0},
 }
 
 MOB_CAP :: 22
@@ -84,6 +95,43 @@ skeleton_shoot :: proc(w: ^World, m: ^Mob, p: ^Player) {
 }
 
 @(private = "file")
+ghast_shoot :: proc(w: ^World, m: ^Mob, p: ^Player) {
+	from := m.pos + Vec3{0, MOB_DIMS[.Ghast].h * 0.5, 0}
+	to := p.pos + Vec3{0, EYE_HEIGHT * 0.6, 0}
+	dir := to - from
+	dl := math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) + 1e-4
+	dir = dir / dl
+	append(&w.arrows, Arrow{pos = from, vel = dir * 14.0, from_player = false, fire = true})
+	audio_play(.Hurt, 0.3)
+}
+
+// Ghast: drifts in the air a few blocks above the floor and lobs fireballs.
+@(private = "file")
+ai_ghast :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
+	m.ai_timer -= dt
+	if m.ai_timer <= 0 {
+		m.ai_timer = rng_range(2.0, 5.0)
+		m.yaw = rng_range(0, 2 * math.PI)
+	}
+	fwd := Vec3{math.sin(m.yaw), 0, -math.cos(m.yaw)}
+	m.vel.x = fwd.x * 1.6
+	m.vel.z = fwd.z * 1.6
+	fy := nether_surface(w, int(m.pos.x), int(m.pos.z))
+	target := f32(fy < 0 ? SEA_LEVEL : fy) + 9
+	m.vel.y = clamp((target - m.pos.y) * 0.8, -2.5, 2.5)
+	m.walk_phase += dt * 4
+
+	dx := p.pos.x - m.pos.x
+	dz := p.pos.z - m.pos.z
+	m.attack_timer -= dt
+	if dx * dx + dz * dz < GHAST_DETECT * GHAST_DETECT && m.attack_timer <= 0 {
+		m.yaw = math.atan2(dx, -dz)
+		ghast_shoot(w, m, p)
+		m.attack_timer = 2.8
+	}
+}
+
+@(private = "file")
 ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 	dx := p.pos.x - m.pos.x
 	dz := p.pos.z - m.pos.z
@@ -114,18 +162,27 @@ ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 		return
 	}
 
-	// zombie melee
+	// zombie / piglin melee
 	m.moving = true
 	m.yaw = toward
 	if d2 < ZOMBIE_REACH * ZOMBIE_REACH && math.abs(p.pos.y - m.pos.y) < 2.0 && m.attack_timer <= 0 {
 		inv := 1.0 / math.sqrt(d2 + 1e-4)
-		player_damage(p, ZOMBIE_DMG, Vec3{dx * inv, 0, dz * inv})
+		dmg := m.kind == .Piglin ? PIGLIN_DMG : ZOMBIE_DMG
+		player_damage(p, dmg, Vec3{dx * inv, 0, dz * inv})
 		m.attack_timer = 1.0
 	}
 }
 
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 	dims := MOB_DIMS[m.kind]
+
+	// Ghast flies freely (no gravity / terrain collision).
+	if m.kind == .Ghast {
+		ai_ghast(w, p, m, dt)
+		m.pos += m.vel * dt
+		m.on_ground = false
+		return
+	}
 
 	if mob_is_hostile(m.kind) {
 		ai_hostile(w, p, m, dt)
@@ -162,6 +219,54 @@ surface_y :: proc(w: ^World, wx, wz: int) -> (int, BlockId) {
 		if b != .Air && b != .Water do return y, b
 	}
 	return -1, .Air
+}
+
+// Nether floor: scan below the bedrock roof for a solid block with 2 air above.
+@(private = "file")
+nether_surface :: proc(w: ^World, wx, wz: int) -> int {
+	for y := CHUNK_H - 8; y >= 2; y -= 1 {
+		if block_is_solid(world_block(w, wx, y, wz)) &&
+		   world_block(w, wx, y + 1, wz) == .Air &&
+		   world_block(w, wx, y + 2, wz) == .Air {
+			return y
+		}
+	}
+	return -1
+}
+
+// Nether spawn: piglins on netherrack, ghasts drifting in the caverns.
+nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
+	if len(mobs^) >= MOB_CAP do return
+	ang := rng_range(0, 2 * math.PI)
+	dist := rng_range(16, 40)
+	wx := int(player_pos.x + math.cos(ang) * dist)
+	wz := int(player_pos.z + math.sin(ang) * dist)
+	fy := nether_surface(w, wx, wz)
+	if fy < 0 do return
+
+	if rng_f32() < 0.35 {
+		append(
+			mobs,
+			Mob {
+				kind = .Ghast,
+				pos = Vec3{f32(wx) + 0.5, f32(fy) + 6, f32(wz) + 0.5},
+				yaw = rng_range(0, 2 * math.PI),
+				ai_timer = rng_range(0, 2),
+				health = 10,
+			},
+		)
+		return
+	}
+	append(
+		mobs,
+		Mob {
+			kind = .Piglin,
+			pos = Vec3{f32(wx) + 0.5, f32(fy + 1), f32(wz) + 0.5},
+			yaw = rng_range(0, 2 * math.PI),
+			ai_timer = rng_range(0, 2),
+			health = 10,
+		},
+	)
 }
 
 mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
@@ -245,13 +350,17 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 // daylight burn for zombies, and far-away / dead despawn.
 mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 	player_pos := p.pos
-	if rng_f32() < 0.03 do mob_try_spawn(w, mobs, player_pos)
-	if is_night(w.time_of_day) && rng_f32() < 0.05 do hostile_try_spawn(w, mobs, player_pos)
+	if w.dimension == .Nether {
+		if rng_f32() < 0.04 do nether_try_spawn(w, mobs, player_pos)
+	} else {
+		if rng_f32() < 0.03 do mob_try_spawn(w, mobs, player_pos)
+		if is_night(w.time_of_day) && rng_f32() < 0.05 do hostile_try_spawn(w, mobs, player_pos)
+	}
 
 	i := 0
 	for i < len(mobs^) {
 		m := &mobs^[i]
-		if mob_is_hostile(m.kind) && is_day(w.time_of_day) {
+		if mob_burns_in_day(m.kind) && is_day(w.time_of_day) {
 			// dt-scaled burn: ~6 hp/s, so a 12-hp zombie lasts ~2s in daylight
 			m.burn_accum += 6.0 * dt
 			if m.burn_accum >= 1.0 {
@@ -314,9 +423,9 @@ mob_pick :: proc(mobs: ^[dynamic]Mob, eye, dir: Vec3, reach: f32) -> (int, f32) 
 }
 
 // Hit a mob: knockback + damage; on death drop food (passive) and remove.
-mob_hit :: proc(w: ^World, idx: int, dir: Vec3) {
+mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 	m := &w.mobs[idx]
-	m.health -= 3
+	m.health -= dmg
 	m.vel.x += dir.x * 6.0
 	m.vel.z += dir.z * 6.0
 	m.vel.y = 6.0

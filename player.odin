@@ -31,6 +31,12 @@ Player :: struct {
 	portal_timer: f32, // time stood in a portal (triggers dimension travel)
 	lava_timer:   f32, // lava-damage tick
 	starve:      f32, // starvation damage timer
+	tool_tier:   [ToolKind]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
+	tool_dur:    [ToolKind]int, // remaining durability for each tool
+	mine_active: bool, // currently mining a block (LMB held)
+	mine_x, mine_y, mine_z: int, // the block being mined
+	mine_progress: f32, // seconds accumulated toward breaking it
+	mine_frac:   f32, // 0..1 progress, for the HUD bar
 }
 
 HOTBAR := [9]BlockId {
@@ -39,9 +45,9 @@ HOTBAR := [9]BlockId {
 	.Stone,
 	.Wood,
 	.Sand,
-	.Glass,
 	.Torch,
 	.Bed,
+	.Chest,
 	.Furnace,
 }
 
@@ -71,7 +77,14 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.inventory[.Obsidian] = 30 // enough to build a nether portal (press P)
 	p.inventory[.Torch] = 16
 	p.inventory[.Bed] = 1
+	p.inventory[.Chest] = 2
 	p.seeds = 8 // enough to start a small farm (R to till/plant)
+
+	// starting tools: a wooden pickaxe and sword (upgrade in the tools menu, X)
+	p.tool_tier[.Pickaxe] = 1
+	p.tool_dur[.Pickaxe] = TOOL_DUR[1]
+	p.tool_tier[.Sword] = 1
+	p.tool_dur[.Sword] = TOOL_DUR[1]
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
@@ -239,60 +252,98 @@ block_hits_player :: proc(p: ^Player, tx, ty, tz: int) -> bool {
 	)
 }
 
-// Break (left click) / place (right click) against the block under the crosshair.
-handle_break_place :: proc(w: ^World, p: ^Player) {
-	if g_input.break_req || g_input.place_req {
-		eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
-		dir := camera_front(p.yaw, p.pitch)
-		hit := raycast(w, eye, dir, REACH)
-		// Along-ray entry distance, consistent with mob_pick's ray_aabb t.
-		block_dist := hit.hit ? hit.t : REACH
+@(private = "file")
+mine_reset :: proc(p: ^Player) {
+	p.mine_active = false
+	p.mine_progress = 0
+	p.mine_frac = 0
+}
 
-		if g_input.break_req {
-			// A left click punches a mob if one is under the crosshair and
-			// nearer than the targeted block; otherwise it breaks the block.
-			mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
-			if mob_idx >= 0 && mob_t <= block_dist {
-				mob_hit(w, mob_idx, dir)
-			} else if hit.hit {
-				broken := world_block(w, hit.bx, hit.by, hit.bz)
-				if block_is_crop(broken) {
-					// harvest by breaking: ripe gives wheat, young gives seeds back
-					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
-					crop_forget(w, Ivec3{hit.bx, hit.by, hit.bz})
-					net_send_edit(hit.bx, hit.by, hit.bz, .Air, w.dimension)
-					audio_play(.Break)
-					p.seeds += 1
-					if broken == .Wheat3 do p.wheat += 1
-				} else if broken != .Bedrock { // bedrock is unbreakable
-					world_set_block(w, hit.bx, hit.by, hit.bz, .Air)
-					net_send_edit(hit.bx, hit.by, hit.bz, .Air, w.dimension)
-					particle_spawn_break(&w.particles, broken, hit.bx, hit.by, hit.bz)
-					audio_play(.Break)
-					item_spawn(
-						&w.items,
-						broken,
-						Vec3{f32(hit.bx) + 0.5, f32(hit.by) + 0.3, f32(hit.bz) + 0.5},
-					)
-					if broken == .Grass && rng_int(4) == 0 do p.seeds += 1 // seeds hide in grass
+// Actually break a block: harvest crops, else drop it, spend tool durability.
+@(private = "file")
+break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
+	if block_is_crop(broken) {
+		world_set_block(w, bx, by, bz, .Air)
+		crop_forget(w, Ivec3{bx, by, bz})
+		net_send_edit(bx, by, bz, .Air, w.dimension)
+		audio_play(.Break)
+		p.seeds += 1
+		if broken == .Wheat3 do p.wheat += 1
+		return
+	}
+	if broken == .Chest do chest_break(w, p, Ivec3{bx, by, bz}) // recover contents first
+	world_set_block(w, bx, by, bz, .Air)
+	net_send_edit(bx, by, bz, .Air, w.dimension)
+	particle_spawn_break(&w.particles, broken, bx, by, bz)
+	audio_play(.Break)
+	item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.3, f32(bz) + 0.5})
+	if broken == .Grass && rng_int(4) == 0 do p.seeds += 1 // seeds hide in grass
+	if kind, applies := mine_tool(broken); applies do tool_wear(p, kind)
+}
+
+// Mine (hold left) / punch mobs (left click) / place (right click) against the
+// block under the crosshair.
+handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
+	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
+	dir := camera_front(p.yaw, p.pitch)
+	hit := raycast(w, eye, dir, REACH)
+	block_dist := hit.hit ? hit.t : REACH // along-ray t, matches mob_pick
+
+	// A left click punches a mob under the crosshair (nearer than any block).
+	if g_input.break_req {
+		mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
+		if mob_idx >= 0 && mob_t <= block_dist {
+			mob_hit(w, mob_idx, dir, 3 + sword_bonus(p))
+			tool_wear(p, .Sword)
+			mine_reset(p)
+		}
+	}
+
+	// Hold the left button to mine the targeted block over time.
+	mining :=
+		g_win != nil &&
+		glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS &&
+		hit.hit
+	if mining {
+		broken := world_block(w, hit.bx, hit.by, hit.bz)
+		if broken == .Bedrock || broken == .Portal || broken == .Air {
+			mine_reset(p) // unbreakable / nothing there
+		} else {
+			if !(p.mine_active && p.mine_x == hit.bx && p.mine_y == hit.by && p.mine_z == hit.bz) {
+				p.mine_active = true
+				p.mine_x, p.mine_y, p.mine_z = hit.bx, hit.by, hit.bz
+				p.mine_progress = 0
+			}
+			if !can_mine(p, broken) {
+				p.mine_progress = 0 // e.g. obsidian needs an iron pickaxe
+				p.mine_frac = 0
+			} else {
+				p.mine_progress += dt
+				need := mining_time(p, broken)
+				p.mine_frac = clamp(p.mine_progress / max(need, 0.0001), 0, 1)
+				if p.mine_progress >= need {
+					break_block(w, p, hit.bx, hit.by, hit.bz, broken)
+					mine_reset(p)
 				}
 			}
 		}
+	} else {
+		mine_reset(p)
+	}
 
-		if g_input.place_req && hit.hit {
-			tx := hit.bx + hit.nx
-			ty := hit.by + hit.ny
-			tz := hit.bz + hit.nz
-			if ty >= 0 &&
-			   ty < CHUNK_H &&
-			   world_block(w, tx, ty, tz) == .Air &&
-			   !block_hits_player(p, tx, ty, tz) &&
-			   p.inventory[p.selected] > 0 {
-				world_set_block(w, tx, ty, tz, p.selected)
-				net_send_edit(tx, ty, tz, p.selected, w.dimension)
-				p.inventory[p.selected] -= 1
-				audio_play(.Place)
-			}
+	if g_input.place_req && hit.hit {
+		tx := hit.bx + hit.nx
+		ty := hit.by + hit.ny
+		tz := hit.bz + hit.nz
+		if ty >= 0 &&
+		   ty < CHUNK_H &&
+		   world_block(w, tx, ty, tz) == .Air &&
+		   !block_hits_player(p, tx, ty, tz) &&
+		   p.inventory[p.selected] > 0 {
+			world_set_block(w, tx, ty, tz, p.selected)
+			net_send_edit(tx, ty, tz, p.selected, w.dimension)
+			p.inventory[p.selected] -= 1
+			audio_play(.Place)
 		}
 	}
 
