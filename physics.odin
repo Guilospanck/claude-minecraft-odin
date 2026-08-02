@@ -83,8 +83,12 @@ player_in_water :: proc(w: ^World, pos: Vec3) -> bool {
 
 physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.fly {
-		p.pos += p.vel * dt // noclip free-fly
-		p.on_ground = false
+		// Fly with no gravity but still collide with solid blocks, so you can't
+		// sink through the floor into lava / the void (Minecraft creative fly).
+		body_move_axis(w, &p.pos, &p.vel, p.vel.x * dt, 0, PLAYER_HW, PLAYER_H)
+		body_move_axis(w, &p.pos, &p.vel, p.vel.z * dt, 2, PLAYER_HW, PLAYER_H)
+		body_move_axis(w, &p.pos, &p.vel, p.vel.y * dt, 1, PLAYER_HW, PLAYER_H)
+		p.on_ground = body_collides(w, p.pos - Vec3{0, 2 * EPS, 0}, PLAYER_HW, PLAYER_H)
 		p.in_water = false
 		p.fall_speed = 0
 		return

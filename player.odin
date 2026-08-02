@@ -31,6 +31,8 @@ Player :: struct {
 	portal_timer: f32, // time stood in a portal (triggers dimension travel)
 	lava_timer:   f32, // lava-damage tick
 	starve:      f32, // starvation damage timer
+	oxygen:      f32, // air remaining while underwater (OXYGEN_MAX..0)
+	drown_timer: f32, // drowning-damage tick once oxygen is empty
 	tool_tier:   [ToolKind]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
 	tool_dur:    [ToolKind]int, // remaining durability for each tool
 	mine_active: bool, // currently mining a block (LMB held)
@@ -61,6 +63,7 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.selected = .Grass
 	p.health = MAX_HEALTH
 	p.hunger = HUNGER_MAX
+	p.oxygen = OXYGEN_MAX
 	p.respawn = pos
 
 	// starting kit so you can build right away; gather more by mining
@@ -110,9 +113,37 @@ player_respawn :: proc(p: ^Player) {
 	p.vel = Vec3{0, 0, 0}
 	p.health = MAX_HEALTH
 	p.hunger = HUNGER_MAX
+	p.oxygen = OXYGEN_MAX
+	p.drown_timer = 0
 	p.starve = 0
 	p.hurt_timer = 1.0
 	p.fall_speed = 0
+}
+
+// Is the player's head (eye level) inside a water block?
+player_head_submerged :: proc(w: ^World, pos: Vec3) -> bool {
+	x := int(math.floor(pos.x))
+	z := int(math.floor(pos.z))
+	return world_block(w, x, int(math.floor(pos.y + EYE_HEIGHT)), z) == .Water
+}
+
+// Drain air while the head is underwater; once empty, take drowning damage.
+// Air refills quickly at the surface.
+player_oxygen_tick :: proc(w: ^World, p: ^Player, dt: f32) {
+	if player_head_submerged(w, p.pos) {
+		p.oxygen -= dt
+		if p.oxygen <= 0 {
+			p.oxygen = 0
+			p.drown_timer += dt
+			if p.drown_timer >= 1.0 {
+				player_damage(p, 2, Vec3{0, 0, 0})
+				p.drown_timer = 0
+			}
+		}
+	} else {
+		p.oxygen = min(p.oxygen + dt * 4, OXYGEN_MAX)
+		p.drown_timer = 0
+	}
 }
 
 @(private = "file")

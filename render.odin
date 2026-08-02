@@ -294,6 +294,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	}
 	hud_draw_health(p.health, int(fbw), int(fbh))
 	hud_draw_hunger(int(p.hunger), int(fbw), int(fbh))
+	hud_draw_oxygen(p.oxygen, int(fbw), int(fbh))
 	ui_draw_hotbar(p, int(fbw), int(fbh))
 	minimap_draw(w, p, int(fbw), int(fbh))
 	gl.BindVertexArray(0)

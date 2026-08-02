@@ -42,6 +42,7 @@ TERMINAL_VEL :: 60.0
 // ---- health / combat ----
 MAX_HEALTH :: 20
 HUNGER_MAX :: 20
+OXYGEN_MAX :: f32(12.0) // seconds of air before drowning starts
 FALL_SAFE :: f32(14.0) // fall speed below this does no damage
 
 // ---- render ----

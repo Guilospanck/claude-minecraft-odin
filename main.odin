@@ -365,6 +365,21 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_DIVE submerges the player in a water pool (oxygen HUD/tint).
+	if os.get_env("MC_DIVE", context.temp_allocator) != "" {
+		px := int(player.pos.x)
+		py := int(player.pos.y)
+		pz := int(player.pos.z)
+		for dy in -1 ..= 4 {
+			for dz in -4 ..= 4 {
+				for dx in -4 ..= 4 {
+					world_set_block(&world, px + dx, py + dy, pz + dz, .Water)
+				}
+			}
+		}
+		player.oxygen = 7.0
+	}
+
 	// Debug UI screenshots.
 	if os.get_env("MC_TOOLS", context.temp_allocator) != "" {
 		player.inventory[.Stone] = 20
@@ -603,11 +618,31 @@ main :: proc() {
 				player.lava_timer = 0
 			}
 
+			// oxygen / drowning while the head is underwater
+			player_oxygen_tick(cur, &player, dt)
+
 			world_stream(cur, player.pos)
 			mobs_update(cur, &player, &cur.mobs, dt)
 			items_update(cur, &player, &cur.items, dt)
 			arrows_update(cur, &player, dt)
 			particles_update(cur, &cur.particles, dt)
+
+			// background music by context: nether > combat > calm
+			track := MusicTrack.Calm
+			if cur.dimension == .Nether {
+				track = .Nether
+			} else {
+				for m in cur.mobs {
+					if !mob_is_hostile(m.kind) do continue
+					dx := m.pos.x - player.pos.x
+					dz := m.pos.z - player.pos.z
+					if dx * dx + dz * dz < 22 * 22 {
+						track = .Combat
+						break
+					}
+				}
+			}
+			audio_set_music(track)
 		}
 		g_input.nav_up = false;g_input.nav_down = false;g_input.nav_left = false;g_input.nav_right = false
 

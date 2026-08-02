@@ -159,8 +159,27 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 		}
 	}
 
+	settle_water(c)
 	generate_waterfalls(c, seed, base_x, base_z, heights[:])
 	generate_trees(c, seed, base_x, base_z, heights[:], biomes[:])
+}
+
+// Make unsupported water fall. Rivers/oceans that were carved through by a
+// ravine or cave used to leave a flat sheet of water hanging in the air over
+// the gap (a "water bridge across the canyon"). Here any water with air
+// directly below flows down to the first solid block, so it cascades into and
+// fills the drop instead of floating.
+settle_water :: proc(c: ^Chunk) {
+	for lz in 0 ..< CHUNK_D {
+		for lx in 0 ..< CHUNK_W {
+			for y := CHUNK_H - 1; y >= 1; y -= 1 {
+				if c.blocks[chunk_index(lx, y, lz)] == .Water &&
+				   c.blocks[chunk_index(lx, y - 1, lz)] == .Air {
+					c.blocks[chunk_index(lx, y - 1, lz)] = .Water
+				}
+			}
+		}
+	}
 }
 
 // Water strands down cliff faces: at the foot of a tall in-chunk cliff, fill

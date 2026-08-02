@@ -89,6 +89,23 @@ hud_draw_hunger :: proc(hunger, fbw, fbh: int) {
 	}
 }
 
+// Air bubbles above the hunger bar, shown only while underwater / refilling.
+hud_draw_oxygen :: proc(oxygen: f32, fbw, fbh: int) {
+	if oxygen >= OXYGEN_MAX do return
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	sz: f32 = 0.045
+	w := sz / aspect
+	gap: f32 = 0.004
+	y0: f32 = -0.845
+	x_end: f32 = 0.97
+	bubbles := int(oxygen / OXYGEN_MAX * 10.0 + 0.999) // ceil, 0..10
+	bubbles = clamp(bubbles, 0, 10)
+	for i in 0 ..< bubbles {
+		x1 := x_end - f32(i) * (w + gap)
+		hud_icon(x1 - w, y0, x1, y0 + sz, ICON_BUBBLE)
+	}
+}
+
 // A swatch of the currently selected block, bottom-centre.
 hud_draw_selected :: proc(sel: BlockId, fbw, fbh: int) {
 	gl.UseProgram(h_prog)

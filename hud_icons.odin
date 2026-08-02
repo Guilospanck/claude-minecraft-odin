@@ -2,12 +2,13 @@ package main
 
 import gl "vendor:OpenGL"
 
-// Small pixel-art HUD icons (hearts + drumsticks) baked into an RGBA texture.
-// Icon indices: 0 heart-full, 1 heart-half, 2 heart-empty,
-//               3 drum-full,  4 drum-half,  5 drum-empty.
+// Small pixel-art HUD icons (hearts + drumsticks + air bubble) baked into an
+// RGBA texture. Icon indices: 0 heart-full, 1 heart-half, 2 heart-empty,
+//               3 drum-full,  4 drum-half,  5 drum-empty, 6 bubble.
 ICON_PX :: 8
-ICON_COUNT :: 6
+ICON_COUNT :: 7
 ICON_ATLAS_W :: ICON_PX * ICON_COUNT
+ICON_BUBBLE :: 6
 
 @(private = "file")
 Col :: [4]u8
@@ -22,6 +23,10 @@ BONE :: Col{236, 226, 192, 255}
 @(private = "file")
 GRAY :: Col{62, 60, 56, 255}
 @(private = "file")
+BUBBLE_C :: Col{150, 205, 245, 255}
+@(private = "file")
+BUBBLE_HI :: Col{225, 245, 255, 255}
+@(private = "file")
 CLEAR :: Col{0, 0, 0, 0}
 
 // bit7 = leftmost column
@@ -31,6 +36,8 @@ HEART := [8]u8{0x6C, 0xFE, 0xFE, 0xFE, 0x7C, 0x38, 0x10, 0x00}
 DRUM_MEAT := [8]u8{0x0E, 0x1E, 0x1E, 0x3C, 0x70, 0x20, 0x00, 0x00}
 @(private = "file")
 DRUM_BONE := [8]u8{0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xC0, 0x00}
+@(private = "file")
+BUBBLE := [8]u8{0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x3C}
 
 @(private = "file")
 MMIVert :: struct {
@@ -76,6 +83,8 @@ icons_init :: proc() {
 					else if bit_on(DRUM_MEAT[row], col) do c = col < 4 ? MEAT : GRAY
 				case 5:
 					if bit_on(DRUM_BONE[row], col) || bit_on(DRUM_MEAT[row], col) do c = GRAY
+				case 6:
+					if bit_on(BUBBLE[row], col) do c = (row < 3 && col < 4) ? BUBBLE_HI : BUBBLE_C
 				}
 				i := (row * ICON_ATLAS_W + ox + col) * 4
 				px[i] = c.r;px[i + 1] = c.g;px[i + 2] = c.b;px[i + 3] = c.a

@@ -558,3 +558,67 @@ test_chest_save_roundtrip :: proc(t: ^testing.T) {
 	clear(&w.chests)
 	save_chests(&w)
 }
+
+@(test)
+test_settle_water_falls :: proc(t: ^testing.T) {
+	c := chunk_make(Ivec2{0, 0})
+	defer chunk_free(c)
+	// a solid floor at y=40, a lone water block at y=50, air between (a "bridge")
+	chunk_set(c, 5, 40, 5, .Stone)
+	chunk_set(c, 5, 50, 5, .Water)
+	settle_water(c)
+	// water should have cascaded down to rest on the floor (y=41..50 water)
+	for y in 41 ..= 50 {
+		testing.expect(t, chunk_get(c, 5, y, 5) == .Water, "water filled the drop")
+	}
+	testing.expect(t, chunk_get(c, 5, 40, 5) == .Stone, "floor intact")
+	testing.expect(t, chunk_get(c, 5, 39, 5) == .Air, "did not leak through the floor")
+}
+
+@(test)
+test_fly_collides_with_floor :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for x in 0 ..< CHUNK_W {
+		for z in 0 ..< CHUNK_D {
+			chunk_set(c, x, 30, z, .Stone)
+		}
+	}
+	p: Player
+	player_init(&p, Vec3{8.5, 34.0, 8.5})
+	p.fly = true
+	p.vel = Vec3{0, -18, 0} // dive straight down
+	for _ in 0 ..< 120 {
+		physics_update(&w, &p, 1.0 / 60.0)
+	}
+	testing.expect(t, p.pos.y >= 30.9, "flying does not sink through the floor")
+}
+
+@(test)
+test_oxygen_drains_and_drowns :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// water column around the player's head at y≈8+EYE_HEIGHT
+	for y in 8 ..< 14 {
+		chunk_set(c, 8, y, 8, .Water)
+	}
+	p: Player
+	player_init(&p, Vec3{8.5, 8.0, 8.5})
+	testing.expect(t, player_head_submerged(&w, p.pos), "head is underwater")
+	// drain all the air
+	for _ in 0 ..< int(OXYGEN_MAX) + 1 {
+		player_oxygen_tick(&w, &p, 1.0)
+	}
+	testing.expect(t, p.oxygen == 0, "oxygen empties underwater")
+	h := p.health
+	p.hurt_timer = 0
+	player_oxygen_tick(&w, &p, 1.0) // one more second past empty
+	testing.expect(t, p.health < h, "drowning damages the player")
+
+	// surfacing refills air
+	p.pos.y = 40 // no water here
+	for _ in 0 ..< 5 {
+		player_oxygen_tick(&w, &p, 1.0)
+	}
+	testing.expect(t, p.oxygen == OXYGEN_MAX, "air refills at the surface")
+}
