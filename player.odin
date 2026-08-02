@@ -39,6 +39,7 @@ Player :: struct {
 	mine_x, mine_y, mine_z: int, // the block being mined
 	mine_progress: f32, // seconds accumulated toward breaking it
 	mine_frac:   f32, // 0..1 progress, for the HUD bar
+	place_cd:    f32, // throttle for held-right-button drag-placing
 }
 
 HOTBAR := [9]BlockId {
@@ -362,7 +363,14 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		mine_reset(p)
 	}
 
-	if g_input.place_req && hit.hit {
+	// Place: the one-shot request (right-click / Q / ctrl-click) fires immediately;
+	// holding the right button drag-places on a short cooldown. Polling the button
+	// directly is more robust than relying only on the press callback.
+	if p.place_cd > 0 do p.place_cd -= dt
+	right_held :=
+		g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+	want_place := g_input.place_req || (right_held && p.place_cd <= 0)
+	if want_place && hit.hit {
 		tx := hit.bx + hit.nx
 		ty := hit.by + hit.ny
 		tz := hit.bz + hit.nz
@@ -375,6 +383,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 			net_send_edit(tx, ty, tz, p.selected, w.dimension)
 			p.inventory[p.selected] -= 1
 			audio_play(.Place)
+			p.place_cd = 0.22
 		}
 	}
 

@@ -47,7 +47,15 @@ cursor_cb :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 
 mouse_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: c.int) {
 	if action == glfw.PRESS {
-		if button == glfw.MOUSE_BUTTON_LEFT do g_input.break_req = true
+		if button == glfw.MOUSE_BUTTON_LEFT {
+			// Ctrl+click is macOS's universal secondary click -> treat as place.
+			// (Some setups deliver it as left+ctrl rather than a right button.)
+			if (mods & glfw.MOD_CONTROL) != 0 {
+				g_input.place_req = true
+			} else {
+				g_input.break_req = true
+			}
+		}
 		if button == glfw.MOUSE_BUTTON_RIGHT do g_input.place_req = true
 	}
 }

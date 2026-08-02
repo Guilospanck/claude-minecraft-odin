@@ -77,10 +77,10 @@ render_title :: proc(fbw, fbh: i32) {
 	text_center("A VOXEL WORLD IN PURE ODIN", 0.18, cw(0.05, aspect), 0.05, Vec4{0.8, 0.8, 0.85, 1})
 	text_center("PRESS ENTER TO PLAY", -0.15, cw(0.07, aspect), 0.07, Vec4{1, 1, 0.6, 1})
 	text_center(
-		"WASD MOVE   HOLD LMB MINE   RMB OR Q PLACE",
+		"WASD MOVE   HOLD LMB MINE   PLACE: RMB / CTRL-CLICK / Q",
 		-0.55,
-		cw(0.04, aspect),
-		0.04,
+		cw(0.038, aspect),
+		0.038,
 		Vec4{0.7, 0.75, 0.82, 1},
 	)
 	text_center(
@@ -372,7 +372,7 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 	hy -= ch_h * 2.2
 	help := [?]string {
 		"MINE: HOLD LMB ON A BLOCK",
-		"PLACE: RMB OR Q (USES A SLOT)",
+		"PLACE: RMB / CTRL-CLICK / Q",
 		"1-9: PICK A HOTBAR SLOT",
 		"",
 		"CRAFT (C):",
