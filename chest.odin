@@ -15,8 +15,14 @@ Chest :: struct {
 g_show_chest: bool
 g_chest_pos: Ivec3
 
-// Open (or lazily create) the chest at pos in world w.
+// Open (or lazily create) the chest at pos in world w. Chests are host-only in
+// multiplayer: their contents are neither networked nor saved on a client, so a
+// client deposit would zero the inventory into a black hole.
 chest_open :: proc(w: ^World, pos: Ivec3) {
+	if net_is_client() {
+		fmt.println("chests are host-only in multiplayer")
+		return
+	}
 	if _, ok := w.chests[pos]; !ok {
 		w.chests[pos] = Chest{}
 	}
@@ -30,6 +36,7 @@ chest_open :: proc(w: ^World, pos: Ivec3) {
 
 // Move every unit of block b from the player into the open chest.
 chest_deposit :: proc(w: ^World, p: ^Player, b: BlockId) {
+	if net_is_client() do return
 	if b == .Air do return
 	n := p.inventory[b]
 	if n <= 0 do return
@@ -44,6 +51,7 @@ chest_deposit :: proc(w: ^World, p: ^Player, b: BlockId) {
 
 // Move all contents of the open chest into the player's inventory.
 chest_withdraw_all :: proc(w: ^World, p: ^Player) {
+	if net_is_client() do return
 	ch, ok := w.chests[g_chest_pos]
 	if !ok do return
 	moved := 0
@@ -140,9 +148,12 @@ load_chests :: proc(w: ^World) {
 		ch: Chest
 		for _ in 0 ..< n {
 			if off + 5 > len(data) do return
-			b := BlockId(data[off]);off += 1
+			raw := data[off];off += 1
 			cnt := int(get_i32(data, off));off += 4
-			if b != .Air do ch.items[b] = cnt
+			// guard against a corrupt/tampered file: skip out-of-range block ids
+			if raw != u8(BlockId.Air) && raw <= u8(max(BlockId)) {
+				ch.items[BlockId(raw)] = cnt
+			}
 		}
 		w.chests[Ivec3{x, y, z}] = ch
 	}
