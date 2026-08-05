@@ -233,7 +233,13 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	view := view_matrix(eye, p.yaw, p.pitch)
+	// Eating nods the camera down and back up — a bump peaking mid-animation.
+	eat_bob: f32 = 0
+	if p.eat_timer > 0 {
+		t := 1.0 - p.eat_timer / EAT_ANIM_DURATION
+		eat_bob = math.sin(clamp(t, 0, 1) * math.PI)
+	}
+	view := view_matrix(eye - Vec3{0, 0.06 * eat_bob, 0}, p.yaw, p.pitch - 0.05 * eat_bob)
 	proj := proj_matrix(aspect)
 	vp := proj * view
 

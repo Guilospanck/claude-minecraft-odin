@@ -52,15 +52,51 @@ scan_biomes :: proc(w: ^World) {
 	fmt.println("desert:", fd, dx0, dy0, dz0)
 }
 
-// Highest solid block near the world origin, used as the spawn point.
+// Natural terrain blocks a spawn point may rest on — never water/lava, and
+// never a tree/cactus/player-built block (irrelevant on a fresh world, but
+// keeps the search meaning "real ground").
+@(private = "file")
+is_spawnable_ground :: proc(b: BlockId) -> bool {
+	#partial switch b {
+	case .Grass, .Dirt, .Stone, .Sand, .Snow, .Netherrack, .Farmland, .Ore, .Bedrock:
+		return true
+	}
+	return false
+}
+
+// A column is a valid spawn if it has dry ground with two clear blocks of
+// headroom above it (so the point is never underwater or floating in air).
+@(private = "file")
+spawn_try_column :: proc(w: ^World, x, z: int) -> (Vec3, bool) {
+	world_ensure_chunk(w, world_chunk_at(w, x, z))
+	for y := CHUNK_H - 2; y >= 1; y -= 1 {
+		b := world_block(w, x, y, z)
+		if !is_spawnable_ground(b) do continue
+		if world_block(w, x, y + 1, z) != .Air do continue
+		if world_block(w, x, y + 2, z) != .Air do continue
+		return Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5}, true
+	}
+	return Vec3{}, false
+}
+
+// Nearest dry land near the world origin, used as the spawn point. Never
+// water, lava, or mid-air: spirals outward from (8,8) until a valid column
+// (solid ground with clear headroom) is found.
 spawn_pos :: proc(w: ^World) -> Vec3 {
-	x, z := 8, 8
-	for y := CHUNK_H - 1; y >= 1; y -= 1 {
-		if block_is_solid(world_block(w, x, y, z)) {
-			return Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5}
+	if p, ok := spawn_try_column(w, 8, 8); ok do return p
+	for r in 1 ..< 24 {
+		for dx in -r ..= r {
+			if p, ok := spawn_try_column(w, 8 + dx, 8 - r); ok do return p
+			if p, ok := spawn_try_column(w, 8 + dx, 8 + r); ok do return p
+		}
+		for dz in -r + 1 ..= r - 1 {
+			if p, ok := spawn_try_column(w, 8 - r, 8 + dz); ok do return p
+			if p, ok := spawn_try_column(w, 8 + r, 8 + dz); ok do return p
 		}
 	}
-	return Vec3{f32(x) + 0.5, f32(SEA_LEVEL + 2), f32(z) + 0.5}
+	// Extremely unlikely fallback (no dry land within 23 blocks): a safe
+	// platform above sea level rather than spawning in water.
+	return Vec3{8.5, f32(SEA_LEVEL + 4), 8.5}
 }
 
 main :: proc() {
@@ -380,6 +416,41 @@ main :: proc() {
 		player.oxygen = 7.0
 	}
 
+	// Debug: MC_FISH=N floods a pool ahead and spawns N fish/squid inside it.
+	if s := os.get_env("MC_FISH", context.temp_allocator); s != "" {
+		n := 4
+		if v, ok := strconv.parse_int(s); ok do n = v
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 8
+		bx, by, bz := int(base.x), int(base.y) - 2, int(base.z)
+		for dx in -3 ..= 3 {
+			for dy in 0 ..= 4 {
+				for dz in -3 ..= 3 {
+					world_set_block(&world, bx + dx, by + dy, bz + dz, .Water)
+				}
+			}
+		}
+		for k in 0 ..< n {
+			kind: MobKind = k % 2 == 0 ? .Fish : .Squid
+			append(
+				&world.mobs,
+				Mob {
+					kind = kind,
+					pos = Vec3{f32(bx) + f32(k % 3 - 1) * 1.5, f32(by) + 2, f32(bz) + f32(k / 3) * 1.5},
+					yaw = 0,
+					health = 4,
+				},
+			)
+		}
+	}
+
+	// Debug: MC_EAT gives the player cooked food and triggers the eat
+	// animation (camera bob + crumb particles) so it lands on frame 0.
+	if os.get_env("MC_EAT", context.temp_allocator) != "" {
+		player.cooked_food = 3
+		g_input.eat = true
+	}
+
 	// Debug UI screenshots.
 	if os.get_env("MC_TOOLS", context.temp_allocator) != "" {
 		player.inventory[.Stone] = 20
@@ -565,7 +636,7 @@ main :: proc() {
 		} else {
 			process_input(&player, dt)
 			physics_update(cur, &player, dt)
-			player_tick(&player, dt)
+			player_tick(cur, &player, dt)
 			handle_break_place(cur, &player, dt)
 
 			// R: use/interact (till, plant, harvest, sleep)

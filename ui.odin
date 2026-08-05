@@ -179,8 +179,41 @@ ui_draw_crafting :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	text_center("PRESS 1-7 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
 }
 
-// Minecraft-style hotbar: 9 slots (keys 1-9) with block swatch, count, and a
-// highlight on the selected slot.
+// One Minecraft-style slot: bordered square, a real block texture (or a flat
+// colour swatch for the handful of non-block items like raw food), and a
+// count badge in the bottom-right corner. Shared by the hotbar, the
+// inventory grid, and the chest panel's slot-styled rows.
+@(private = "file")
+ui_slot :: proc(
+	x0, y0, w, sz: f32,
+	use_tex: bool,
+	blk: BlockId,
+	flat: Vec3,
+	count: int,
+	ch_w, ch_h: f32,
+	selected: bool,
+	num_label: string,
+) {
+	border := selected ? Vec4{1, 1, 1, 0.95} : Vec4{0.10, 0.10, 0.13, 0.85}
+	hud_quad(x0 - 0.005, y0 - 0.005, x0 + w + 0.005, y0 + sz + 0.005, border)
+	hud_quad(x0, y0, x0 + w, y0 + sz, Vec4{0.17, 0.17, 0.21, 1})
+	if use_tex {
+		ui_block_icon(x0 + w * 0.10, y0 + sz * 0.10, x0 + w * 0.90, y0 + sz * 0.90, blk)
+	} else if count > 0 {
+		hud_quad(x0 + w * 0.20, y0 + sz * 0.20, x0 + w * 0.80, y0 + sz * 0.80, Vec4{flat.r, flat.g, flat.b, 1})
+	}
+	if num_label != "" {
+		text_draw(num_label, x0 + 0.004, y0 + sz - 0.004, ch_w * 0.75, ch_h * 0.75, Vec4{0.95, 0.95, 0.6, 0.9})
+	}
+	if count > 0 {
+		s := fmt.tprintf("%d", count)
+		cw2 := ch_w * 0.8
+		text_draw(s, x0 + w - text_width(s, cw2) - 0.005, y0 + 0.005, cw2, ch_h * 0.8, Vec4{1, 1, 1, 1})
+	}
+}
+
+// Minecraft-style hotbar: 9 slots (keys 1-9) with real block textures, counts,
+// and a highlight on the selected slot.
 ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
 	sz: f32 = 0.11
@@ -190,37 +223,13 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 	x0 := -total * 0.5
 	y0: f32 = -0.97
 
-	sel := -1
-	for i in 0 ..< 9 do if HOTBAR[i] == p.selected do sel = i
-
 	ch_h: f32 = 0.032
 	cw := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
 
 	for i in 0 ..< 9 {
 		bx := x0 + f32(i) * (w + gap)
 		b := HOTBAR[i]
-		cnt := p.inventory[b]
-
-		border := i == sel ? Vec4{1, 1, 1, 0.95} : Vec4{0.12, 0.12, 0.15, 0.75}
-		hud_quad(bx - 0.006, y0 - 0.006, bx + w + 0.006, y0 + sz + 0.006, border)
-
-		col := block_color(b)
-		a: f32 = cnt > 0 ? 1.0 : 0.35
-		hud_quad(bx, y0, bx + w, y0 + sz, Vec4{col.r, col.g, col.b, a})
-
-		num := fmt.tprintf("%d", i + 1)
-		text_draw(num, bx + 0.004, y0 + sz - 0.004, cw * 0.8, ch_h * 0.8, Vec4{0.95, 0.95, 0.6, 0.9})
-		if cnt > 0 {
-			s := fmt.tprintf("%d", cnt)
-			text_draw(
-				s,
-				bx + w - text_width(s, cw) - 0.004,
-				y0 + ch_h + 0.004,
-				cw,
-				ch_h,
-				Vec4{1, 1, 1, 1},
-			)
-		}
+		ui_slot(bx, y0, w, sz, true, b, Vec3{}, p.inventory[b], cw, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
 	}
 }
 
@@ -291,127 +300,91 @@ ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	)
 }
 
-// Full-screen inventory panel: title, every owned block with a colour swatch
-// and count, and a controls footer. Toggled with E.
+// One entry in the inventory grid: either a real block (textured icon) or one
+// of the handful of non-block counters (food/seeds/wheat) shown as a flat
+// colour swatch since they have no world block/texture of their own.
+@(private = "file")
+InvEntry :: struct {
+	use_tex: bool,
+	blk:     BlockId,
+	flat:    Vec3,
+	count:   int,
+}
+
+// Full-screen inventory: a Minecraft-style grid of square item slots with
+// real block textures, plus the hotbar mirrored at the bottom. Toggled with E.
 ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
 
-	hud_quad(-0.86, -0.88, 0.86, 0.88, Vec4{0.05, 0.05, 0.08, 0.9})
+	// Reaches all the way to ~-0.99/0.99 so it fully covers the world's own
+	// hotbar/health/hunger/oxygen HUD sitting underneath (health hearts start
+	// as far out as x=-0.97) instead of leaving slivers of it peeking out.
+	hud_quad(-0.99, -0.99, 0.99, 0.90, Vec4{0.05, 0.05, 0.08, 0.97})
 
-	ch_h: f32 = 0.05
+	ch_h: f32 = 0.045
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	text_center("INVENTORY", 0.82, ch_w * 1.3, ch_h * 1.3, Vec4{1, 1, 1, 1})
 
-	x: f32 = -0.64
-	y: f32 = 0.76
-	text_draw("INVENTORY", x, y, ch_w * 1.5, ch_h * 1.5, Vec4{1, 1, 1, 1})
-	y -= ch_h * 2.4
-
+	// Gather owned entries: every held block, then the non-block counters.
+	entries := make([dynamic]InvEntry, 0, 40, context.temp_allocator)
 	for b in BlockId {
 		if b == .Air do continue
 		if p.inventory[b] <= 0 do continue
-		col := block_color(b)
-		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{col.r, col.g, col.b, 1})
-		line := fmt.tprintf("%s X%d", block_name(b), p.inventory[b])
-		text_draw(line, x + ch_w * 2.0, y, ch_w, ch_h, Vec4{0.95, 0.95, 0.95, 1})
-		y -= ch_h * 1.5
-		if y < -0.62 do break
+		append(&entries, InvEntry{use_tex = true, blk = b, count = p.inventory[b]})
+	}
+	if p.raw_food > 0 do append(&entries, InvEntry{flat = {0.72, 0.28, 0.22}, count = p.raw_food})
+	if p.cooked_food > 0 do append(&entries, InvEntry{flat = {0.55, 0.35, 0.2}, count = p.cooked_food})
+	if p.bread > 0 do append(&entries, InvEntry{flat = {0.78, 0.58, 0.30}, count = p.bread})
+	if p.wheat > 0 do append(&entries, InvEntry{flat = {0.82, 0.70, 0.28}, count = p.wheat})
+	if p.seeds > 0 do append(&entries, InvEntry{flat = {0.55, 0.62, 0.30}, count = p.seeds})
+
+	cols :: 9
+	sz: f32 = 0.095
+	sw := sz / aspect
+	gap: f32 = 0.010
+	grid_w := f32(cols) * (sw + gap) - gap
+	gx0 := -grid_w * 0.5
+	gy: f32 = 0.68
+
+	for e, i in entries {
+		row := i / cols
+		col := i % cols
+		x0 := gx0 + f32(col) * (sw + gap)
+		y0 := gy - f32(row) * (sz + gap) - sz
+		ui_slot(x0, y0, sw, sz, e.use_tex, e.blk, e.flat, e.count, ch_w, ch_h, false, "")
+	}
+	if len(entries) == 0 {
+		text_center("(EMPTY)", gy - sz * 0.5, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
 	}
 
-	if p.raw_food > 0 {
-		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.72, 0.28, 0.22, 1})
-		text_draw(
-			fmt.tprintf("RAW FOOD X%d  (COOK: V)", p.raw_food),
-			x + ch_w * 2.0,
-			y,
-			ch_w,
-			ch_h,
-			Vec4{0.95, 0.8, 0.75, 1},
-		)
-		y -= ch_h * 1.5
-	}
-	if p.cooked_food > 0 {
-		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.55, 0.35, 0.2, 1})
-		text_draw(
-			fmt.tprintf("COOKED FOOD X%d  (EAT: G)", p.cooked_food),
-			x + ch_w * 2.0,
-			y,
-			ch_w,
-			ch_h,
-			Vec4{0.95, 0.85, 0.7, 1},
-		)
-		y -= ch_h * 1.5
-	}
-	if p.bread > 0 {
-		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.78, 0.58, 0.30, 1})
-		text_draw(
-			fmt.tprintf("BREAD X%d  (EAT: G)", p.bread),
-			x + ch_w * 2.0,
-			y,
-			ch_w,
-			ch_h,
-			Vec4{0.95, 0.88, 0.72, 1},
-		)
-		y -= ch_h * 1.5
-	}
-	if p.wheat > 0 || p.seeds > 0 {
-		hud_quad(x, y - ch_h, x + ch_w * 1.1, y, Vec4{0.82, 0.70, 0.28, 1})
-		text_draw(
-			fmt.tprintf("WHEAT X%d   SEEDS X%d  (BAKE: C)", p.wheat, p.seeds),
-			x + ch_w * 2.0,
-			y,
-			ch_w,
-			ch_h,
-			Vec4{0.92, 0.90, 0.7, 1},
-		)
+	// Hotbar mirrored at a fixed position, same as Minecraft's inventory screen.
+	hy0: f32 = -0.60
+	text_draw("HOTBAR", gx0, hy0 + sz + 0.03, ch_w * 0.85, ch_h * 0.85, Vec4{0.7, 0.75, 0.82, 1})
+	for i in 0 ..< 9 {
+		x0 := gx0 + f32(i) * (sw + gap)
+		b := HOTBAR[i]
+		ui_slot(x0, hy0, sw, sz, true, b, Vec3{}, p.inventory[b], ch_w, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
 	}
 
-	// --- right column: how to get / make things ---
-	hx: f32 = 0.06
-	hy: f32 = 0.74
-	text_draw("HOW TO", hx, hy, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
-	hy -= ch_h * 2.2
-	help := [?]string {
-		"MINE: HOLD LMB ON A BLOCK",
-		"PLACE: RMB / CTRL-CLICK / Q",
-		"1-9: PICK A HOTBAR SLOT",
-		"",
-		"CRAFT (C):",
-		"  8 STONE -> FURNACE",
-		"  4 SAND + 1 ORE -> GLOWSTONE",
-		"",
-		"SMELT (V, NEAR A FURNACE):",
-		"  ORE + WOOD -> IRON",
-		"  SAND + WOOD -> GLASS",
-		"",
-		"KILL ANIMALS -> RAW FOOD",
-		"COOK RAW FOOD AT A FURNACE (V)",
-		"EAT: G (COOKED HEALS MORE)",
-		"",
-		"FARMING (R = USE):",
-		"  R ON GRASS/DIRT -> TILL",
-		"  R ON FARMLAND -> PLANT SEEDS",
-		"  BREAK RIPE WHEAT -> WHEAT",
-		"  3 WHEAT -> BREAD (C)",
-		"",
-		"TORCH: LIGHT   BED: R TO SLEEP",
-		"CHEST: R TO OPEN/STORE",
-		"",
-		"TOOLS (X): PICK/AXE/SHOVEL/SWORD",
-		"  HOLD LMB TO MINE",
-	}
-	for line in help {
-		if line != "" {
-			text_draw(line, hx, hy, ch_w * 0.82, ch_h * 0.82, Vec4{0.85, 0.9, 0.96, 1})
-		}
-		hy -= ch_h * 1.15
-	}
-
-	text_draw(
-		"1-9 SELECT   C CRAFT   V SMELT   E CLOSE",
-		x,
-		-0.78,
-		ch_w * 0.85,
-		ch_h * 0.85,
+	text_center(
+		"RAW=RED  COOKED=BROWN  BREAD=TAN  WHEAT=GOLD  SEEDS=GREEN",
+		hy0 - sz - 0.05,
+		ch_w * 0.62,
+		ch_h * 0.62,
+		Vec4{0.65, 0.7, 0.76, 1},
+	)
+	text_center(
+		"R USE/FARM/SLEEP/CHEST   G EAT   C CRAFT   V SMELT   X TOOLS   T RECIPES",
+		hy0 - sz - 0.13,
+		ch_w * 0.62,
+		ch_h * 0.62,
+		Vec4{0.65, 0.7, 0.76, 1},
+	)
+	text_center(
+		"1-9 SELECT   E CLOSE",
+		hy0 - sz - 0.21,
+		ch_w * 0.7,
+		ch_h * 0.7,
 		Vec4{0.75, 0.82, 0.92, 1},
 	)
 }

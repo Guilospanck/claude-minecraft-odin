@@ -124,6 +124,37 @@ icons_init :: proc() {
 	gl.BindVertexArray(0)
 }
 
+// Draw a real block texture (its top-face tile from the world atlas) into the
+// NDC rect (x0,y0)-(x1,y1) — used for inventory/hotbar slot icons so they
+// match what the block looks like in-world instead of a flat colour swatch.
+ui_block_icon :: proc(x0, y0, x1, y1: f32, b: BlockId) {
+	if icon_prog == 0 do return
+	u0, v0, u1, v1 := tile_uv(block_tile(b, .PosY))
+	verts := [6]MMIVert {
+		{{x0, y1}, {u0, v0}},
+		{{x1, y1}, {u1, v0}},
+		{{x1, y0}, {u1, v1}},
+		{{x0, y1}, {u0, v0}},
+		{{x1, y0}, {u1, v1}},
+		{{x0, y0}, {u0, v1}},
+	}
+	gl.UseProgram(icon_prog)
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, r_atlas)
+	gl.Uniform1i(icon_utex, 0)
+	gl.Disable(gl.DEPTH_TEST)
+	gl.Disable(gl.CULL_FACE)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.BindVertexArray(icon_vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, icon_vbo)
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, 6 * size_of(MMIVert), &verts[0])
+	gl.DrawArrays(gl.TRIANGLES, 0, 6)
+	gl.Disable(gl.BLEND)
+	gl.Enable(gl.CULL_FACE)
+	gl.Enable(gl.DEPTH_TEST)
+}
+
 // Draw icon `idx` into the NDC rect (x0,y0)-(x1,y1).
 hud_icon :: proc(x0, y0, x1, y1: f32, idx: int) {
 	if icon_prog == 0 do return

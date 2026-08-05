@@ -40,6 +40,7 @@ Player :: struct {
 	mine_progress: f32, // seconds accumulated toward breaking it
 	mine_frac:   f32, // 0..1 progress, for the HUD bar
 	place_cd:    f32, // throttle for held-right-button drag-placing
+	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
 }
 
 HOTBAR := [9]BlockId {
@@ -204,8 +205,12 @@ process_input :: proc(p: ^Player, dt: f32) {
 }
 
 // Per-frame player upkeep: timers, health regen, footstep sounds.
-player_tick :: proc(p: ^Player, dt: f32) {
+player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.hurt_timer > 0 do p.hurt_timer -= dt
+	if p.eat_timer > 0 {
+		p.eat_timer -= dt
+		if p.eat_timer < 0 do p.eat_timer = 0
+	}
 
 	// hunger drains over time, faster while walking
 	drain: f32 = 0.25
@@ -227,21 +232,30 @@ player_tick :: proc(p: ^Player, dt: f32) {
 	// eat: prefer cooked meat (+8), then bread (+6), then raw meat (+3)
 	if g_input.eat {
 		if p.hunger < f32(HUNGER_MAX) {
+			ate := true
+			food_col := Vec3{0.72, 0.28, 0.22}
 			if p.cooked_food > 0 {
 				p.cooked_food -= 1
 				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
-				audio_play(.Place, 0.4)
+				food_col = Vec3{0.55, 0.35, 0.2}
 				fmt.println("ate cooked food — hunger", int(p.hunger))
 			} else if p.bread > 0 {
 				p.bread -= 1
 				p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
-				audio_play(.Place, 0.4)
+				food_col = Vec3{0.78, 0.58, 0.30}
 				fmt.println("ate bread — hunger", int(p.hunger))
 			} else if p.raw_food > 0 {
 				p.raw_food -= 1
 				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
-				audio_play(.Place, 0.4)
 				fmt.println("ate raw food (cook it for more!) — hunger", int(p.hunger))
+			} else {
+				ate = false
+			}
+			if ate {
+				audio_play(.Eat, 0.6)
+				p.eat_timer = EAT_ANIM_DURATION
+				mouth := p.pos + Vec3{0, EYE_HEIGHT * 0.85, 0} + camera_front(p.yaw, 0) * 0.4
+				particle_spawn_eat(&w.particles, mouth, food_col)
 			}
 		}
 		g_input.eat = false

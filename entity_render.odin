@@ -152,6 +152,27 @@ ghast_parts := [7]MobPart {
 }
 
 @(private = "file")
+FISHC :: Vec3{0.80, 0.55, 0.30}
+@(private = "file")
+SQUIDC :: Vec3{0.68, 0.58, 0.72}
+
+@(private = "file")
+fish_parts := [3]MobPart {
+	{{0, 0.14, 0}, {0.16, 0.14, 0.34}, FISHC, 0}, // body
+	{{0, 0.14, 0.20}, {0.03, 0.12, 0.14}, FISHC, 1}, // tail fin (wiggles)
+	{{0, 0.22, -0.02}, {0.10, 0.03, 0.10}, FISHC, 0}, // top fin
+}
+
+@(private = "file")
+squid_parts := [5]MobPart {
+	{{0, 0.32, 0}, {0.34, 0.30, 0.34}, SQUIDC, 0}, // mantle
+	{{-0.10, 0.06, -0.10}, {0.06, 0.30, 0.06}, SQUIDC, 1}, // tentacles (sway)
+	{{0.10, 0.06, -0.10}, {0.06, 0.30, 0.06}, SQUIDC, -1},
+	{{-0.10, 0.06, 0.10}, {0.06, 0.30, 0.06}, SQUIDC, -1},
+	{{0.10, 0.06, 0.10}, {0.06, 0.30, 0.06}, SQUIDC, 1},
+}
+
+@(private = "file")
 PSKIN :: Vec3{0.86, 0.70, 0.56}
 @(private = "file")
 PSHIRT :: Vec3{0.20, 0.55, 0.75}
@@ -214,6 +235,10 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return piglin_parts[:]
 	case .Ghast:
 		return ghast_parts[:]
+	case .Fish:
+		return fish_parts[:]
+	case .Squid:
+		return squid_parts[:]
 	}
 	return pig_parts[:]
 }

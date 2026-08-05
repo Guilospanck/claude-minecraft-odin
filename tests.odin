@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import "core:testing"
 
 @(private = "file")
@@ -621,4 +622,92 @@ test_oxygen_drains_and_drowns :: proc(t: ^testing.T) {
 		player_oxygen_tick(&w, &p, 1.0)
 	}
 	testing.expect(t, p.oxygen == OXYGEN_MAX, "air refills at the surface")
+}
+
+@(test)
+test_land_mob_avoids_water :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a floor at y=10 that turns to water at x>=9 (a lake bordering the shore)
+	for x in 4 ..< 13 {
+		for z in 6 ..< 11 {
+			chunk_set(c, x, 10, z, x >= 9 ? .Water : .Stone)
+		}
+	}
+	m: Mob
+	m.kind = .Pig
+	m.pos = Vec3{6.5, 11, 8.5}
+	m.yaw = math.PI * 0.5 // fwd = (sin,0,-cos) = (+1,0,0): walks straight at the lake
+	m.moving = true
+	m.ai_timer = 999 // keep the forced heading; don't let ai_wander override it
+	p: Player
+	for _ in 0 ..< 300 {
+		mob_update(&w, &p, &m, 1.0 / 60.0)
+	}
+	testing.expect(t, m.pos.x < 9.0, "a land animal never crosses into the water tile")
+}
+
+@(test)
+test_aquatic_mob_never_leaves_water :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a small water tank surrounded by stone walls/floor/ceiling
+	for x in 3 ..< 9 {
+		for y in 20 ..< 26 {
+			for z in 3 ..< 9 {
+				edge := x == 3 || x == 8 || y == 20 || y == 25 || z == 3 || z == 8
+				chunk_set(c, x, y, z, edge ? .Stone : .Water)
+			}
+		}
+	}
+	m: Mob
+	m.kind = .Fish
+	m.pos = Vec3{5.5, 22, 5.5}
+	m.yaw = 0
+	p: Player
+	for _ in 0 ..< 600 {
+		mob_update(&w, &p, &m, 1.0 / 30.0)
+		b := world_block(&w, int(math.floor(m.pos.x)), int(math.floor(m.pos.y)), int(math.floor(m.pos.z)))
+		testing.expect(t, b == .Water, "fish stays inside the water tank every frame")
+	}
+}
+
+@(test)
+test_spawn_never_in_water_or_air :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for y in 1 ..< 20 {
+		chunk_set(c, 8, y, 8, .Water) // flood the default (8,8) spawn column
+	}
+	chunk_set(c, 11, 10, 8, .Grass) // the only valid dry ground nearby
+
+	pos := spawn_pos(&w)
+	bx := int(pos.x)
+	by := int(pos.y) - 1
+	bz := int(pos.z)
+	testing.expect(t, world_block(&w, bx, by, bz) == .Grass, "spawn rests on the dry grass column")
+	testing.expect(t, world_block(&w, bx, by + 1, bz) == .Air, "clear headroom above the feet")
+	testing.expect(t, world_block(&w, bx, by + 2, bz) == .Air, "clear headroom above the head")
+}
+
+@(test)
+test_eat_triggers_animation_and_particles :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	player_init(&p, Vec3{8.5, 40.0, 8.5})
+	p.cooked_food = 1
+	p.hunger = 5
+	g_input = {}
+	g_input.eat = true
+	player_tick(&w, &p, 1.0 / 60.0)
+	g_input = {}
+	testing.expect(t, p.eat_timer > 0, "eating starts the bob/crumbs animation timer")
+	testing.expect(t, len(w.particles) > 0, "eating spawns crumb particles")
+
+	// the timer counts back down to zero over time
+	for _ in 0 ..< 120 {
+		player_tick(&w, &p, 1.0 / 60.0)
+	}
+	testing.expect(t, p.eat_timer == 0, "eat animation timer settles back to zero")
 }
