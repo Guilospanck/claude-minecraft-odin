@@ -216,7 +216,39 @@ ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 	}
 }
 
-mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
+MATE_SEEK_RANGE :: f32(16.0) // how far a love-mode mob can sense a same-kind mate
+
+// A mob in love mode beelines for the nearest eligible same-kind mate instead
+// of wandering randomly — without this, two fed animals only breed if they
+// happen to wander within BREED_RADIUS of each other by chance, which in
+// practice almost never happens. Returns false (so the caller falls back to
+// normal wandering) if no mate is in range.
+@(private = "file")
+ai_seek_mate :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
+	best_d2 := MATE_SEEK_RANGE * MATE_SEEK_RANGE
+	found := false
+	best_dx, best_dz: f32
+	for i in 0 ..< len(w.mobs) {
+		if i == self_idx do continue
+		other := w.mobs[i]
+		if other.kind != m.kind || other.love_timer <= 0 || other.is_baby do continue
+		dx := other.pos.x - m.pos.x
+		dz := other.pos.z - m.pos.z
+		d2 := dx * dx + dz * dz
+		if d2 < best_d2 {
+			best_d2 = d2
+			best_dx, best_dz = dx, dz
+			found = true
+		}
+	}
+	if found {
+		m.yaw = math.atan2(best_dx, -best_dz)
+		m.moving = true
+	}
+	return found
+}
+
+mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	dims := MOB_DIMS[m.kind]
 	if m.is_baby {
 		dims.hw *= 0.6
@@ -260,7 +292,7 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 
 	if mob_is_hostile(m.kind) {
 		ai_hostile(w, p, m, dt)
-	} else {
+	} else if m.love_timer <= 0 || !ai_seek_mate(w, m, self_idx) {
 		ai_wander(m, dt, 0.6)
 	}
 
@@ -281,11 +313,30 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 			m.vel.z = fwd.z * dims.speed
 			m.walk_phase += dt * 9.0
 
-			// hop over a one-block step when blocked and grounded
+			// Hop over a one-block step, but only if it's genuinely climbable
+			// (the space above the obstruction is clear). Without this check,
+			// a mob walking into a wall 2+ blocks tall would hop every single
+			// frame forever — bouncing in place instead of giving up and
+			// picking a new direction.
 			if m.on_ground {
 				ahead := m.pos + Vec3{fwd.x * (dims.hw + 0.25), 0, fwd.z * (dims.hw + 0.25)}
 				if body_collides(w, ahead, dims.hw, 0.5) {
-					m.vel.y = 7.5
+					if !body_collides(w, ahead + Vec3{0, 1, 0}, dims.hw, dims.h) {
+						m.vel.y = 7.5 // a real 1-block step: hop it
+					} else {
+						// Too tall to climb: stop before it turns into an
+						// endless bounce, and turn away. Mate-seeking has no
+						// obstacle avoidance of its own (it always recomputes
+						// the same heading toward its target), so without this
+						// deflection it would walk into the same wall forever;
+						// wandering already re-randomizes on its own via
+						// ai_timer, so the turn is harmless there too.
+						m.moving = false
+						m.ai_timer = 0
+						m.vel.x = 0
+						m.vel.z = 0
+						m.yaw += rng_range(1.5, 3.0) * (rng_f32() < 0.5 ? 1 : -1)
+					}
 				}
 			}
 		}
@@ -498,11 +549,11 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 			pop(mobs)
 			continue
 		}
-		mob_update(w, p, m, dt)
+		mob_update(w, p, m, i, dt)
 		i += 1
 	}
 
-	breed_pass(mobs)
+	breed_pass(w, mobs)
 }
 
 @(private = "file")
@@ -515,9 +566,9 @@ contains_int :: proc(arr: []int, v: int) -> bool {
 // BREED_RADIUS make a baby. Indices (not pointers) are collected while
 // scanning, and every append happens in a separate pass afterward — append
 // can reallocate the backing array, so holding a &mobs^[i] pointer across it
-// would risk a stale/use-after-free read.
-@(private = "file")
-breed_pass :: proc(mobs: ^[dynamic]Mob) {
+// would risk a stale/use-after-free read. Not file-private: tests call it
+// directly to exercise breeding without mobs_update's random spawn rolls.
+breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob) {
 	paired := make([dynamic]int, 0, 4, context.temp_allocator)
 	births := make([dynamic]Mob, 0, 4, context.temp_allocator)
 	for i in 0 ..< len(mobs^) {
@@ -552,6 +603,7 @@ breed_pass :: proc(mobs: ^[dynamic]Mob) {
 		if len(mobs^) >= MOB_CAP do break
 		append(mobs, baby)
 		audio_play(.Place, 0.4)
+		particle_spawn_eat(&w.particles, baby.pos + Vec3{0, 0.4, 0}, LOVE_HEART_COLOR)
 	}
 }
 
@@ -594,10 +646,13 @@ mob_pick :: proc(mobs: ^[dynamic]Mob, eye, dir: Vec3, reach: f32) -> (int, f32) 
 	return best, best_t
 }
 
+LOVE_HEART_COLOR :: Vec3{0.95, 0.25, 0.45}
+
 // Feed Wheat to a passive adult mob (R while aiming at it): puts it in love
-// mode for BREED_LOVE_DURATION. If another same-kind mob is also in love mode
-// nearby, breed_pass (run every mobs_update) pairs them off into a baby.
-try_feed :: proc(p: ^Player, m: ^Mob) -> bool {
+// mode for BREED_LOVE_DURATION and bursts pink heart-colored particles above
+// its head. If another same-kind mob is also in love mode nearby, breed_pass
+// (run every mobs_update) pairs them off into a baby.
+try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast || m.is_baby {
 		return false
 	}
@@ -613,6 +668,7 @@ try_feed :: proc(p: ^Player, m: ^Mob) -> bool {
 	m.love_timer = BREED_LOVE_DURATION
 	audio_play(.Place, 0.4)
 	toast_show("FED - LOOKING FOR A MATE")
+	particle_spawn_eat(&w.particles, m.pos + Vec3{0, MOB_DIMS[m.kind].h + 0.2, 0}, LOVE_HEART_COLOR)
 	return true
 }
 

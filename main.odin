@@ -514,6 +514,19 @@ main :: proc() {
 			Mob{kind = .Cow, pos = base + Vec3{1, 0, 0}, is_baby = true, grow_timer = 60, health = 6},
 		)
 	}
+	// Debug: MC_BREED spawns two cows a few blocks apart and feeds both, so
+	// love-mode particles show immediately and they visibly walk toward
+	// each other (mate-seeking) over subsequent frames.
+	if os.get_env("MC_BREED", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 8
+		append(&world.mobs, Mob{kind = .Cow, pos = base + Vec3{-4, 0, 0}, health = 6})
+		append(&world.mobs, Mob{kind = .Cow, pos = base + Vec3{4, 0, 0}, health = 6})
+		fed_p: Player
+		fed_p.wheat = 2
+		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 2])
+		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 1])
+	}
 	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
 		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
 		ch: Chest
@@ -622,7 +635,7 @@ main :: proc() {
 
 		// Inventory/crafting/tools are one tabbed panel now: E/T/X each open
 		// straight to their tab (or close it, if that tab is already showing).
-		// LEFT/RIGHT below switches tabs while it's open.
+		// LEFT/RIGHT below moves the Items-tab grid cursor.
 		if !g_show_quit_confirm {
 			open_tab :: proc(tab: InvTab) {
 				if g_show_inventory && g_inv_tab == tab {
@@ -632,6 +645,7 @@ main :: proc() {
 					g_inv_tab = tab
 					g_show_settings = false
 					g_show_chest = false
+					if tab == .Items do g_inv_cursor = 0
 				}
 			}
 			if g_input.inv_toggle do open_tab(.Items)
@@ -653,7 +667,7 @@ main :: proc() {
 			if g_show_chest {
 				if g_input.interact do chest_withdraw_all(cur, &player)
 				if g_input.select >= 1 && g_input.select <= 9 {
-					chest_deposit(cur, &player, HOTBAR[g_input.select - 1])
+					chest_deposit(cur, &player, player.hotbar[g_input.select - 1])
 				}
 			}
 			// discard buffered gameplay one-shots so they don't fire on close
@@ -674,12 +688,35 @@ main :: proc() {
 				if g_input.nav_right do settings_adjust(1)
 			}
 			if g_show_inventory {
-				if g_input.nav_left do inv_tab_cycle(-1)
-				if g_input.nav_right do inv_tab_cycle(1)
-				if g_inv_tab == .Craft && g_input.select > 0 {
-					recipe_try(&player, cur, g_input.select - 1)
-				}
-				if g_inv_tab == .Tools {
+				switch g_inv_tab {
+				case .Items:
+					// Arrow keys move a cursor over a real selectable grid;
+					// a number key assigns the highlighted item to that
+					// hotbar slot (there's no mouse cursor to drag-drop with,
+					// so this is the keyboard equivalent).
+					entries := inventory_entries(&player)
+					if len(entries) > 0 {
+						cols := 9
+						if g_input.nav_left do g_inv_cursor -= 1
+						if g_input.nav_right do g_inv_cursor += 1
+						if g_input.nav_up do g_inv_cursor -= cols
+						if g_input.nav_down do g_inv_cursor += cols
+						g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
+						if g_input.select > 0 {
+							e := entries[g_inv_cursor]
+							if e.use_tex {
+								player.hotbar[g_input.select - 1] = e.blk
+								toast_show(fmt.tprintf("HOTBAR %d: %s", g_input.select, block_name(e.blk)))
+							} else {
+								toast_show("CANT PUT THAT ON THE HOTBAR")
+							}
+						}
+					}
+				case .Craft:
+					if g_input.select > 0 {
+						recipe_try(&player, cur, g_input.select - 1)
+					}
+				case .Tools:
 					if g_input.select >= 1 && g_input.select <= TOOL_KIND_COUNT {
 						tool_craft(&player, ToolKind(g_input.select - 1))
 					} else if g_input.select > TOOL_KIND_COUNT &&

@@ -642,7 +642,7 @@ test_land_mob_avoids_water :: proc(t: ^testing.T) {
 	m.ai_timer = 999 // keep the forced heading; don't let ai_wander override it
 	p: Player
 	for _ in 0 ..< 300 {
-		mob_update(&w, &p, &m, 1.0 / 60.0)
+		mob_update(&w, &p, &m, -1, 1.0 / 60.0)
 	}
 	testing.expect(t, m.pos.x < 9.0, "a land animal never crosses into the water tile")
 }
@@ -666,7 +666,7 @@ test_aquatic_mob_never_leaves_water :: proc(t: ^testing.T) {
 	m.yaw = 0
 	p: Player
 	for _ in 0 ..< 600 {
-		mob_update(&w, &p, &m, 1.0 / 30.0)
+		mob_update(&w, &p, &m, -1, 1.0 / 30.0)
 		b := world_block(&w, int(math.floor(m.pos.x)), int(math.floor(m.pos.y)), int(math.floor(m.pos.z)))
 		testing.expect(t, b == .Water, "fish stays inside the water tank every frame")
 	}
@@ -816,8 +816,8 @@ test_breeding_makes_a_baby :: proc(t: ^testing.T) {
 	p.wheat = 2
 	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{8, 40, 8}, health = 6})
 	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{9, 40, 8}, health = 6})
-	ok1 := try_feed(&p, &w.mobs[0])
-	ok2 := try_feed(&p, &w.mobs[1])
+	ok1 := try_feed(&w, &p, &w.mobs[0])
+	ok2 := try_feed(&w, &p, &w.mobs[1])
 	testing.expect(t, ok1 && ok2, "feeding wheat to a cow is accepted")
 	testing.expect(t, p.wheat == 0, "each feeding consumes one wheat")
 	testing.expect(t, w.mobs[0].love_timer > 0 && w.mobs[1].love_timer > 0, "both cows enter love mode")
@@ -842,7 +842,7 @@ test_baby_grows_up :: proc(t: ^testing.T) {
 	defer free_test_world(&w)
 	p: Player
 	for _ in 0 ..< 5 {
-		mob_update(&w, &p, &m, 0.3) // 1.5s total, past the 1.0s grow_timer
+		mob_update(&w, &p, &m, -1, 0.3) // 1.5s total, past the 1.0s grow_timer
 	}
 	testing.expect(t, !m.is_baby, "a baby grows into an adult once its timer elapses")
 }
@@ -881,4 +881,93 @@ test_settings_real_time_toggle :: proc(t: ^testing.T) {
 test_real_time_fraction_in_range :: proc(t: ^testing.T) {
 	f := real_time_fraction()
 	testing.expect(t, f >= 0 && f < 1, "real_time_fraction returns a [0,1) day fraction")
+}
+
+@(test)
+test_mob_gives_up_on_tall_wall_instead_of_bouncing :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a 3-block-tall wall (too tall to hop) directly ahead at x=9
+	for y in 10 ..< 13 {
+		chunk_set(c, 9, y, 8, .Stone)
+	}
+	m: Mob
+	m.kind = .Pig
+	m.pos = Vec3{8.5, 11, 8.5} // resting on an implicit floor, feet at y=11
+	m.on_ground = true
+	m.yaw = math.PI * 0.5 // fwd = (+1,0,~0): facing straight at the wall
+	m.moving = true
+	m.ai_timer = 999
+	p: Player
+	mob_update(&w, &p, &m, -1, 1.0 / 60.0)
+	testing.expect(t, !m.moving, "blocked by a too-tall wall, the mob gives up instead of hopping forever")
+	testing.expect(t, m.vel.y <= 0.1, "no hop is triggered against an unclimbable wall")
+}
+
+@(test)
+test_mob_hops_a_real_one_block_step :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a genuine 1-block step at x=9 (nothing above it)
+	chunk_set(c, 9, 11, 8, .Stone)
+	m: Mob
+	m.kind = .Pig
+	m.pos = Vec3{8.5, 11, 8.5}
+	m.on_ground = true
+	m.yaw = math.PI * 0.5
+	m.moving = true
+	m.ai_timer = 999
+	p: Player
+	mob_update(&w, &p, &m, -1, 1.0 / 60.0)
+	testing.expect(t, m.vel.y > 1.0, "a genuine 1-block step is still hopped")
+}
+
+@(test)
+test_mobs_seek_mate_across_distance_and_breed :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for x in 0 ..< CHUNK_W {
+		chunk_set(c, x, 10, 8, .Stone)
+	}
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{2.5, 11, 8.5}, love_timer = BREED_LOVE_DURATION, health = 6})
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{10.5, 11, 8.5}, love_timer = BREED_LOVE_DURATION, health = 6})
+	p: Player
+	p.pos = Vec3{6, 11, 8} // near enough that despawn-distance never kicks in
+	found_baby := false
+	for _ in 0 ..< 600 {
+		for i in 0 ..< len(w.mobs) {
+			mob_update(&w, &p, &w.mobs[i], i, 1.0 / 60.0)
+		}
+		breed_pass(&w, &w.mobs)
+		for m in w.mobs do if m.is_baby do found_baby = true
+		if found_baby do break
+	}
+	testing.expect(t, found_baby, "two same-kind mobs in love mode, started apart, seek each other out and breed")
+}
+
+@(test)
+test_hotbar_is_per_player_and_assignable :: proc(t: ^testing.T) {
+	p1: Player
+	player_init(&p1, Vec3{8.5, 40, 8.5})
+	p2: Player
+	player_init(&p2, Vec3{8.5, 40, 8.5})
+	testing.expect(t, p1.hotbar == DEFAULT_HOTBAR, "a fresh player starts with the default hotbar")
+
+	p1.hotbar[0] = .Iron
+	testing.expect(t, p1.hotbar[0] == .Iron, "a hotbar slot can be reassigned")
+	testing.expect(t, p2.hotbar[0] == DEFAULT_HOTBAR[0], "reassigning one player's hotbar does not affect another's")
+}
+
+@(test)
+test_inventory_grid_cursor_navigation :: proc(t: ^testing.T) {
+	p: Player
+	p.inventory[.Stone] = 5
+	p.inventory[.Wood] = 3
+	entries := inventory_entries(&p)
+	testing.expect(t, len(entries) == 2, "one grid entry per owned block type")
+	g_inv_cursor = 0
+	g_inv_cursor = clamp(g_inv_cursor + 1, 0, len(entries) - 1)
+	testing.expect(t, g_inv_cursor == 1, "cursor moves to the next entry")
+	g_inv_cursor = clamp(g_inv_cursor + 5, 0, len(entries) - 1)
+	testing.expect(t, g_inv_cursor == len(entries) - 1, "cursor clamps at the last entry")
 }

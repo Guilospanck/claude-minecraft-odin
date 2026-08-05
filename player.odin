@@ -43,9 +43,13 @@ Player :: struct {
 	mine_frac:   f32, // 0..1 progress, for the HUD bar
 	place_cd:    f32, // throttle for held-right-button drag-placing
 	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
+	hotbar:      [9]BlockId, // customizable: assign items from the inventory grid (E)
 }
 
-HOTBAR := [9]BlockId {
+// Default hotbar loadout; each player gets their own mutable copy (see
+// Player.hotbar) so assigning an item from the inventory grid (E) can
+// actually change what a slot holds.
+DEFAULT_HOTBAR := [9]BlockId {
 	.Grass,
 	.Dirt,
 	.Stone,
@@ -65,6 +69,7 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.on_ground = false
 	p.fly = false
 	p.selected = .Grass
+	p.hotbar = DEFAULT_HOTBAR
 	p.health = MAX_HEALTH
 	p.hunger = HUNGER_MAX
 	p.oxygen = OXYGEN_MAX
@@ -175,7 +180,7 @@ process_input :: proc(p: ^Player, dt: f32) {
 		g_input.fly_toggle = false
 	}
 	if g_input.select > 0 {
-		p.selected = HOTBAR[g_input.select - 1]
+		p.selected = p.hotbar[g_input.select - 1]
 		fmt.println("selected:", block_name(p.selected), "x", p.inventory[p.selected])
 		g_input.select = 0
 	}

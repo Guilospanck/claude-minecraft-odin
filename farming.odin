@@ -72,7 +72,7 @@ try_interact :: proc(w: ^World, p: ^Player) {
 	dir := camera_front(p.yaw, p.pitch)
 
 	mob_idx, _ := mob_pick(&w.mobs, eye, dir, REACH)
-	if mob_idx >= 0 && try_feed(p, &w.mobs[mob_idx]) do return
+	if mob_idx >= 0 && try_feed(w, p, &w.mobs[mob_idx]) do return
 
 	hit := raycast(w, eye, dir, REACH)
 	if !hit.hit do return
