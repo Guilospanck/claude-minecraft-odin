@@ -60,7 +60,9 @@ harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
 	p.wheat += 1
 	p.seeds += 1 + rng_int(2)
 	audio_play(.Break, 0.6)
-	fmt.println("harvested wheat —", p.wheat, "wheat,", p.seeds, "seeds")
+	msg := fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", p.wheat, p.seeds)
+	fmt.println(msg)
+	toast_show(msg)
 }
 
 // R "use" key: context action on the block under the crosshair.
@@ -84,7 +86,7 @@ try_interact :: proc(w: ^World, p: ^Player) {
 			return
 		}
 		if p.seeds <= 0 {
-			fmt.println("no seeds — break grass to find some")
+			toast_show("NO SEEDS - BREAK GRASS TO FIND SOME")
 			return
 		}
 		world_set_block(w, ax, ay, az, .Wheat1)
@@ -92,28 +94,29 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		append(&w.crops, Crop{pos = Ivec3{ax, ay, az}})
 		p.seeds -= 1
 		audio_play(.Place, 0.4)
-		fmt.println("planted wheat —", p.seeds, "seeds left")
+		toast_show(fmt.tprintf("PLANTED WHEAT (%d SEEDS LEFT)", p.seeds))
 	case .Grass, .Dirt:
 		if world_block(w, hit.bx, hit.by + 1, hit.bz) != .Air do return
 		world_set_block(w, hit.bx, hit.by, hit.bz, .Farmland)
 		net_send_edit(hit.bx, hit.by, hit.bz, .Farmland, w.dimension)
 		audio_play(.Place, 0.4)
-		fmt.println("tilled farmland — plant seeds with R")
+		toast_show("TILLED FARMLAND - PRESS R TO PLANT")
 	}
 }
 
 // Sleep in a bed (overworld only): set spawn point and, at night, skip to dawn.
 try_sleep :: proc(w: ^World, p: ^Player) {
 	if w.dimension != .Overworld {
-		fmt.println("you can't sleep here")
+		toast_show("YOU CANT SLEEP HERE")
 		return
 	}
 	p.respawn = p.pos
 	if is_night(w.time_of_day) {
 		w.time_of_day = 0.28 // early morning
 		p.safe_timer = 10 // let health regen resume after resting
-		fmt.println("*yawn* good morning — spawn point set")
+		toast_show("GOOD MORNING - SPAWN POINT SET")
 	} else {
-		fmt.println("spawn point set (sleep at night to skip to morning)")
+		toast_show("SPAWN POINT SET")
 	}
+	audio_play(.Place, 0.5)
 }

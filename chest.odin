@@ -20,7 +20,7 @@ g_chest_pos: Ivec3
 // client deposit would zero the inventory into a black hole.
 chest_open :: proc(w: ^World, pos: Ivec3) {
 	if net_is_client() {
-		fmt.println("chests are host-only in multiplayer")
+		toast_show("CHESTS ARE HOST-ONLY IN MULTIPLAYER")
 		return
 	}
 	if _, ok := w.chests[pos]; !ok {
@@ -30,8 +30,7 @@ chest_open :: proc(w: ^World, pos: Ivec3) {
 	g_show_chest = true
 	g_show_inventory = false
 	g_show_settings = false
-	g_show_crafting = false
-	g_show_tools = false
+	audio_play(.Place, 0.35)
 }
 
 // Move every unit of block b from the player into the open chest.
@@ -45,7 +44,7 @@ chest_deposit :: proc(w: ^World, p: ^Player, b: BlockId) {
 	ch.items[b] += n
 	w.chests[g_chest_pos] = ch
 	p.inventory[b] = 0
-	fmt.println("stored", n, block_name(b))
+	toast_show(fmt.tprintf("STORED %d %s", n, block_name(b)))
 	audio_play(.Place, 0.4)
 }
 
@@ -62,7 +61,7 @@ chest_withdraw_all :: proc(w: ^World, p: ^Player) {
 	}
 	w.chests[g_chest_pos] = ch
 	if moved > 0 {
-		fmt.println("took", moved, "items from the chest")
+		toast_show(fmt.tprintf("TOOK %d ITEMS FROM THE CHEST", moved))
 		audio_play(.Place, 0.4)
 	}
 }

@@ -110,7 +110,7 @@ player_damage :: proc(p: ^Player, amount: int, dir: Vec3) {
 }
 
 player_respawn :: proc(p: ^Player) {
-	fmt.println("you died - respawning")
+	toast_show("YOU DIED - RESPAWNING", 3.0)
 	p.pos = p.respawn
 	p.vel = Vec3{0, 0, 0}
 	p.health = MAX_HEALTH
@@ -238,16 +238,16 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 				p.cooked_food -= 1
 				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
 				food_col = Vec3{0.55, 0.35, 0.2}
-				fmt.println("ate cooked food — hunger", int(p.hunger))
+				toast_show(fmt.tprintf("ATE COOKED FOOD (HUNGER %d)", int(p.hunger)))
 			} else if p.bread > 0 {
 				p.bread -= 1
 				p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
 				food_col = Vec3{0.78, 0.58, 0.30}
-				fmt.println("ate bread — hunger", int(p.hunger))
+				toast_show(fmt.tprintf("ATE BREAD (HUNGER %d)", int(p.hunger)))
 			} else if p.raw_food > 0 {
 				p.raw_food -= 1
 				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
-				fmt.println("ate raw food (cook it for more!) — hunger", int(p.hunger))
+				toast_show(fmt.tprintf("ATE RAW FOOD - COOK IT FOR MORE (HUNGER %d)", int(p.hunger)))
 			} else {
 				ate = false
 			}
@@ -431,32 +431,32 @@ near_furnace :: proc(w: ^World, p: ^Player) -> bool {
 // Smelting near a placed furnace: Wood is fuel; Ore -> Iron, Sand -> Glass.
 try_smelt :: proc(w: ^World, p: ^Player) {
 	if !near_furnace(w, p) {
-		fmt.println("smelt: stand next to a placed Furnace")
+		toast_show("SMELT: STAND NEXT TO A FURNACE")
 		return
 	}
 	if p.inventory[.Wood] < 1 {
-		fmt.println("smelt: need Wood as fuel")
+		toast_show("SMELT: NEED WOOD AS FUEL")
 		return
 	}
 	if p.raw_food >= 1 {
 		p.inventory[.Wood] -= 1
 		p.raw_food -= 1
 		p.cooked_food += 1
-		fmt.println("cooked food (1 Raw + 1 Wood) — cooked:", p.cooked_food)
+		toast_show(fmt.tprintf("COOKED FOOD (HAVE %d)", p.cooked_food))
 		return
 	}
 	if p.inventory[.Ore] >= 1 {
 		p.inventory[.Wood] -= 1
 		p.inventory[.Ore] -= 1
 		p.inventory[.Iron] += 1
-		fmt.println("smelted Iron (1 Ore + 1 Wood) — now have", p.inventory[.Iron])
+		toast_show(fmt.tprintf("SMELTED IRON (HAVE %d)", p.inventory[.Iron]))
 	} else if p.inventory[.Sand] >= 1 {
 		p.inventory[.Wood] -= 1
 		p.inventory[.Sand] -= 1
 		p.inventory[.Glass] += 1
-		fmt.println("smelted Glass (1 Sand + 1 Wood) — now have", p.inventory[.Glass])
+		toast_show(fmt.tprintf("SMELTED GLASS (HAVE %d)", p.inventory[.Glass]))
 	} else {
-		fmt.println("smelt: need Ore or Sand")
+		toast_show("SMELT: NEED ORE OR SAND")
 	}
 }
 
@@ -467,21 +467,21 @@ try_craft :: proc(p: ^Player) {
 	if p.inventory[.Stone] >= 8 {
 		p.inventory[.Stone] -= 8
 		p.inventory[.Furnace] += 1
-		fmt.println("crafted Furnace (8 Stone) — now have", p.inventory[.Furnace])
+		toast_show(fmt.tprintf("CRAFTED FURNACE (HAVE %d)", p.inventory[.Furnace]))
 		return
 	}
 	if p.inventory[.Sand] >= 4 && p.inventory[.Ore] >= 1 {
 		p.inventory[.Sand] -= 4
 		p.inventory[.Ore] -= 1
 		p.inventory[.Glowstone] += 1
-		fmt.println("crafted Glowstone (4 Sand + 1 Ore) — now have", p.inventory[.Glowstone])
+		toast_show(fmt.tprintf("CRAFTED GLOWSTONE (HAVE %d)", p.inventory[.Glowstone]))
 		return
 	}
 	if p.wheat >= 3 {
 		p.wheat -= 3
 		p.bread += 1
-		fmt.println("baked bread (3 Wheat) — now have", p.bread)
+		toast_show(fmt.tprintf("BAKED BREAD (HAVE %d)", p.bread))
 		return
 	}
-	fmt.println("craft: 8 Stone -> Furnace, 4 Sand + 1 Ore -> Glowstone, 3 Wheat -> Bread")
+	toast_show("CRAFT: 8 STONE, 4 SAND+1 ORE, OR 3 WHEAT")
 }

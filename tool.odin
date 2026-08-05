@@ -98,7 +98,7 @@ tool_wear :: proc(p: ^Player, k: ToolKind) {
 	if p.tool_tier[k] <= 0 do return
 	p.tool_dur[k] -= 1
 	if p.tool_dur[k] <= 0 {
-		fmt.println("your", TIER_NAMES[p.tool_tier[k]], tool_name(k), "broke!")
+		toast_show(fmt.tprintf("YOUR %s %s BROKE", TIER_NAMES[p.tool_tier[k]], tool_name(k)))
 		p.tool_tier[k] = 0
 		p.tool_dur[k] = 0
 	}
@@ -117,16 +117,16 @@ tool_next :: proc(p: ^Player, k: ToolKind) -> (tier: int, block: BlockId, count:
 tool_craft :: proc(p: ^Player, k: ToolKind) {
 	next, block, count, ok := tool_next(p, k)
 	if !ok {
-		fmt.println(tool_name(k), "is already Iron (max)")
+		toast_show(fmt.tprintf("%s IS ALREADY IRON (MAX)", tool_name(k)))
 		return
 	}
 	if p.inventory[block] < count {
-		fmt.println("need", count, block_name(block), "for a", TIER_NAMES[next], tool_name(k))
+		toast_show(fmt.tprintf("NEED %d %s FOR %s %s", count, block_name(block), TIER_NAMES[next], tool_name(k)))
 		return
 	}
 	p.inventory[block] -= count
 	p.tool_tier[k] = next
 	p.tool_dur[k] = TOOL_DUR[next]
-	fmt.println("crafted", TIER_NAMES[next], tool_name(k))
+	toast_show(fmt.tprintf("CRAFTED %s %s", TIER_NAMES[next], tool_name(k)))
 	audio_play(.Place, 0.5)
 }

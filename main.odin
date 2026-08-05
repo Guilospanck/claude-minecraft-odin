@@ -79,12 +79,36 @@ spawn_try_column :: proc(w: ^World, x, z: int) -> (Vec3, bool) {
 	return Vec3{}, false
 }
 
+// Absolute last resort: no natural dry land was found anywhere within the
+// search radius (e.g. an all-ocean seed near the origin). Build a small
+// guaranteed-dry island instead of ever leaving the player spawned over —
+// or falling into — open water.
+@(private = "file")
+spawn_build_platform :: proc(w: ^World, x, z: int) -> Vec3 {
+	y := SEA_LEVEL + 1
+	for dz in -1 ..= 1 {
+		for dx in -1 ..= 1 {
+			cx, cz := x + dx, z + dz
+			world_ensure_chunk(w, world_chunk_at(w, cx, cz))
+			world_set_block(w, cx, y - 1, cz, .Stone)
+			world_set_block(w, cx, y, cz, .Sand)
+			world_set_block(w, cx, y + 1, cz, .Air)
+			world_set_block(w, cx, y + 2, cz, .Air)
+		}
+	}
+	return Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5}
+}
+
 // Nearest dry land near the world origin, used as the spawn point. Never
 // water, lava, or mid-air: spirals outward from (8,8) until a valid column
-// (solid ground with clear headroom) is found.
+// (solid ground with clear headroom) is found. Real oceans can be enormous —
+// a small search radius previously let this fall through to a fixed-height
+// fallback that was itself sometimes still underwater — so this now searches
+// a wide radius and, failing that, builds a guaranteed-dry platform.
 spawn_pos :: proc(w: ^World) -> Vec3 {
 	if p, ok := spawn_try_column(w, 8, 8); ok do return p
-	for r in 1 ..< 24 {
+	SEARCH_RADIUS :: 48
+	for r in 1 ..< SEARCH_RADIUS {
 		for dx in -r ..= r {
 			if p, ok := spawn_try_column(w, 8 + dx, 8 - r); ok do return p
 			if p, ok := spawn_try_column(w, 8 + dx, 8 + r); ok do return p
@@ -94,9 +118,7 @@ spawn_pos :: proc(w: ^World) -> Vec3 {
 			if p, ok := spawn_try_column(w, 8 + r, 8 + dz); ok do return p
 		}
 	}
-	// Extremely unlikely fallback (no dry land within 23 blocks): a safe
-	// platform above sea level rather than spawning in water.
-	return Vec3{8.5, f32(SEA_LEVEL + 4), 8.5}
+	return spawn_build_platform(w, 8, 8)
 }
 
 main :: proc() {
@@ -205,9 +227,9 @@ main :: proc() {
 		if v, ok := strconv.parse_int(s); ok do max_frames = v
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
-	if os.get_env("MC_INV", context.temp_allocator) != "" do g_show_inventory = true
+	if os.get_env("MC_INV", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Items}
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
-	if os.get_env("MC_CRAFT", context.temp_allocator) != "" do g_show_crafting = true
+	if os.get_env("MC_CRAFT", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Craft}
 	if os.get_env("MC_QUITUI", context.temp_allocator) != "" do g_show_quit_confirm = true
 
 	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
@@ -451,11 +473,17 @@ main :: proc() {
 		g_input.eat = true
 	}
 
+	// Debug: MC_TOAST shows a sample on-screen action-bar message.
+	if os.get_env("MC_TOAST", context.temp_allocator) != "" {
+		toast_show("GOOD MORNING - SPAWN POINT SET")
+	}
+
 	// Debug UI screenshots.
 	if os.get_env("MC_TOOLS", context.temp_allocator) != "" {
 		player.inventory[.Stone] = 20
 		player.inventory[.Iron] = 6
-		g_show_tools = true
+		g_show_inventory = true
+		g_inv_tab = .Tools
 	}
 	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
 		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
@@ -539,6 +567,7 @@ main :: proc() {
 			world.time_of_day += dt / g_settings.day_length
 			if world.time_of_day >= 1 do world.time_of_day -= 1
 		}
+		toast_tick(dt)
 
 		glfw.PollEvents()
 		// ESC opens a quit-confirm overlay (or backs out of a menu / the
@@ -547,11 +576,9 @@ main :: proc() {
 			g_input.quit = false
 			if g_show_quit_confirm {
 				g_show_quit_confirm = false
-			} else if g_show_inventory || g_show_settings || g_show_crafting || g_show_tools || g_show_chest {
+			} else if g_show_inventory || g_show_settings || g_show_chest {
 				g_show_inventory = false
 				g_show_settings = false
-				g_show_crafting = false
-				g_show_tools = false
 				g_show_chest = false
 			} else {
 				g_show_quit_confirm = true
@@ -562,31 +589,26 @@ main :: proc() {
 		}
 		g_input.confirm = false
 
-		// menu toggles (mutually exclusive; disabled while confirming quit)
+		// Inventory/crafting/tools are one tabbed panel now: E/T/X each open
+		// straight to their tab (or close it, if that tab is already showing).
+		// LEFT/RIGHT below switches tabs while it's open.
 		if !g_show_quit_confirm {
-			if g_input.inv_toggle {
-				g_show_inventory = !g_show_inventory
-				if g_show_inventory {
-					g_show_settings = false;g_show_crafting = false;g_show_tools = false;g_show_chest = false
+			open_tab :: proc(tab: InvTab) {
+				if g_show_inventory && g_inv_tab == tab {
+					g_show_inventory = false
+				} else {
+					g_show_inventory = true
+					g_inv_tab = tab
+					g_show_settings = false
+					g_show_chest = false
 				}
 			}
+			if g_input.inv_toggle do open_tab(.Items)
+			if g_input.craft_toggle do open_tab(.Craft)
+			if g_input.tools_toggle do open_tab(.Tools)
 			if g_input.settings_toggle {
 				g_show_settings = !g_show_settings
-				if g_show_settings {
-					g_show_inventory = false;g_show_crafting = false;g_show_tools = false;g_show_chest = false
-				}
-			}
-			if g_input.craft_toggle {
-				g_show_crafting = !g_show_crafting
-				if g_show_crafting {
-					g_show_inventory = false;g_show_settings = false;g_show_tools = false;g_show_chest = false
-				}
-			}
-			if g_input.tools_toggle {
-				g_show_tools = !g_show_tools
-				if g_show_tools {
-					g_show_inventory = false;g_show_settings = false;g_show_crafting = false;g_show_chest = false
-				}
+				if g_show_settings {g_show_inventory = false;g_show_chest = false}
 			}
 		}
 		g_input.inv_toggle = false
@@ -594,13 +616,7 @@ main :: proc() {
 		g_input.craft_toggle = false
 		g_input.tools_toggle = false
 
-		paused :=
-			g_show_inventory ||
-			g_show_settings ||
-			g_show_crafting ||
-			g_show_tools ||
-			g_show_chest ||
-			g_show_quit_confirm
+		paused := g_show_inventory || g_show_settings || g_show_chest || g_show_quit_confirm
 		if paused {
 			// chest transfers: R takes everything, a hotbar number deposits it
 			if g_show_chest {
@@ -626,11 +642,15 @@ main :: proc() {
 				if g_input.nav_left do settings_adjust(-1)
 				if g_input.nav_right do settings_adjust(1)
 			}
-			if g_show_crafting && g_input.select > 0 {
-				recipe_try(&player, cur, g_input.select - 1)
-			}
-			if g_show_tools && g_input.select >= 1 && g_input.select <= len(ToolKind) {
-				tool_craft(&player, ToolKind(g_input.select - 1))
+			if g_show_inventory {
+				if g_input.nav_left do inv_tab_cycle(-1)
+				if g_input.nav_right do inv_tab_cycle(1)
+				if g_inv_tab == .Craft && g_input.select > 0 {
+					recipe_try(&player, cur, g_input.select - 1)
+				}
+				if g_inv_tab == .Tools && g_input.select >= 1 && g_input.select <= len(ToolKind) {
+					tool_craft(&player, ToolKind(g_input.select - 1))
+				}
 			}
 			g_input.select = 0
 		} else {
@@ -655,9 +675,9 @@ main :: proc() {
 					oy := int(player.pos.y)
 					build_portal(cur, ox, oy, oz)
 					player.inventory[.Obsidian] -= PORTAL_COST
-					fmt.println("portal lit - step in to travel")
+					toast_show("PORTAL LIT - STEP IN TO TRAVEL")
 				} else {
-					fmt.println("need", PORTAL_COST, "Obsidian for a portal (craft: T)")
+					toast_show(fmt.tprintf("NEED %d OBSIDIAN FOR A PORTAL", PORTAL_COST))
 				}
 				g_input.portal = false
 			}
@@ -670,7 +690,7 @@ main :: proc() {
 					cur = cur == &world ? &nether : &world
 					player.pos = portal_destination(cur, int(player.pos.x), int(player.pos.z))
 					player.vel = Vec3{0, 0, 0}
-					fmt.println("entered the", cur.dimension)
+					toast_show(fmt.tprintf("ENTERED THE %v", cur.dimension))
 				}
 			} else if player.portal_timer < 0 {
 				player.portal_timer += dt
@@ -725,10 +745,8 @@ main :: proc() {
 		render_remesh(cur, player.pos)
 		render_frame(cur, &player, g_input.fb_w, g_input.fb_h)
 		fw, fh := int(g_input.fb_w), int(g_input.fb_h)
-		if g_show_inventory do ui_draw_inventory(&player, fw, fh)
+		if g_show_inventory do ui_draw_inventory(&player, cur, fw, fh)
 		else if g_show_settings do ui_draw_settings(fw, fh)
-		else if g_show_crafting do ui_draw_crafting(&player, cur, fw, fh)
-		else if g_show_tools do ui_draw_tools(&player, fw, fh)
 		else if g_show_chest do ui_draw_chest(&player, cur, fw, fh)
 		if g_show_quit_confirm do ui_draw_quit_confirm(fw, fh)
 

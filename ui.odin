@@ -5,25 +5,70 @@ import gl "vendor:OpenGL"
 
 g_show_inventory: bool
 g_show_quit_confirm: bool
-g_show_tools: bool
 
-// Tools menu (X): shows each tool's tier + durability and its next upgrade;
-// press 1-4 to craft/upgrade.
-ui_draw_tools :: proc(p: ^Player, fbw, fbh: int) {
+// The inventory (E), crafting (T), and tools (X) screens are one tabbed panel,
+// like Minecraft's inventory: a shared frame with the hotbar always visible,
+// switchable with LEFT/RIGHT while open (or by pressing E/T/X directly).
+InvTab :: enum {
+	Items,
+	Craft,
+	Tools,
+}
+INV_TAB_COUNT :: len(InvTab)
+g_inv_tab: InvTab
+
+inv_tab_cycle :: proc(dir: int) {
+	n := INV_TAB_COUNT
+	g_inv_tab = InvTab((int(g_inv_tab) + dir + n) % n)
+}
+
+@(private = "file")
+inv_tab_name :: proc(t: InvTab) -> string {
+	switch t {
+	case .Items:
+		return "ITEMS"
+	case .Craft:
+		return "CRAFT"
+	case .Tools:
+		return "TOOLS"
+	}
+	return "?"
+}
+
+// Tab bar across the top of the inventory panel; the active tab is boxed and
+// bright, others dim. Purely visual — E/T/X and LEFT/RIGHT drive selection.
+@(private = "file")
+ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	hud_quad(-0.72, -0.5, 0.72, 0.62, Vec4{0.05, 0.05, 0.08, 0.94})
-	ch_h: f32 = 0.055
-	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	text_center("TOOLS", 0.52, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+	labels := [INV_TAB_COUNT]string{"E ITEMS", "T CRAFT", "X TOOLS"}
+	seg: f32 = 0.34
+	total := seg * f32(INV_TAB_COUNT)
+	x0 := -total * 0.5
+	for i in 0 ..< INV_TAB_COUNT {
+		active := InvTab(i) == g_inv_tab
+		cx := x0 + f32(i) * seg + seg * 0.5
+		w2 := seg * 0.42
+		col := active ? Vec4{0.95, 0.85, 0.4, 1} : Vec4{0.55, 0.58, 0.64, 1}
+		if active {
+			hud_quad(cx - w2, y - ch_h * 1.3, cx + w2, y + ch_h * 0.35, Vec4{0.16, 0.16, 0.2, 1})
+		}
+		lw := text_width(labels[i], ch_w)
+		text_draw(labels[i], cx - lw * 0.5, y, ch_w, ch_h, col)
+	}
+}
 
-	y: f32 = 0.32
+// Tools tab content: each tool's tier + durability and its next upgrade;
+// press 1-4 to craft/upgrade.
+@(private = "file")
+ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
+	y := top
 	for k in ToolKind {
 		tier := p.tool_tier[k]
 		have := tier > 0 \
 			? fmt.tprintf("%s %s  DUR %d", TIER_NAMES[tier], tool_name(k), p.tool_dur[k]) \
 			: fmt.tprintf("%s: none", tool_name(k))
-		text_draw(fmt.tprintf("%d", int(k) + 1), -0.62, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
-		text_draw(have, -0.5, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
+		text_draw(fmt.tprintf("%d", int(k) + 1), -0.5, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
+		text_draw(have, -0.38, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
 
 		next, block, count, ok := tool_next(p, k)
 		msg: string
@@ -35,16 +80,9 @@ ui_draw_tools :: proc(p: ^Player, fbw, fbh: int) {
 		} else {
 			msg = "(max)"
 		}
-		text_draw(msg, 0.16, y, ch_w * 0.9, ch_h * 0.9, col)
-		y -= ch_h * 1.7
+		text_draw(msg, 0.22, y, ch_w * 0.9, ch_h * 0.9, col)
+		y -= ch_h * 1.9
 	}
-	text_center(
-		"PRESS 1-4 TO CRAFT/UPGRADE   X CLOSE",
-		-0.4,
-		ch_w * 0.6,
-		ch_h * 0.6,
-		Vec4{0.7, 0.8, 0.9, 1},
-	)
 }
 
 // ESC confirmation overlay: Y quits, ESC resumes.
@@ -137,46 +175,41 @@ ui_draw_settings :: proc(fbw, fbh: int) {
 	)
 }
 
-// Crafting menu (T): recipes with input->output swatches; press 1-4 to craft.
-ui_draw_crafting :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
-	aspect := f32(fbw) / f32(max(fbh, 1))
-	hud_quad(-0.82, -0.68, 0.82, 0.78, Vec4{0.05, 0.05, 0.08, 0.92})
-	ch_h: f32 = 0.05
-	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	sw := ch_h / aspect * 1.1
-	text_center("CRAFTING", 0.66, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
-
-	y: f32 = 0.44
+// Craft tab content: each recipe as real-textured input icons -> output icon;
+// press the number key to make it. Dimmed when you can't afford it yet.
+@(private = "file")
+ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
+	sw := ch_h / aspect * 1.3
+	y := top
 	for i in 0 ..< len(RECIPES) {
 		r := RECIPES[i]
-		a: f32 = recipe_can_make(p, w, r) ? 1.0 : 0.4
-		x: f32 = -0.72
-		text_draw(fmt.tprintf("%d", i + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, a})
-		x += ch_w * 2.5
+		afford: f32 = recipe_can_make(p, w, r) ? 1.0 : 0.35
+		x: f32 = -0.86
+		text_draw(fmt.tprintf("%d", i + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, afford})
+		x += ch_w * 2.2
 		for j in 0 ..< r.n_in {
 			ing := r.inputs[j]
-			col := block_color(ing.block)
-			hud_quad(x, y - ch_h, x + sw, y, Vec4{col.r, col.g, col.b, a})
-			text_draw(fmt.tprintf("X%d", ing.count), x + sw + 0.006, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.9, 0.9, a})
-			x += sw + ch_w * 3.5
+			hud_quad(x - 0.004, y - ch_h - 0.004, x + sw + 0.004, y + 0.004, Vec4{0.12, 0.12, 0.15, afford})
+			ui_block_icon(x, y - ch_h, x + sw, y, ing.block)
+			text_draw(fmt.tprintf("X%d", ing.count), x + sw + 0.008, y, ch_w * 0.85, ch_h * 0.85, Vec4{0.9, 0.9, 0.9, afford})
+			x += sw + ch_w * 2.8
 		}
-		text_draw("->", x, y, ch_w, ch_h, Vec4{1, 1, 1, a})
-		x += ch_w * 3.5
-		oc := block_color(r.out)
-		hud_quad(x, y - ch_h, x + sw, y, Vec4{oc.r, oc.g, oc.b, a})
+		text_draw(">", x, y, ch_w, ch_h, Vec4{1, 1, 1, afford})
+		x += ch_w * 2.2
+		hud_quad(x - 0.004, y - ch_h - 0.004, x + sw + 0.004, y + 0.004, Vec4{0.12, 0.12, 0.15, afford})
+		ui_block_icon(x, y - ch_h, x + sw, y, r.out)
 		x += sw + 0.01
 		note := r.needs_furnace ? " (FURNACE)" : ""
 		text_draw(
-			fmt.tprintf("%s%s", block_name(r.out), note),
+			fmt.tprintf("%dX %s%s", r.out_count, block_name(r.out), note),
 			x,
 			y,
-			ch_w * 0.85,
-			ch_h * 0.85,
-			Vec4{0.9, 0.95, 1, a},
+			ch_w * 0.8,
+			ch_h * 0.8,
+			Vec4{0.9, 0.95, 1, afford},
 		)
-		y -= ch_h * 1.9
+		y -= ch_h * 2.1
 	}
-	text_center("PRESS 1-7 TO CRAFT   T CLOSE", -0.58, ch_w * 0.6, ch_h * 0.6, Vec4{0.7, 0.8, 0.9, 1})
 }
 
 // One Minecraft-style slot: bordered square, a real block texture (or a flat
@@ -311,9 +344,11 @@ InvEntry :: struct {
 	count:   int,
 }
 
-// Full-screen inventory: a Minecraft-style grid of square item slots with
-// real block textures, plus the hotbar mirrored at the bottom. Toggled with E.
-ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
+// Full-screen inventory: a tabbed Minecraft-style panel (ITEMS / CRAFT /
+// TOOLS — E/T/X or LEFT/RIGHT to switch) with the hotbar mirrored at the
+// bottom on every tab. Items are real block textures in a slot grid; Craft
+// and Tools let you make/upgrade things right here, not just look at them.
+ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
 
 	// Reaches all the way to ~-0.99/0.99 so it fully covers the world's own
@@ -323,20 +358,7 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 
 	ch_h: f32 = 0.045
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	text_center("INVENTORY", 0.82, ch_w * 1.3, ch_h * 1.3, Vec4{1, 1, 1, 1})
-
-	// Gather owned entries: every held block, then the non-block counters.
-	entries := make([dynamic]InvEntry, 0, 40, context.temp_allocator)
-	for b in BlockId {
-		if b == .Air do continue
-		if p.inventory[b] <= 0 do continue
-		append(&entries, InvEntry{use_tex = true, blk = b, count = p.inventory[b]})
-	}
-	if p.raw_food > 0 do append(&entries, InvEntry{flat = {0.72, 0.28, 0.22}, count = p.raw_food})
-	if p.cooked_food > 0 do append(&entries, InvEntry{flat = {0.55, 0.35, 0.2}, count = p.cooked_food})
-	if p.bread > 0 do append(&entries, InvEntry{flat = {0.78, 0.58, 0.30}, count = p.bread})
-	if p.wheat > 0 do append(&entries, InvEntry{flat = {0.82, 0.70, 0.28}, count = p.wheat})
-	if p.seeds > 0 do append(&entries, InvEntry{flat = {0.55, 0.62, 0.30}, count = p.seeds})
+	ui_draw_tabs(fbw, fbh, ch_w * 1.05, ch_h * 1.05, 0.82)
 
 	cols :: 9
 	sz: f32 = 0.095
@@ -344,20 +366,47 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 	gap: f32 = 0.010
 	grid_w := f32(cols) * (sw + gap) - gap
 	gx0 := -grid_w * 0.5
-	gy: f32 = 0.68
+	content_top: f32 = 0.66
 
-	for e, i in entries {
-		row := i / cols
-		col := i % cols
-		x0 := gx0 + f32(col) * (sw + gap)
-		y0 := gy - f32(row) * (sz + gap) - sz
-		ui_slot(x0, y0, sw, sz, e.use_tex, e.blk, e.flat, e.count, ch_w, ch_h, false, "")
-	}
-	if len(entries) == 0 {
-		text_center("(EMPTY)", gy - sz * 0.5, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
+	switch g_inv_tab {
+	case .Items:
+		// Gather owned entries: every held block, then the non-block counters.
+		entries := make([dynamic]InvEntry, 0, 40, context.temp_allocator)
+		for b in BlockId {
+			if b == .Air do continue
+			if p.inventory[b] <= 0 do continue
+			append(&entries, InvEntry{use_tex = true, blk = b, count = p.inventory[b]})
+		}
+		if p.raw_food > 0 do append(&entries, InvEntry{flat = {0.72, 0.28, 0.22}, count = p.raw_food})
+		if p.cooked_food > 0 do append(&entries, InvEntry{flat = {0.55, 0.35, 0.2}, count = p.cooked_food})
+		if p.bread > 0 do append(&entries, InvEntry{flat = {0.78, 0.58, 0.30}, count = p.bread})
+		if p.wheat > 0 do append(&entries, InvEntry{flat = {0.82, 0.70, 0.28}, count = p.wheat})
+		if p.seeds > 0 do append(&entries, InvEntry{flat = {0.55, 0.62, 0.30}, count = p.seeds})
+
+		for e, i in entries {
+			row := i / cols
+			col := i % cols
+			x0 := gx0 + f32(col) * (sw + gap)
+			y0 := content_top - f32(row) * (sz + gap) - sz
+			ui_slot(x0, y0, sw, sz, e.use_tex, e.blk, e.flat, e.count, ch_w, ch_h, false, "")
+		}
+		if len(entries) == 0 {
+			text_center("(EMPTY)", content_top - sz * 0.5, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
+		}
+		text_center(
+			"RAW=RED  COOKED=BROWN  BREAD=TAN  WHEAT=GOLD  SEEDS=GREEN",
+			0.10,
+			ch_w * 0.62,
+			ch_h * 0.62,
+			Vec4{0.65, 0.7, 0.76, 1},
+		)
+	case .Craft:
+		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, content_top)
+	case .Tools:
+		ui_draw_tools_tab(p, ch_w, ch_h, content_top)
 	}
 
-	// Hotbar mirrored at a fixed position, same as Minecraft's inventory screen.
+	// Hotbar mirrored at a fixed position on every tab, same as Minecraft.
 	hy0: f32 = -0.60
 	text_draw("HOTBAR", gx0, hy0 + sz + 0.03, ch_w * 0.85, ch_h * 0.85, Vec4{0.7, 0.75, 0.82, 1})
 	for i in 0 ..< 9 {
@@ -366,25 +415,21 @@ ui_draw_inventory :: proc(p: ^Player, fbw, fbh: int) {
 		ui_slot(x0, hy0, sw, sz, true, b, Vec3{}, p.inventory[b], ch_w, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
 	}
 
+	action_hint: string
+	switch g_inv_tab {
+	case .Items:
+		action_hint = "1-9 SELECT A HOTBAR SLOT"
+	case .Craft:
+		action_hint = "1-8 TO CRAFT"
+	case .Tools:
+		action_hint = "1-4 TO CRAFT/UPGRADE"
+	}
+	text_center(action_hint, hy0 - sz - 0.06, ch_w * 0.68, ch_h * 0.68, Vec4{0.75, 0.82, 0.92, 1})
 	text_center(
-		"RAW=RED  COOKED=BROWN  BREAD=TAN  WHEAT=GOLD  SEEDS=GREEN",
-		hy0 - sz - 0.05,
-		ch_w * 0.62,
-		ch_h * 0.62,
+		"LEFT/RIGHT SWITCH TABS   R USE/FARM/SLEEP/CHEST   G EAT   E/T/X CLOSE",
+		hy0 - sz - 0.14,
+		ch_w * 0.6,
+		ch_h * 0.6,
 		Vec4{0.65, 0.7, 0.76, 1},
-	)
-	text_center(
-		"R USE/FARM/SLEEP/CHEST   G EAT   C CRAFT   V SMELT   X TOOLS   T RECIPES",
-		hy0 - sz - 0.13,
-		ch_w * 0.62,
-		ch_h * 0.62,
-		Vec4{0.65, 0.7, 0.76, 1},
-	)
-	text_center(
-		"1-9 SELECT   E CLOSE",
-		hy0 - sz - 0.21,
-		ch_w * 0.7,
-		ch_h * 0.7,
-		Vec4{0.75, 0.82, 0.92, 1},
 	)
 }

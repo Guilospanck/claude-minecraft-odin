@@ -26,8 +26,6 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Wood, 8}, {}, {}}, n_in = 1, out = .Chest, out_count = 1},
 }
 
-g_show_crafting: bool
-
 recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {
 	for i in 0 ..< r.n_in {
 		if p.inventory[r.inputs[i].block] < r.inputs[i].count do return false
@@ -41,9 +39,9 @@ recipe_try :: proc(p: ^Player, w: ^World, idx: int) {
 	r := RECIPES[idx]
 	if !recipe_can_make(p, w, r) {
 		if r.needs_furnace && !near_furnace(w, p) {
-			fmt.println("craft: stand next to a Furnace for that")
+			toast_show("CRAFT: STAND NEXT TO A FURNACE")
 		} else {
-			fmt.println("craft: not enough materials")
+			toast_show("CRAFT: NOT ENOUGH MATERIALS")
 		}
 		return
 	}
@@ -51,6 +49,6 @@ recipe_try :: proc(p: ^Player, w: ^World, idx: int) {
 		p.inventory[r.inputs[i].block] -= r.inputs[i].count
 	}
 	p.inventory[r.out] += r.out_count
-	fmt.println("made", r.out_count, block_name(r.out))
+	toast_show(fmt.tprintf("MADE %d %s", r.out_count, block_name(r.out)))
 	audio_play(.Place, 0.5)
 }

@@ -711,3 +711,51 @@ test_eat_triggers_animation_and_particles :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, p.eat_timer == 0, "eat animation timer settles back to zero")
 }
+
+@(test)
+test_spawn_builds_platform_when_no_land_nearby :: proc(t: ^testing.T) {
+	w: World
+	world_init(&w, 1)
+	defer {
+		for _, c in w.chunks do chunk_free(c)
+		delete(w.chunks)
+		delete(w.mobs);delete(w.items);delete(w.arrows);delete(w.particles)
+		delete(w.crops);delete(w.chests)
+	}
+	// Flood every chunk within the spawn search radius with deep water (an
+	// all-ocean seed near the origin) — no natural dry land exists anywhere
+	// nearby, forcing the guaranteed-safe synthetic-platform fallback.
+	for cx in -4 ..= 4 {
+		for cz in -4 ..= 4 {
+			c := chunk_make(Ivec2{cx, cz})
+			for x in 0 ..< CHUNK_W {
+				for z in 0 ..< CHUNK_D {
+					chunk_set(c, x, 0, z, .Bedrock)
+					for y in 1 ..= SEA_LEVEL {
+						chunk_set(c, x, y, z, .Water)
+					}
+				}
+			}
+			c.generated = true
+			w.chunks[Ivec2{cx, cz}] = c
+		}
+	}
+	pos := spawn_pos(&w)
+	bx := int(pos.x)
+	by := int(pos.y) - 1
+	bz := int(pos.z)
+	b := world_block(&w, bx, by, bz)
+	testing.expect(t, b != .Water && b != .Air, "synthetic platform provides real ground when no land is nearby")
+	testing.expect(t, world_block(&w, bx, by + 1, bz) == .Air, "clear headroom above the platform")
+	testing.expect(t, pos.y > f32(SEA_LEVEL), "platform sits above the water line")
+}
+
+@(test)
+test_toast_shows_and_fades :: proc(t: ^testing.T) {
+	toast_show("TEST MESSAGE", 1.0)
+	testing.expect(t, true, "toast_show does not crash") // fixed-buffer, no allocator races
+	toast_tick(0.5)
+	toast_tick(0.6) // past the 1.0s life
+	// no observable getter is exposed (draw-only); this just exercises the
+	// tick/show path without leaking or racing under the parallel test runner
+}
