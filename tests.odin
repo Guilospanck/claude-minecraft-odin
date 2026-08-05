@@ -938,7 +938,7 @@ test_mobs_seek_mate_across_distance_and_breed :: proc(t: ^testing.T) {
 		for i in 0 ..< len(w.mobs) {
 			mob_update(&w, &p, &w.mobs[i], i, 1.0 / 60.0)
 		}
-		breed_pass(&w, &w.mobs)
+		breed_pass(&w, &w.mobs, 1.0 / 60.0)
 		for m in w.mobs do if m.is_baby do found_baby = true
 		if found_baby do break
 	}
@@ -1069,4 +1069,30 @@ test_spawn_never_in_sealed_cave_under_ocean :: proc(t: ^testing.T) {
 	bz := int(pos.z)
 	testing.expect(t, !(bx == 8 && bz == 8), "never spawns in the sealed cave pocket under the ocean")
 	testing.expect(t, world_block(&w, bx, by, bz) == .Grass, "spawns on the real dry land instead")
+}
+
+@(test)
+test_breed_at_cap_does_not_waste_love_mode :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	// fill the world right up to MOB_CAP with unrelated passive mobs
+	for i in 0 ..< MOB_CAP {
+		append(&w.mobs, Mob{kind = .Chicken, pos = Vec3{f32(i) * 4, 40, 40}, health = 4})
+	}
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{8, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6})
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{9, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6})
+	// (this pushes the world one mob over MOB_CAP, matching "already full")
+
+	breed_pass(&w, &w.mobs, 0.016)
+	found_baby := false
+	for m in w.mobs do if m.is_baby do found_baby = true
+	testing.expect(t, !found_baby, "no baby is born while the world is at the mob cap")
+
+	cows_still_in_love := 0
+	for m in w.mobs do if m.kind == .Cow && m.love_timer > 0 do cows_still_in_love += 1
+	testing.expect(
+		t,
+		cows_still_in_love == 2,
+		"love mode is preserved (not silently spent) when a birth is blocked by the cap",
+	)
 }

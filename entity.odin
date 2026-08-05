@@ -81,7 +81,14 @@ MOB_DIMS := [MobKind]MobDims {
 	.Squid    = {0.28, 0.55, 1.3},
 }
 
-MOB_CAP :: 22
+// A hard ceiling on simultaneous mobs is still needed — nothing else bounds
+// population (no starvation/predation/old age), so unchecked breeding would
+// grow it forever and eventually cost real framerate. But passive wildlife,
+// fish/squid, hostiles, and bred babies all share this one pool, so a low
+// cap gets crowded out by ambient spawns and leaves no room for breeding —
+// which read as breeding being silently broken. Raised well above what
+// ambient spawning alone would ever reach.
+MOB_CAP :: 60
 MOB_DESPAWN_DIST :: f32(60)
 
 // --- AI + physics for one mob ---
@@ -563,7 +570,7 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 		i += 1
 	}
 
-	breed_pass(w, mobs)
+	breed_pass(w, mobs, dt)
 }
 
 @(private = "file")
@@ -578,7 +585,13 @@ contains_int :: proc(arr: []int, v: int) -> bool {
 // can reallocate the backing array, so holding a &mobs^[i] pointer across it
 // would risk a stale/use-after-free read. Not file-private: tests call it
 // directly to exercise breeding without mobs_update's random spawn rolls.
-breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob) {
+// Throttles the "no room for a baby" toast so a persistently-blocked pair
+// doesn't repaint it (and stomp every other toast) on every single frame.
+@(private = "file")
+g_breed_cap_toast_cd: f32
+
+breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob, dt: f32) {
+	if g_breed_cap_toast_cd > 0 do g_breed_cap_toast_cd -= dt
 	paired := make([dynamic]int, 0, 4, context.temp_allocator)
 	births := make([dynamic]Mob, 0, 4, context.temp_allocator)
 	for i in 0 ..< len(mobs^) {
@@ -592,6 +605,17 @@ breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob) {
 			dx := a.pos.x - b.pos.x
 			dz := a.pos.z - b.pos.z
 			if dx * dx + dz * dz > BREED_RADIUS * BREED_RADIUS do continue
+			// No room for any more babies: skip this pair WITHOUT spending
+			// their love mode. Consuming love_timer here (as the code used
+			// to, unconditionally) while the birth loop below silently
+			// dropped the baby at MOB_CAP made feeding appear to do nothing.
+			if len(mobs^) + len(births) >= MOB_CAP {
+				if g_breed_cap_toast_cd <= 0 {
+					toast_show("NO ROOM FOR A BABY - TOO MANY MOBS NEARBY")
+					g_breed_cap_toast_cd = 4.0
+				}
+				continue
+			}
 			mobs^[i].love_timer = 0
 			mobs^[j].love_timer = 0
 			append(&paired, i, j)
@@ -609,8 +633,9 @@ breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob) {
 			break
 		}
 	}
+	// Room for every queued birth is guaranteed by the check above, so this
+	// never has to drop one on the floor after already spending the love mode.
 	for baby in births {
-		if len(mobs^) >= MOB_CAP do break
 		append(mobs, baby)
 		audio_play(.Place, 0.4)
 		particle_spawn_eat(&w.particles, baby.pos + Vec3{0, 0.4, 0}, LOVE_HEART_COLOR)
