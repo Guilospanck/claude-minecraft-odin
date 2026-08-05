@@ -512,16 +512,26 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 	player_pos := p.pos
 	if w.dimension == .Nether {
-		if rng_f32() < 0.04 do nether_try_spawn(w, mobs, player_pos)
+		// nether_try_spawn only ever produces Piglins/Ghasts, both hostile
+		if !g_settings.peaceful && rng_f32() < 0.04 do nether_try_spawn(w, mobs, player_pos)
 	} else {
 		if rng_f32() < 0.03 do mob_try_spawn(w, mobs, player_pos)
 		if rng_f32() < 0.02 do water_try_spawn(w, mobs, player_pos)
-		if is_night(w.time_of_day) && rng_f32() < 0.05 do hostile_try_spawn(w, mobs, player_pos)
+		if !g_settings.peaceful && is_night(w.time_of_day) && rng_f32() < 0.05 {
+			hostile_try_spawn(w, mobs, player_pos)
+		}
 	}
 
 	i := 0
 	for i < len(mobs^) {
 		m := &mobs^[i]
+		// Peaceful mode: clear out any hostiles that already existed the
+		// moment it's turned on, not just block future spawns.
+		if g_settings.peaceful && mob_is_hostile(m.kind) {
+			mobs^[i] = mobs^[len(mobs^) - 1]
+			pop(mobs)
+			continue
+		}
 		// Safety net: if an aquatic mob's cell is ever no longer water (e.g. the
 		// world changed under it), remove it instead of letting it sit on land.
 		if mob_is_aquatic(m.kind) &&

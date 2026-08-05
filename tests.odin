@@ -971,3 +971,43 @@ test_inventory_grid_cursor_navigation :: proc(t: ^testing.T) {
 	g_inv_cursor = clamp(g_inv_cursor + 5, 0, len(entries) - 1)
 	testing.expect(t, g_inv_cursor == len(entries) - 1, "cursor clamps at the last entry")
 }
+
+@(test)
+test_peaceful_mode_clears_existing_hostiles :: proc(t: ^testing.T) {
+	saved := g_settings.peaceful
+	defer g_settings.peaceful = saved
+
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	append(&w.mobs, Mob{kind = .Zombie, pos = Vec3{8, 40, 8}, health = 12})
+	append(&w.mobs, Mob{kind = .Pig, pos = Vec3{9, 40, 8}, health = 6})
+	p: Player
+	p.pos = Vec3{8, 40, 8}
+
+	g_settings.peaceful = false
+	mobs_update(&w, &p, &w.mobs, 0.016)
+	testing.expect(t, len(w.mobs) == 2, "hostiles are untouched outside peaceful mode")
+
+	g_settings.peaceful = true
+	mobs_update(&w, &p, &w.mobs, 0.016)
+	testing.expect(t, len(w.mobs) == 1, "peaceful mode removes the existing zombie")
+	testing.expect(t, w.mobs[0].kind == .Pig, "the passive pig is left alone")
+}
+
+@(test)
+test_peaceful_mode_blocks_new_hostile_spawns :: proc(t: ^testing.T) {
+	saved := g_settings.peaceful
+	defer g_settings.peaceful = saved
+	g_settings.peaceful = true
+
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	w.time_of_day = 0.0 // midnight: hostile_try_spawn would otherwise be eligible
+	p: Player
+	for _ in 0 ..< 200 {
+		mobs_update(&w, &p, &w.mobs, 0.05)
+	}
+	for m in w.mobs {
+		testing.expect(t, !mob_is_hostile(m.kind), "no hostile ever spawns while peaceful is on")
+	}
+}

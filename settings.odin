@@ -8,6 +8,7 @@ Settings :: struct {
 	volume:        f32,
 	day_length:    f32, // used only when real_time is off
 	real_time:     bool, // sync day/night to the player's actual local time
+	peaceful:      bool, // disable hostile mob spawning (zombies, skeletons, piglins, ghasts)
 }
 
 g_settings := Settings {
@@ -17,12 +18,13 @@ g_settings := Settings {
 	volume        = 1.0,
 	day_length    = 1800,
 	real_time     = true,
+	peaceful      = false,
 }
 
 g_show_settings: bool
 g_settings_sel: int
 
-SETTINGS_COUNT :: 6
+SETTINGS_COUNT :: 7
 
 settings_adjust :: proc(delta: int) {
 	d := f32(delta)
@@ -39,5 +41,7 @@ settings_adjust :: proc(delta: int) {
 		g_settings.real_time = !g_settings.real_time // either direction toggles
 	case 5:
 		g_settings.day_length = clamp(g_settings.day_length + d * 120, 300, 7200)
+	case 6:
+		g_settings.peaceful = !g_settings.peaceful
 	}
 }

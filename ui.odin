@@ -182,6 +182,7 @@ ui_draw_settings :: proc(fbw, fbh: int) {
 		g_settings.real_time \
 			? "DAY LENGTH: (REAL TIME ON)" \
 			: fmt.tprintf("DAY LENGTH: %dS", int(g_settings.day_length)),
+		fmt.tprintf("PEACEFUL (NO HOSTILES): %s", g_settings.peaceful ? "ON" : "OFF"),
 	}
 	y: f32 = 0.36
 	for i in 0 ..< SETTINGS_COUNT {
