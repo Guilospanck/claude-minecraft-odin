@@ -64,8 +64,23 @@ is_spawnable_ground :: proc(b: BlockId) -> bool {
 	return false
 }
 
+// Confirms nothing solid sits between from_y and the world ceiling — i.e.
+// this is a genuine outdoor surface spot, not a sealed cave/cavern pocket
+// that happens to have a floor and two blocks of headroom (which, near an
+// ocean, is easy to find underground without ever reaching real ground).
+@(private = "file")
+open_to_sky :: proc(w: ^World, x, from_y, z: int) -> bool {
+	for y := from_y; y < CHUNK_H; y += 1 {
+		if block_is_solid(world_block(w, x, y, z)) do return false
+	}
+	return true
+}
+
 // A column is a valid spawn if it has dry ground with two clear blocks of
-// headroom above it (so the point is never underwater or floating in air).
+// headroom above it (so the point is never underwater or floating in air)
+// AND open sky above that — never inside a cave, even a sealed one that
+// happens to have a floor (a real bug: these turn up under oceans, where a
+// cavern ceiling reads as "ground" for a column scanned from the top down).
 @(private = "file")
 spawn_try_column :: proc(w: ^World, x, z: int) -> (Vec3, bool) {
 	world_ensure_chunk(w, world_chunk_at(w, x, z))
@@ -74,6 +89,7 @@ spawn_try_column :: proc(w: ^World, x, z: int) -> (Vec3, bool) {
 		if !is_spawnable_ground(b) do continue
 		if world_block(w, x, y + 1, z) != .Air do continue
 		if world_block(w, x, y + 2, z) != .Air do continue
+		if !open_to_sky(w, x, y + 3, z) do continue
 		return Vec3{f32(x) + 0.5, f32(y + 1), f32(z) + 0.5}, true
 	}
 	return Vec3{}, false
@@ -295,6 +311,12 @@ main :: proc() {
 				}
 			}
 		}
+	}
+
+	// Debug: MC_PICKUP drops an item right at the player's feet so it's
+	// picked up within a few frames (toast + particle burst + sound).
+	if os.get_env("MC_PICKUP", context.temp_allocator) != "" {
+		item_spawn(&world.items, .Iron, player.pos + Vec3{0, 0.3, 0})
 	}
 
 	// Debug: MC_SKELS=N spawns N skeletons ahead (they fire arrows).

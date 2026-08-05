@@ -1,5 +1,7 @@
 package main
 
+import "core:fmt"
+
 // Dropped block items: spawned when a block breaks, they fall with physics,
 // bob/spin, and are collected when the player walks near.
 
@@ -55,12 +57,18 @@ items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 		dy := it.pos.y - (p.pos.y + 0.9)
 		dz := it.pos.z - p.pos.z
 		if it.age > 0.4 && dx * dx + dy * dy + dz * dz < ITEM_PICKUP * ITEM_PICKUP {
+			col: Vec3
 			if it.food {
 				p.raw_food += 1
+				col = Vec3{0.72, 0.28, 0.22}
+				toast_show(fmt.tprintf("+1 RAW FOOD (%d)", p.raw_food))
 			} else {
 				p.inventory[it.block] += 1
+				col = block_color(it.block)
+				toast_show(fmt.tprintf("+1 %s (%d)", block_name(it.block), p.inventory[it.block]), 1.2)
 			}
-			audio_play(.Place, 0.35)
+			audio_play(.Pickup, 0.5)
+			particle_spawn_eat(&w.particles, it.pos + Vec3{0, 0.2, 0}, col)
 			items^[i] = items^[len(items^) - 1]
 			pop(items)
 			continue

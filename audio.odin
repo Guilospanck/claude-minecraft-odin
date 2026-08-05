@@ -15,6 +15,7 @@ Sound :: enum {
 	Jump,
 	Hurt,
 	Eat,
+	Pickup,
 }
 
 // Looping background music, chosen by context (see audio_set_music).
@@ -146,6 +147,22 @@ make_eat :: proc() -> []f32 {
 		env := math.exp(-bt * 26)
 		lp = lp * 0.82 + noise() * 0.18 // lowpassed crunch
 		buf[i] = lp * env * 0.55
+	}
+	return buf
+}
+
+@(private = "file")
+make_pickup :: proc() -> []f32 {
+	// a short two-note upward "pop", like a coin/item ping
+	n := secs(0.14)
+	buf := make([]f32, n)
+	phase: f32 = 0
+	for i in 0 ..< n {
+		t := f32(i) / AUDIO_SR
+		env := math.exp(-t * 18)
+		freq := t < 0.06 ? f32(880.0) : f32(1320.0) // hop up a fifth partway through
+		phase += 2 * math.PI * freq / AUDIO_SR
+		buf[i] = math.sin(phase) * env * 0.35
 	}
 	return buf
 }
@@ -283,6 +300,7 @@ audio_init :: proc() {
 	g_audio.bank[.Jump] = make_jump()
 	g_audio.bank[.Hurt] = make_hurt()
 	g_audio.bank[.Eat] = make_eat()
+	g_audio.bank[.Pickup] = make_pickup()
 
 	g_audio.music[.Calm] = make_music_calm()
 	g_audio.music[.Combat] = make_music_combat()

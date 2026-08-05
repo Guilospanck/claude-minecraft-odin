@@ -1045,3 +1045,28 @@ test_wish_dir_strafe_stays_level :: proc(t: ^testing.T) {
 	testing.expect(t, wish.y == 0, "strafing (D) stays level regardless of pitch")
 	testing.expect(t, wish.x > 0.9, "strafes sideways")
 }
+
+@(test)
+test_spawn_never_in_sealed_cave_under_ocean :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// A sealed cave pocket at (8,8): a floor with two clear blocks above it
+	// (the exact shape the old code accepted as "valid ground"), but sealed
+	// under solid rock and then an ocean above that — never actually open to
+	// the sky. This is the real bug: spawning inside a cave under the ocean.
+	chunk_set(c, 8, 1, 8, .Stone) // cave floor; y=2,3 default to Air (cave interior)
+	for y in 4 ..< 41 {
+		chunk_set(c, 8, y, 8, .Stone) // rock separating the cave from the ocean
+	}
+	for y in 41 ..= int(SEA_LEVEL) {
+		chunk_set(c, 8, y, 8, .Water) // ocean above the rock
+	}
+	chunk_set(c, 12, 10, 8, .Grass) // genuine dry land elsewhere
+
+	pos := spawn_pos(&w)
+	bx := int(pos.x)
+	by := int(pos.y) - 1
+	bz := int(pos.z)
+	testing.expect(t, !(bx == 8 && bz == 8), "never spawns in the sealed cave pocket under the ocean")
+	testing.expect(t, world_block(&w, bx, by, bz) == .Grass, "spawns on the real dry land instead")
+}
