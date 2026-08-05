@@ -759,3 +759,90 @@ test_toast_shows_and_fades :: proc(t: ^testing.T) {
 	// no observable getter is exposed (draw-only); this just exercises the
 	// tick/show path without leaking or racing under the parallel test runner
 }
+
+@(test)
+test_armor_reduces_damage_and_wears :: proc(t: ^testing.T) {
+	p: Player
+	player_init(&p, Vec3{8.5, 40, 8.5})
+	p.hurt_timer = 0
+	h0 := p.health
+	player_damage(&p, 10, Vec3{0, 0, 0})
+	unarmored_loss := h0 - p.health
+
+	p2: Player
+	player_init(&p2, Vec3{8.5, 40, 8.5})
+	p2.hurt_timer = 0
+	p2.inventory[.Iron] = 20
+	for s in ArmorSlot {
+		armor_craft(&p2, s) // wood
+		armor_craft(&p2, s) // stone
+		armor_craft(&p2, s) // iron
+	}
+	testing.expect(t, armor_points(&p2) == 16, "full iron set is 16 armor points")
+	testing.expect(t, armor_reduction(&p2) == 0.8, "full iron set caps at 80% reduction")
+	dur0 := p2.armor_dur[.Helmet]
+	h1 := p2.health
+	player_damage(&p2, 10, Vec3{0, 0, 0})
+	armored_loss := h1 - p2.health
+	testing.expect(t, armored_loss < unarmored_loss, "armor reduces incoming damage")
+	testing.expect(t, armored_loss >= 1, "armor never fully negates a hit")
+	testing.expect(t, p2.armor_dur[.Helmet] == dur0 - 1, "armor wears by one point per hit")
+}
+
+@(test)
+test_weather_toggles_overworld_only :: proc(t: ^testing.T) {
+	w: World
+	world_init(&w, 1, .Nether)
+	defer free_test_world(&w)
+	w.weather_timer = 0
+	weather_tick(&w, 0.016)
+	testing.expect(t, !w.raining, "the nether never rains")
+
+	w2: World
+	world_init(&w2, 1, .Overworld)
+	defer free_test_world(&w2)
+	w2.raining = true
+	w2.weather_timer = 0.001
+	weather_tick(&w2, 0.01) // timer expires: a rainy spell always ends
+	testing.expect(t, !w2.raining, "a rain spell ends when its timer expires")
+	testing.expect(t, w2.weather_timer > 0, "a new timer is armed for the next state")
+}
+
+@(test)
+test_breeding_makes_a_baby :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	p.wheat = 2
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{8, 40, 8}, health = 6})
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{9, 40, 8}, health = 6})
+	ok1 := try_feed(&p, &w.mobs[0])
+	ok2 := try_feed(&p, &w.mobs[1])
+	testing.expect(t, ok1 && ok2, "feeding wheat to a cow is accepted")
+	testing.expect(t, p.wheat == 0, "each feeding consumes one wheat")
+	testing.expect(t, w.mobs[0].love_timer > 0 && w.mobs[1].love_timer > 0, "both cows enter love mode")
+
+	before := len(w.mobs)
+	pl: Player
+	mobs_update(&w, &pl, &w.mobs, 0.016)
+	testing.expect(t, len(w.mobs) == before + 1, "two nearby cows in love mode breed a baby")
+	found_baby := false
+	for m in w.mobs do if m.is_baby do found_baby = true
+	testing.expect(t, found_baby, "the new mob is flagged as a baby")
+}
+
+@(test)
+test_baby_grows_up :: proc(t: ^testing.T) {
+	m: Mob
+	m.kind = .Pig
+	m.is_baby = true
+	m.grow_timer = 1.0
+	m.pos = Vec3{8, 40, 8}
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	for _ in 0 ..< 5 {
+		mob_update(&w, &p, &m, 0.3) // 1.5s total, past the 1.0s grow_timer
+	}
+	testing.expect(t, !m.is_baby, "a baby grows into an adult once its timer elapses")
+}

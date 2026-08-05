@@ -57,8 +57,8 @@ ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 	}
 }
 
-// Tools tab content: each tool's tier + durability and its next upgrade;
-// press 1-4 to craft/upgrade.
+// Tools tab content: tools (1-4) then armor (5-8), each with tier + durability
+// and its next upgrade; press the number to craft/upgrade it.
 @(private = "file")
 ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
 	y := top
@@ -71,6 +71,38 @@ ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
 		text_draw(have, -0.38, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
 
 		next, block, count, ok := tool_next(p, k)
+		msg: string
+		col := Vec4{0.6, 0.7, 0.8, 1}
+		if ok {
+			afford := p.inventory[block] >= count
+			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
+			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
+		} else {
+			msg = "(max)"
+		}
+		text_draw(msg, 0.22, y, ch_w * 0.9, ch_h * 0.9, col)
+		y -= ch_h * 1.9
+	}
+
+	y -= ch_h * 0.6
+	text_draw(
+		fmt.tprintf("ARMOR: %d PTS - %d PCT REDUCTION", armor_points(p), int(armor_reduction(p) * 100)),
+		-0.5,
+		y,
+		ch_w,
+		ch_h,
+		Vec4{1, 0.88, 0.5, 1},
+	)
+	y -= ch_h * 1.9
+	for s in ArmorSlot {
+		tier := p.armor_tier[s]
+		have := tier > 0 \
+			? fmt.tprintf("%s %s  DUR %d", TIER_NAMES[tier], armor_name(s), p.armor_dur[s]) \
+			: fmt.tprintf("%s: none", armor_name(s))
+		text_draw(fmt.tprintf("%d", TOOL_KIND_COUNT + int(s) + 1), -0.5, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
+		text_draw(have, -0.38, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
+
+		next, block, count, ok := armor_next(p, s)
 		msg: string
 		col := Vec4{0.6, 0.7, 0.8, 1}
 		if ok {
@@ -422,7 +454,7 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	case .Craft:
 		action_hint = "1-8 TO CRAFT"
 	case .Tools:
-		action_hint = "1-4 TO CRAFT/UPGRADE"
+		action_hint = "1-4 TOOLS   5-8 ARMOR"
 	}
 	text_center(action_hint, hy0 - sz - 0.06, ch_w * 0.68, ch_h * 0.68, Vec4{0.75, 0.82, 0.92, 1})
 	text_center(

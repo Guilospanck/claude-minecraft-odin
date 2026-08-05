@@ -298,6 +298,9 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 		m := &mobs^[i]
 		// -yaw so the model's local -Z (its face) points along the heading.
 		base := linalg.matrix4_translate_f32(m.pos) * linalg.matrix4_rotate_f32(-m.yaw, Vec3{0, 1, 0})
+		if m.is_baby {
+			base = base * linalg.matrix4_scale_f32(Vec3{0.55, 0.55, 0.55}) // shrink around the feet
+		}
 		sw := math.sin(m.walk_phase)
 		for pt in mob_parts(m.kind) {
 			off := pt.offset

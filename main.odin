@@ -485,6 +485,35 @@ main :: proc() {
 		g_show_inventory = true
 		g_inv_tab = .Tools
 	}
+	// Debug: MC_ARMOR equips a mixed-tier set for a screenshot of the tab.
+	if os.get_env("MC_ARMOR", context.temp_allocator) != "" {
+		player.inventory[.Wood] = 20
+		player.inventory[.Stone] = 20
+		player.inventory[.Iron] = 20
+		armor_craft(&player, .Helmet)
+		armor_craft(&player, .Helmet)
+		armor_craft(&player, .Helmet) // iron helmet
+		armor_craft(&player, .Chestplate)
+		armor_craft(&player, .Chestplate) // stone chestplate
+		armor_craft(&player, .Boots) // wood boots
+		g_show_inventory = true
+		g_inv_tab = .Tools
+	}
+	// Debug: MC_RAIN forces rain on immediately (skips the weather timer).
+	if os.get_env("MC_RAIN", context.temp_allocator) != "" {
+		world.raining = true
+		world.weather_timer = 1000
+	}
+	// Debug: MC_BABY spawns an adult + baby cow pair ahead for comparison.
+	if os.get_env("MC_BABY", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 6
+		append(&world.mobs, Mob{kind = .Cow, pos = base + Vec3{-1, 0, 0}, health = 6})
+		append(
+			&world.mobs,
+			Mob{kind = .Cow, pos = base + Vec3{1, 0, 0}, is_baby = true, grow_timer = 60, health = 6},
+		)
+	}
 	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
 		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
 		ch: Chest
@@ -648,8 +677,13 @@ main :: proc() {
 				if g_inv_tab == .Craft && g_input.select > 0 {
 					recipe_try(&player, cur, g_input.select - 1)
 				}
-				if g_inv_tab == .Tools && g_input.select >= 1 && g_input.select <= len(ToolKind) {
-					tool_craft(&player, ToolKind(g_input.select - 1))
+				if g_inv_tab == .Tools {
+					if g_input.select >= 1 && g_input.select <= TOOL_KIND_COUNT {
+						tool_craft(&player, ToolKind(g_input.select - 1))
+					} else if g_input.select > TOOL_KIND_COUNT &&
+					   g_input.select <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
+						armor_craft(&player, ArmorSlot(g_input.select - 1 - TOOL_KIND_COUNT))
+					}
 				}
 			}
 			g_input.select = 0
@@ -716,6 +750,8 @@ main :: proc() {
 			mobs_update(cur, &player, &cur.mobs, dt)
 			items_update(cur, &player, &cur.items, dt)
 			arrows_update(cur, &player, dt)
+			weather_tick(cur, dt)
+			if cur.raining do rain_particles_spawn(&cur.particles, player.pos)
 			particles_update(cur, &cur.particles, dt)
 
 			// background music by context: nether > combat > calm

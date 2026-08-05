@@ -13,6 +13,7 @@ ToolKind :: enum {
 	Shovel,
 	Sword,
 }
+TOOL_KIND_COUNT :: len(ToolKind)
 
 // Durability granted at tier 1..3 (index 0 unused = "not owned").
 TOOL_DUR := [4]int{0, 60, 132, 251}

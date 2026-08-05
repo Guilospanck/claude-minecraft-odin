@@ -65,10 +65,15 @@ harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
 	toast_show(msg)
 }
 
-// R "use" key: context action on the block under the crosshair.
+// R "use" key: context action on the block (or feedable mob) under the
+// crosshair. A targetable mob always takes priority over the block behind it.
 try_interact :: proc(w: ^World, p: ^Player) {
 	eye := p.pos + Vec3{0, EYE_HEIGHT, 0}
 	dir := camera_front(p.yaw, p.pitch)
+
+	mob_idx, _ := mob_pick(&w.mobs, eye, dir, REACH)
+	if mob_idx >= 0 && try_feed(p, &w.mobs[mob_idx]) do return
+
 	hit := raycast(w, eye, dir, REACH)
 	if !hit.hit do return
 	tb := world_block(w, hit.bx, hit.by, hit.bz)

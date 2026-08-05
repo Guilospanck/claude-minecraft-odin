@@ -35,6 +35,8 @@ Player :: struct {
 	drown_timer: f32, // drowning-damage tick once oxygen is empty
 	tool_tier:   [ToolKind]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
 	tool_dur:    [ToolKind]int, // remaining durability for each tool
+	armor_tier:  [ArmorSlot]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
+	armor_dur:   [ArmorSlot]int, // remaining durability for each armor piece
 	mine_active: bool, // currently mining a block (LMB held)
 	mine_x, mine_y, mine_z: int, // the block being mined
 	mine_progress: f32, // seconds accumulated toward breaking it
@@ -93,9 +95,13 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 }
 
 // Apply damage with brief invulnerability + optional horizontal knockback.
+// Worn armor reduces the amount (see armor_reduction) and wears by one point.
 player_damage :: proc(p: ^Player, amount: int, dir: Vec3) {
 	if p.hurt_timer > 0 do return
-	p.health -= amount
+	reduced := int(f32(amount) * (1.0 - armor_reduction(p)) + 0.5)
+	if reduced < 1 && amount > 0 do reduced = 1 // armor can soften a hit, never fully negate it
+	if armor_points(p) > 0 do armor_wear(p)
+	p.health -= reduced
 	p.hurt_timer = 0.5
 	p.safe_timer = 0 // pause regen after taking a hit
 	if dir.x != 0 || dir.z != 0 {

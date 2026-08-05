@@ -226,6 +226,10 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		fog_start = 1.5
 		fog_end = 22.0
 		ambient *= 0.72
+	} else if w.raining {
+		fog_col = fog_col * 0.55 + Vec3{0.5, 0.54, 0.58} * 0.45 // grey overcast haze
+		fog_end *= 0.55 // shorter visibility in the rain
+		ambient *= 0.8
 	}
 
 	gl.ClearColor(fog_col.r, fog_col.g, fog_col.b, 1.0)

@@ -52,7 +52,14 @@ Mob :: struct {
 	attack_timer: f32, // hostile melee cooldown
 	burn_accum:   f32, // fractional daylight-burn damage
 	health:       int,
+	love_timer:   f32, // >0 while "in love" (fed Wheat), looking for a same-kind mate
+	is_baby:      bool, // renders smaller, has a shrunk hitbox, can't breed
+	grow_timer:   f32, // seconds until a baby becomes an adult
 }
+
+BREED_LOVE_DURATION :: f32(30.0) // how long a fed mob stays in love mode
+BREED_RADIUS :: f32(3.0) // mates must be within this many blocks
+BABY_GROW_TIME :: f32(60.0) // seconds for a baby to grow into an adult
 
 MobDims :: struct {
 	hw:    f32, // half width/depth
@@ -211,6 +218,13 @@ ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 	dims := MOB_DIMS[m.kind]
+	if m.is_baby {
+		dims.hw *= 0.6
+		dims.h *= 0.6
+		m.grow_timer -= dt
+		if m.grow_timer <= 0 do m.is_baby = false
+	}
+	if m.love_timer > 0 do m.love_timer -= dt
 
 	// Ghast flies freely (no gravity / terrain collision).
 	if m.kind == .Ghast {
@@ -487,6 +501,58 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 		mob_update(w, p, m, dt)
 		i += 1
 	}
+
+	breed_pass(mobs)
+}
+
+@(private = "file")
+contains_int :: proc(arr: []int, v: int) -> bool {
+	for x in arr do if x == v do return true
+	return false
+}
+
+// Same-kind adult mobs both in love mode (fed Wheat via try_feed) within
+// BREED_RADIUS make a baby. Indices (not pointers) are collected while
+// scanning, and every append happens in a separate pass afterward — append
+// can reallocate the backing array, so holding a &mobs^[i] pointer across it
+// would risk a stale/use-after-free read.
+@(private = "file")
+breed_pass :: proc(mobs: ^[dynamic]Mob) {
+	paired := make([dynamic]int, 0, 4, context.temp_allocator)
+	births := make([dynamic]Mob, 0, 4, context.temp_allocator)
+	for i in 0 ..< len(mobs^) {
+		if contains_int(paired[:], i) do continue
+		a := mobs^[i]
+		if a.love_timer <= 0 || a.is_baby do continue
+		for j in i + 1 ..< len(mobs^) {
+			if contains_int(paired[:], j) do continue
+			b := mobs^[j]
+			if b.love_timer <= 0 || b.is_baby || b.kind != a.kind do continue
+			dx := a.pos.x - b.pos.x
+			dz := a.pos.z - b.pos.z
+			if dx * dx + dz * dz > BREED_RADIUS * BREED_RADIUS do continue
+			mobs^[i].love_timer = 0
+			mobs^[j].love_timer = 0
+			append(&paired, i, j)
+			append(
+				&births,
+				Mob {
+					kind = a.kind,
+					pos = (a.pos + b.pos) * 0.5,
+					yaw = a.yaw,
+					is_baby = true,
+					grow_timer = BABY_GROW_TIME,
+					health = 6,
+				},
+			)
+			break
+		}
+	}
+	for baby in births {
+		if len(mobs^) >= MOB_CAP do break
+		append(mobs, baby)
+		audio_play(.Place, 0.4)
+	}
 }
 
 // --- interaction ---
@@ -526,6 +592,28 @@ mob_pick :: proc(mobs: ^[dynamic]Mob, eye, dir: Vec3, reach: f32) -> (int, f32) 
 		}
 	}
 	return best, best_t
+}
+
+// Feed Wheat to a passive adult mob (R while aiming at it): puts it in love
+// mode for BREED_LOVE_DURATION. If another same-kind mob is also in love mode
+// nearby, breed_pass (run every mobs_update) pairs them off into a baby.
+try_feed :: proc(p: ^Player, m: ^Mob) -> bool {
+	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast || m.is_baby {
+		return false
+	}
+	if p.wheat <= 0 {
+		toast_show("FEED: NEED WHEAT")
+		return true
+	}
+	if m.love_timer > 0 {
+		toast_show("ALREADY IN LOVE MODE")
+		return true
+	}
+	p.wheat -= 1
+	m.love_timer = BREED_LOVE_DURATION
+	audio_play(.Place, 0.4)
+	toast_show("FED - LOOKING FOR A MATE")
+	return true
 }
 
 // Hit a mob: knockback + damage; on death drop food (passive) and remove.
