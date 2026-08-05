@@ -164,6 +164,30 @@ key_down :: proc(k: i32) -> bool {
 	return glfw.GetKey(g_win, k) == glfw.PRESS
 }
 
+// Desired unit movement direction from orientation + which movement keys are
+// held. Forward follows the full look direction (pitch included) while
+// flying or swimming, so looking up/down and pressing W actually climbs or
+// dives; strafing (A/D) always stays level, and ground-walking forward stays
+// horizontal too (looking down while walking shouldn't dig you into the
+// floor). Pulled out as pure math (no GLFW dependency) so the fix is
+// directly unit-testable without a live window.
+compute_wish_dir :: proc(yaw, pitch: f32, fly, in_water, w, s, a, d: bool) -> Vec3 {
+	right := Vec3{math.cos(yaw), 0, math.sin(yaw)}
+	fwd := Vec3{math.sin(yaw), 0, -math.cos(yaw)}
+	if fly || in_water {
+		fwd = camera_front(yaw, pitch)
+	}
+	wish := Vec3{0, 0, 0}
+	if w do wish += fwd
+	if s do wish -= fwd
+	if d do wish += right
+	if a do wish -= right
+	if wish.x != 0 || wish.y != 0 || wish.z != 0 {
+		wish = linalg.normalize(wish)
+	}
+	return wish
+}
+
 // Mouse-look, block selection, fly toggle, and desired horizontal velocity.
 process_input :: proc(p: ^Player, dt: f32) {
 	sens := g_settings.mouse_sens
@@ -185,30 +209,36 @@ process_input :: proc(p: ^Player, dt: f32) {
 		g_input.select = 0
 	}
 
-	fwd := Vec3{math.sin(p.yaw), 0, -math.cos(p.yaw)}
-	right := Vec3{math.cos(p.yaw), 0, math.sin(p.yaw)}
-	wish := Vec3{0, 0, 0}
-	if key_down(glfw.KEY_W) do wish += fwd
-	if key_down(glfw.KEY_S) do wish -= fwd
-	if key_down(glfw.KEY_D) do wish += right
-	if key_down(glfw.KEY_A) do wish -= right
-	if wish.x != 0 || wish.z != 0 {
-		wish = linalg.normalize(wish)
-	}
+	wish := compute_wish_dir(
+		p.yaw,
+		p.pitch,
+		p.fly,
+		p.in_water,
+		key_down(glfw.KEY_W),
+		key_down(glfw.KEY_S),
+		key_down(glfw.KEY_A),
+		key_down(glfw.KEY_D),
+	)
 
 	speed := p.fly ? f32(FLY_SPEED) : (p.in_water ? f32(WALK_SPEED) * 0.6 : f32(WALK_SPEED))
 	p.vel.x = wish.x * speed
 	p.vel.z = wish.z * speed
 
 	if p.fly {
-		vy: f32 = 0
-		if key_down(glfw.KEY_SPACE) do vy += 1
-		if key_down(glfw.KEY_LEFT_SHIFT) do vy -= 1
-		p.vel.y = vy * f32(FLY_SPEED)
+		vy := wish.y * f32(FLY_SPEED) // from looking up/down while holding W/S
+		if key_down(glfw.KEY_SPACE) do vy += f32(FLY_SPEED)
+		if key_down(glfw.KEY_LEFT_SHIFT) do vy -= f32(FLY_SPEED)
+		p.vel.y = vy
 	} else if p.in_water {
-		// swim: space rises, shift dives, otherwise gently sink (physics)
-		if key_down(glfw.KEY_SPACE) do p.vel.y = 4.0
-		if key_down(glfw.KEY_LEFT_SHIFT) do p.vel.y = -4.0
+		if key_down(glfw.KEY_SPACE) {
+			p.vel.y = 4.0
+		} else if key_down(glfw.KEY_LEFT_SHIFT) {
+			p.vel.y = -4.0
+		} else if wish.y != 0 {
+			p.vel.y = wish.y * speed
+		}
+		// else: leave vel.y alone — physics_update's reduced gravity handles
+		// the gentle sink when there's no vertical input at all.
 	} else if key_down(glfw.KEY_SPACE) && p.on_ground {
 		p.vel.y = JUMP_SPEED
 		audio_play(.Jump, 0.5)

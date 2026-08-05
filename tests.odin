@@ -1011,3 +1011,37 @@ test_peaceful_mode_blocks_new_hostile_spawns :: proc(t: ^testing.T) {
 		testing.expect(t, !mob_is_hostile(m.kind), "no hostile ever spawns while peaceful is on")
 	}
 }
+
+@(test)
+test_wish_dir_follows_pitch_when_flying :: proc(t: ^testing.T) {
+	// looking straight up (+pitch) while flying and holding W should give a
+	// wish direction that's mostly vertical, not flat
+	up_wish := compute_wish_dir(0, 1.5, true, false, true, false, false, false)
+	testing.expect(t, up_wish.y > 0.9, "flying + looking up + W climbs steeply")
+
+	down_wish := compute_wish_dir(0, -1.5, true, false, true, false, false, false)
+	testing.expect(t, down_wish.y < -0.9, "flying + looking down + W dives steeply")
+}
+
+@(test)
+test_wish_dir_stays_horizontal_when_walking :: proc(t: ^testing.T) {
+	// the previous bug: pitch was ignored everywhere, which is actually the
+	// desired behaviour for ground walking (fly=false, in_water=false)
+	wish := compute_wish_dir(0, 1.5, false, false, true, false, false, false)
+	testing.expect(t, wish.y == 0, "walking forward stays flat regardless of pitch")
+	testing.expect(t, wish.z < -0.9, "still moves forward on the ground plane")
+}
+
+@(test)
+test_wish_dir_follows_pitch_when_swimming :: proc(t: ^testing.T) {
+	wish := compute_wish_dir(0, 1.0, false, true, true, false, false, false)
+	testing.expect(t, wish.y > 0.5, "swimming + looking up + W rises")
+}
+
+@(test)
+test_wish_dir_strafe_stays_level :: proc(t: ^testing.T) {
+	// strafing should never be affected by pitch, even while flying
+	wish := compute_wish_dir(0, 1.4, true, false, false, false, false, true)
+	testing.expect(t, wish.y == 0, "strafing (D) stays level regardless of pitch")
+	testing.expect(t, wish.x > 0.9, "strafes sideways")
+}
