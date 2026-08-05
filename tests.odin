@@ -1072,27 +1072,67 @@ test_spawn_never_in_sealed_cave_under_ocean :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_breed_at_cap_does_not_waste_love_mode :: proc(t: ^testing.T) {
+test_mob_old_age_kills_and_tags_death_cause :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)
-	// fill the world right up to MOB_CAP with unrelated passive mobs
-	for i in 0 ..< MOB_CAP {
-		append(&w.mobs, Mob{kind = .Chicken, pos = Vec3{f32(i) * 4, 40, 40}, health = 4})
+	m := Mob{kind = .Pig, pos = Vec3{8, 40, 8}, health = 1, age = MOB_OLD_AGE + 1}
+
+	mob_life_tick(&w, &m, 1.0)
+
+	testing.expect(t, m.health <= 0, "an old mob takes old-age damage")
+	testing.expect(t, m.death_cause == .OldAge, "the death is tagged as old age")
+}
+
+@(test)
+test_mob_grazing_relieves_hunger_and_turns_grass_to_dirt :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 39, 8, .Grass)
+	m := Mob{kind = .Cow, pos = Vec3{8.5, 40, 8.5}, health = 6, hunger_level = MOB_GRAZE_RELIEF}
+
+	mob_life_tick(&w, &m, 0.5)
+
+	testing.expect(t, m.hunger_level < MOB_GRAZE_RELIEF, "grazing lowers hunger_level")
+	testing.expect(t, world_block(&w, 8, 39, 8) == .Dirt, "grazing converts the grass beneath the mob to dirt")
+}
+
+@(test)
+test_mob_starves_without_grazing :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	// no grass anywhere nearby, so hunger only ever climbs
+	m := Mob{kind = .Chicken, pos = Vec3{8, 40, 8}, health = 1, hunger_level = MOB_STARVE_THRESHOLD + 1}
+
+	mob_life_tick(&w, &m, 1.0)
+
+	testing.expect(t, m.health <= 0, "a hungry mob takes starvation damage")
+	testing.expect(t, m.death_cause == .Starvation, "the death is tagged as starvation")
+}
+
+@(test)
+test_predation_damages_nearby_passive_mob :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	p: Player
+	// beyond ZOMBIE_DETECT, so ai_hostile falls back to predation instead of
+	// chasing the player; mob_update is exercised directly (not mobs_update)
+	// so this test doesn't race other tests' concurrent g_settings.peaceful
+	// mutation under odin test's multithreaded runner.
+	p.pos = Vec3{38, 40, 8}
+	append(&w.mobs, Mob{kind = .Zombie, pos = Vec3{8, 40, 8}, health = 12})
+	append(&w.mobs, Mob{kind = .Pig, pos = Vec3{9, 40, 8}, health = 6})
+
+	prey_health_before := w.mobs[1].health
+	mob_update(&w, &p, &w.mobs[0], 0, 1.0)
+
+	prey_idx := -1
+	for i in 0 ..< len(w.mobs) do if w.mobs[i].kind == .Pig do prey_idx = i
+	testing.expect(t, prey_idx >= 0, "the prey mob still exists after one predation tick")
+	if prey_idx >= 0 {
+		testing.expect(
+			t,
+			w.mobs[prey_idx].health < prey_health_before,
+			"a hostile within predation reach damages nearby passive prey",
+		)
 	}
-	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{8, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6})
-	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{9, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6})
-	// (this pushes the world one mob over MOB_CAP, matching "already full")
-
-	breed_pass(&w, &w.mobs, 0.016)
-	found_baby := false
-	for m in w.mobs do if m.is_baby do found_baby = true
-	testing.expect(t, !found_baby, "no baby is born while the world is at the mob cap")
-
-	cows_still_in_love := 0
-	for m in w.mobs do if m.kind == .Cow && m.love_timer > 0 do cows_still_in_love += 1
-	testing.expect(
-		t,
-		cows_still_in_love == 2,
-		"love mode is preserved (not silently spent) when a birth is blocked by the cap",
-	)
 }

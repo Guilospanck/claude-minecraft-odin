@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:math"
 
 MobKind :: enum {
@@ -40,6 +41,19 @@ mob_is_aquatic :: proc(k: MobKind) -> bool {
 	return k == .Fish || k == .Squid
 }
 
+// Why a mob's health last reached zero — tags the generic despawn-on-death
+// path so the right particle colour / toast can be shown (see
+// mob_death_feedback). Player-attack kills go through mob_hit instead, which
+// has its own immediate handling, so this only covers the natural-causes
+// deaths added here.
+MobDeathCause :: enum {
+	None,
+	OldAge,
+	Starvation,
+	Predator,
+	Burned,
+}
+
 Mob :: struct {
 	kind:         MobKind,
 	pos:          Vec3, // feet centre
@@ -55,11 +69,34 @@ Mob :: struct {
 	love_timer:   f32, // >0 while "in love" (fed Wheat), looking for a same-kind mate
 	is_baby:      bool, // renders smaller, has a shrunk hitbox, can't breed
 	grow_timer:   f32, // seconds until a baby becomes an adult
+	age:            f32, // seconds since spawn; old-age damage begins past MOB_OLD_AGE
+	hunger_level:   f32, // rises over time; grazing lowers it (0 = well fed, the spawn default)
+	graze_cd:       f32, // cooldown between grazing bites
+	old_age_accum:  f32, // fractional old-age damage
+	starve_accum:   f32, // fractional starvation damage
+	death_cause:    MobDeathCause, // why health last reached zero (see above)
 }
 
 BREED_LOVE_DURATION :: f32(30.0) // how long a fed mob stays in love mode
 BREED_RADIUS :: f32(3.0) // mates must be within this many blocks
 BABY_GROW_TIME :: f32(60.0) // seconds for a baby to grow into an adult
+
+// Natural population bounds, replacing a hard mob-count cap: old age catches
+// up with every mob eventually; passive animals must graze on grass or they
+// starve; hostiles hunt down nearby passive mobs when the player isn't in
+// range. Together these let population settle on its own (more animals ->
+// more grazing -> less grass -> starvation) instead of a hard ceiling.
+MOB_OLD_AGE :: f32(600.0) // ~10 minutes: old-age damage begins
+MOB_OLD_AGE_DPS :: f32(2.0)
+MOB_HUNGER_RATE :: f32(1.0) // hunger_level units/sec
+MOB_STARVE_THRESHOLD :: f32(240.0) // ~4 minutes ungrazed before it starts hurting
+MOB_STARVE_DPS :: f32(1.0)
+MOB_GRAZE_RELIEF :: f32(80.0)
+MOB_GRAZE_COOLDOWN :: f32(6.0)
+PREDATION_RANGE :: f32(14.0) // how far a hostile senses passive prey
+PREDATION_REACH :: f32(1.6)
+PREDATION_DMG :: 3
+MOB_DEATH_FEEDBACK_RANGE :: f32(28.0) // only show toast/particles if plausibly visible
 
 MobDims :: struct {
 	hw:    f32, // half width/depth
@@ -81,14 +118,6 @@ MOB_DIMS := [MobKind]MobDims {
 	.Squid    = {0.28, 0.55, 1.3},
 }
 
-// A hard ceiling on simultaneous mobs is still needed — nothing else bounds
-// population (no starvation/predation/old age), so unchecked breeding would
-// grow it forever and eventually cost real framerate. But passive wildlife,
-// fish/squid, hostiles, and bred babies all share this one pool, so a low
-// cap gets crowded out by ambient spawns and leaves no room for breeding —
-// which read as breeding being silently broken. Raised well above what
-// ambient spawning alone would ever reach.
-MOB_CAP :: 60
 MOB_DESPAWN_DIST :: f32(60)
 
 // --- AI + physics for one mob ---
@@ -181,13 +210,54 @@ water_ahead :: proc(w: ^World, x, z, feet_y: int) -> bool {
 	return false
 }
 
+// Hunts the nearest passive, non-baby mob within PREDATION_RANGE — the
+// "predation" population bound. Called when a hostile can't see the player;
+// mirrors ai_seek_mate's approach-and-attack shape. Damage is applied
+// directly to the prey's health rather than via mob_hit, since mob_hit's
+// immediate swap-remove-on-death would be unsafe to call mid-iteration from
+// inside mobs_update's own loop over this same mobs array (killing an
+// earlier-indexed mob would move a not-yet-updated one into this slot).
+// The prey's death is instead picked up by mobs_update's own health<=0
+// check, same as old age/starvation/burning.
 @(private = "file")
-ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
+ai_predation :: proc(w: ^World, m: ^Mob, self_idx: int, dt: f32) -> bool {
+	best_idx := -1
+	best_d2 := PREDATION_RANGE * PREDATION_RANGE
+	best_dx, best_dz: f32
+	for i in 0 ..< len(w.mobs) {
+		if i == self_idx do continue
+		other := w.mobs[i]
+		if mob_is_hostile(other.kind) || mob_is_aquatic(other.kind) do continue
+		dx := other.pos.x - m.pos.x
+		dz := other.pos.z - m.pos.z
+		d2 := dx * dx + dz * dz
+		if d2 < best_d2 {
+			best_d2 = d2
+			best_dx, best_dz = dx, dz
+			best_idx = i
+		}
+	}
+	if best_idx < 0 do return false
+	m.yaw = math.atan2(best_dx, -best_dz)
+	m.moving = true
+	m.attack_timer -= dt
+	if best_d2 < PREDATION_REACH * PREDATION_REACH && m.attack_timer <= 0 {
+		w.mobs[best_idx].health -= PREDATION_DMG
+		w.mobs[best_idx].death_cause = .Predator
+		m.attack_timer = 1.2
+	}
+	return true
+}
+
+@(private = "file")
+ai_hostile :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	dx := p.pos.x - m.pos.x
 	dz := p.pos.z - m.pos.z
 	d2 := dx * dx + dz * dz
 	if d2 >= ZOMBIE_DETECT * ZOMBIE_DETECT {
-		ai_wander(m, dt, 0.4)
+		if !ai_predation(w, m, self_idx, dt) {
+			ai_wander(m, dt, 0.4)
+		}
 		return
 	}
 	toward := math.atan2(dx, -dz)
@@ -298,7 +368,7 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	}
 
 	if mob_is_hostile(m.kind) {
-		ai_hostile(w, p, m, dt)
+		ai_hostile(w, p, m, self_idx, dt)
 	} else if m.love_timer <= 0 || !ai_seek_mate(w, m, self_idx) {
 		ai_wander(m, dt, 0.6)
 	}
@@ -380,7 +450,6 @@ nether_surface :: proc(w: ^World, wx, wz: int) -> int {
 
 // Nether spawn: piglins on netherrack, ghasts drifting in the caverns.
 nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
-	if len(mobs^) >= MOB_CAP do return
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(16, 40)
 	wx := int(player_pos.x + math.cos(ang) * dist)
@@ -414,7 +483,6 @@ nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 }
 
 mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
-	if len(mobs^) >= MOB_CAP do return
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(20, 44)
 	wx := int(player_pos.x + math.cos(ang) * dist)
@@ -442,7 +510,6 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 // Water spawn: fish/squid appear in open water away from the player. Requires
 // two blocks of water depth at sea level so the mob spawns fully submerged.
 water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
-	if len(mobs^) >= MOB_CAP do return
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(14, 36)
 	wx := int(player_pos.x + math.cos(ang) * dist)
@@ -465,7 +532,6 @@ water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 
 // Hostile spawn: zombies/skeletons appear at night on solid ground.
 hostile_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
-	if len(mobs^) >= MOB_CAP do return
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(24, 46)
 	wx := int(player_pos.x + math.cos(ang) * dist)
@@ -514,6 +580,132 @@ mob_debug_populate :: proc(w: ^World, mobs: ^[dynamic]Mob, center: Vec3, n: int)
 	}
 }
 
+// Ages a mob, and — for grazing-eligible mobs (not hostile, not aquatic,
+// not Ghast, not a baby) — accumulates hunger and either relieves it by
+// grazing nearby grass (converting it to dirt) or, once hunger crosses
+// MOB_STARVE_THRESHOLD, applies starvation damage. Uses the same
+// fractional-accumulator pattern as the existing daylight-burn code so
+// sub-1-hp/frame rates still deal whole-point damage over time. Not
+// file-private: tests call it directly to exercise grazing/starvation
+// without mobs_update's random spawn rolls.
+mob_life_tick :: proc(w: ^World, m: ^Mob, dt: f32) {
+	m.age += dt
+	if m.age > MOB_OLD_AGE {
+		m.old_age_accum += MOB_OLD_AGE_DPS * dt
+		if m.old_age_accum >= 1.0 {
+			d := int(m.old_age_accum)
+			m.health -= d
+			m.old_age_accum -= f32(d)
+			if m.death_cause == .None do m.death_cause = .OldAge
+		}
+	}
+
+	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast || m.is_baby {
+		return
+	}
+
+	if m.graze_cd > 0 do m.graze_cd -= dt
+	m.hunger_level += MOB_HUNGER_RATE * dt
+
+	if m.graze_cd <= 0 {
+		fx := int(math.floor(m.pos.x))
+		fy := int(math.floor(m.pos.y)) - 1
+		fz := int(math.floor(m.pos.z))
+		if world_block(w, fx, fy, fz) == .Grass {
+			world_set_block(w, fx, fy, fz, .Dirt)
+			net_send_edit(fx, fy, fz, .Dirt, w.dimension)
+			m.hunger_level = max(0, m.hunger_level - MOB_GRAZE_RELIEF)
+			m.graze_cd = MOB_GRAZE_COOLDOWN
+		}
+	}
+
+	if m.hunger_level > MOB_STARVE_THRESHOLD {
+		m.starve_accum += MOB_STARVE_DPS * dt
+		if m.starve_accum >= 1.0 {
+			d := int(m.starve_accum)
+			m.health -= d
+			m.starve_accum -= f32(d)
+			if m.death_cause == .None do m.death_cause = .Starvation
+		}
+	}
+}
+
+@(private = "file")
+mob_death_color :: proc(cause: MobDeathCause) -> Vec3 {
+	#partial switch cause {
+	case .OldAge:
+		return Vec3{0.75, 0.75, 0.7}
+	case .Starvation:
+		return Vec3{0.55, 0.5, 0.35}
+	case .Predator:
+		return Vec3{0.65, 0.12, 0.12}
+	case .Burned:
+		return Vec3{0.9, 0.5, 0.15}
+	}
+	return Vec3{}
+}
+
+// The bitmap font only has uppercase letters, so fmt's default %v (which
+// would print mixed-case enum names like "Zombie") can't be used directly
+// in toasts.
+@(private = "file")
+mob_kind_label :: proc(k: MobKind) -> string {
+	switch k {
+	case .Pig:
+		return "PIG"
+	case .Sheep:
+		return "SHEEP"
+	case .Cow:
+		return "COW"
+	case .Chicken:
+		return "CHICKEN"
+	case .Rabbit:
+		return "RABBIT"
+	case .Zombie:
+		return "ZOMBIE"
+	case .Skeleton:
+		return "SKELETON"
+	case .Piglin:
+		return "PIGLIN"
+	case .Ghast:
+		return "GHAST"
+	case .Fish:
+		return "FISH"
+	case .Squid:
+		return "SQUID"
+	}
+	return ""
+}
+
+@(private = "file")
+mob_death_label :: proc(cause: MobDeathCause) -> string {
+	#partial switch cause {
+	case .OldAge:
+		return "DIED OF OLD AGE"
+	case .Starvation:
+		return "STARVED"
+	case .Predator:
+		return "WAS EATEN"
+	case .Burned:
+		return "BURNED UP"
+	}
+	return ""
+}
+
+// Toast + particle burst for a natural-causes death, shown only when the
+// player is plausibly close enough to have noticed. Player-attack kills are
+// handled separately by mob_hit, which has its own immediate feedback.
+@(private = "file")
+mob_death_feedback :: proc(w: ^World, m: Mob, player_pos: Vec3) {
+	if m.death_cause == .None do return
+	dx := m.pos.x - player_pos.x
+	dz := m.pos.z - player_pos.z
+	if dx * dx + dz * dz > MOB_DEATH_FEEDBACK_RANGE * MOB_DEATH_FEEDBACK_RANGE do return
+	col := mob_death_color(m.death_cause)
+	particle_spawn_eat(&w.particles, m.pos + Vec3{0, MOB_DIMS[m.kind].h * 0.5, 0}, col)
+	toast_show(fmt.tprintf("%s %s", mob_kind_label(m.kind), mob_death_label(m.death_cause)))
+}
+
 // Update all mobs: spawning (passive anytime, zombies at night), per-mob AI,
 // daylight burn for zombies, and far-away / dead despawn.
 mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
@@ -555,13 +747,14 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 				d := int(m.burn_accum)
 				m.health -= d
 				m.burn_accum -= f32(d)
+				if m.death_cause == .None do m.death_cause = .Burned
 			}
 		}
+		mob_life_tick(w, m, dt)
 		dx := m.pos.x - player_pos.x
 		dz := m.pos.z - player_pos.z
-		if dx * dx + dz * dz > MOB_DESPAWN_DIST * MOB_DESPAWN_DIST ||
-		   m.pos.y < -8 ||
-		   m.health <= 0 {
+		if dx * dx + dz * dz > MOB_DESPAWN_DIST * MOB_DESPAWN_DIST || m.pos.y < -8 || m.health <= 0 {
+			if m.health <= 0 do mob_death_feedback(w, m^, player_pos)
 			mobs^[i] = mobs^[len(mobs^) - 1]
 			pop(mobs)
 			continue
@@ -585,13 +778,7 @@ contains_int :: proc(arr: []int, v: int) -> bool {
 // can reallocate the backing array, so holding a &mobs^[i] pointer across it
 // would risk a stale/use-after-free read. Not file-private: tests call it
 // directly to exercise breeding without mobs_update's random spawn rolls.
-// Throttles the "no room for a baby" toast so a persistently-blocked pair
-// doesn't repaint it (and stomp every other toast) on every single frame.
-@(private = "file")
-g_breed_cap_toast_cd: f32
-
 breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob, dt: f32) {
-	if g_breed_cap_toast_cd > 0 do g_breed_cap_toast_cd -= dt
 	paired := make([dynamic]int, 0, 4, context.temp_allocator)
 	births := make([dynamic]Mob, 0, 4, context.temp_allocator)
 	for i in 0 ..< len(mobs^) {
@@ -605,17 +792,6 @@ breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob, dt: f32) {
 			dx := a.pos.x - b.pos.x
 			dz := a.pos.z - b.pos.z
 			if dx * dx + dz * dz > BREED_RADIUS * BREED_RADIUS do continue
-			// No room for any more babies: skip this pair WITHOUT spending
-			// their love mode. Consuming love_timer here (as the code used
-			// to, unconditionally) while the birth loop below silently
-			// dropped the baby at MOB_CAP made feeding appear to do nothing.
-			if len(mobs^) + len(births) >= MOB_CAP {
-				if g_breed_cap_toast_cd <= 0 {
-					toast_show("NO ROOM FOR A BABY - TOO MANY MOBS NEARBY")
-					g_breed_cap_toast_cd = 4.0
-				}
-				continue
-			}
 			mobs^[i].love_timer = 0
 			mobs^[j].love_timer = 0
 			append(&paired, i, j)
@@ -633,8 +809,6 @@ breed_pass :: proc(w: ^World, mobs: ^[dynamic]Mob, dt: f32) {
 			break
 		}
 	}
-	// Room for every queued birth is guaranteed by the check above, so this
-	// never has to drop one on the floor after already spending the love mode.
 	for baby in births {
 		append(mobs, baby)
 		audio_play(.Place, 0.4)

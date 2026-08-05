@@ -549,6 +549,15 @@ main :: proc() {
 		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 2])
 		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 1])
 	}
+	// Debug: MC_DEATH spawns a Pig already past MOB_OLD_AGE with 1 hp, so the
+	// old-age death toast/particle burst fires on the very next mobs_update.
+	if os.get_env("MC_DEATH", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		append(
+			&world.mobs,
+			Mob{kind = .Pig, pos = player.pos + fwd * 4, health = 1, age = MOB_OLD_AGE + 1},
+		)
+	}
 	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
 		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
 		ch: Chest
