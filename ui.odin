@@ -182,7 +182,10 @@ ui_draw_settings :: proc(fbw, fbh: int) {
 		fmt.tprintf("FOV: %d", int(g_settings.fov_deg)),
 		fmt.tprintf("RENDER DIST: %d", g_settings.render_radius),
 		fmt.tprintf("VOLUME: %d", int(g_settings.volume * 100)),
-		fmt.tprintf("DAY LENGTH: %dS", int(g_settings.day_length)),
+		fmt.tprintf("REAL TIME DAY/NIGHT: %s", g_settings.real_time ? "ON" : "OFF"),
+		g_settings.real_time \
+			? "DAY LENGTH: (REAL TIME ON)" \
+			: fmt.tprintf("DAY LENGTH: %dS", int(g_settings.day_length)),
 	}
 	y: f32 = 0.36
 	for i in 0 ..< SETTINGS_COUNT {

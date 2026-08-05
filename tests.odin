@@ -846,3 +846,39 @@ test_baby_grows_up :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !m.is_baby, "a baby grows into an adult once its timer elapses")
 }
+
+@(test)
+test_hunger_drains_slowly :: proc(t: ^testing.T) {
+	p: Player
+	player_init(&p, Vec3{8.5, 40, 8.5})
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	// standing still for 60 simulated seconds should lose only a small sliver
+	// of hunger, not empty it (regression: it used to drain fully in under a
+	// minute even standing still)
+	for _ in 0 ..< 3600 {
+		player_tick(&w, &p, 1.0 / 60.0)
+	}
+	testing.expect(t, p.hunger > f32(HUNGER_MAX) - 2, "hunger barely drains over 60s standing still")
+}
+
+@(test)
+test_settings_real_time_toggle :: proc(t: ^testing.T) {
+	saved := g_settings.real_time
+	defer g_settings.real_time = saved
+	saved_sel := g_settings_sel
+	defer g_settings_sel = saved_sel
+
+	g_settings_sel = 4 // the REAL TIME DAY/NIGHT row
+	g_settings.real_time = true
+	settings_adjust(1)
+	testing.expect(t, !g_settings.real_time, "adjusting the real-time row toggles it off")
+	settings_adjust(-1)
+	testing.expect(t, g_settings.real_time, "adjusting it again toggles it back on")
+}
+
+@(test)
+test_real_time_fraction_in_range :: proc(t: ^testing.T) {
+	f := real_time_fraction()
+	testing.expect(t, f >= 0 && f < 1, "real_time_fraction returns a [0,1) day fraction")
+}

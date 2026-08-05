@@ -218,9 +218,11 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 		if p.eat_timer < 0 do p.eat_timer = 0
 	}
 
-	// hunger drains over time, faster while walking
-	drain: f32 = 0.25
-	if p.on_ground && !p.fly && (abs(p.vel.x) + abs(p.vel.z)) > 0.1 do drain += 0.30
+	// Hunger drains slowly over a play session (~20min idle, ~7min walking
+	// nonstop), faster while walking. Previously drained fully in under a
+	// minute, which felt punishing rather than a long-session survival timer.
+	drain: f32 = 0.015
+	if p.on_ground && !p.fly && (abs(p.vel.x) + abs(p.vel.z)) > 0.1 do drain += 0.035
 	p.hunger -= drain * dt
 	if p.hunger < 0 do p.hunger = 0
 

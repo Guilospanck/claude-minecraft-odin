@@ -592,6 +592,8 @@ main :: proc() {
 
 		if fixed_time >= 0 {
 			world.time_of_day = fixed_time
+		} else if g_settings.real_time {
+			world.time_of_day = real_time_fraction()
 		} else {
 			world.time_of_day += dt / g_settings.day_length
 			if world.time_of_day >= 1 do world.time_of_day -= 1

@@ -2,8 +2,6 @@ package main
 
 import "core:math"
 
-DAY_LENGTH :: f32(300.0) // seconds for one full day/night cycle
-
 @(private = "file")
 NIGHT_SKY :: Vec3{0.02, 0.03, 0.08}
 @(private = "file")

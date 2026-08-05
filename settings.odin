@@ -6,7 +6,8 @@ Settings :: struct {
 	fov_deg:       f32,
 	render_radius: int,
 	volume:        f32,
-	day_length:    f32,
+	day_length:    f32, // used only when real_time is off
+	real_time:     bool, // sync day/night to the player's actual local time
 }
 
 g_settings := Settings {
@@ -14,13 +15,14 @@ g_settings := Settings {
 	fov_deg       = 70,
 	render_radius = 6,
 	volume        = 1.0,
-	day_length    = 300,
+	day_length    = 1800,
+	real_time     = true,
 }
 
 g_show_settings: bool
 g_settings_sel: int
 
-SETTINGS_COUNT :: 5
+SETTINGS_COUNT :: 6
 
 settings_adjust :: proc(delta: int) {
 	d := f32(delta)
@@ -34,6 +36,8 @@ settings_adjust :: proc(delta: int) {
 	case 3:
 		g_settings.volume = clamp(g_settings.volume + d * 0.1, 0, 1)
 	case 4:
-		g_settings.day_length = clamp(g_settings.day_length + d * 30, 60, 1200)
+		g_settings.real_time = !g_settings.real_time // either direction toggles
+	case 5:
+		g_settings.day_length = clamp(g_settings.day_length + d * 120, 300, 7200)
 	}
 }
