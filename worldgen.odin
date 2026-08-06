@@ -166,13 +166,25 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome,
 	river_band := wg_smoothstep(0.14, 0.0, ra) // 0 well outside the channel .. 1 at its centre
 	lowland := wg_smoothstep(f32(SEA_LEVEL) + 30.0, f32(SEA_LEVEL) + 10.0, f32(h)) // 0 in the mountains .. 1 in true lowlands
 	carve := river_band * lowland
+	river_carve = carve // returned as-is; used unboosted by the ravine-suppression gate below
 	if carve > 0 {
 		target := SEA_LEVEL - 3
 		if h > target {
-			h = int(f32(h) * (1 - carve) + f32(target) * carve)
+			// Boosted (not the raw carve) for the height blend specifically:
+			// a separate "give the river extra water above its own carved
+			// floor" system was tried here twice and both times reinvented
+			// the vertical-wall bug in a new place, because it let two
+			// different fields (height vs. water level) disagree about
+			// where the channel's edge was. Driving both from the *same*
+			// single height value is the only way they can't disagree —
+			// so instead, the carve is boosted before it blends h toward
+			// target, so a moderately (not just maximally) carved column
+			// still dips below SEA_LEVEL and gets water from the one plain
+			// "y <= SEA_LEVEL" rule everywhere else already uses.
+			height_carve := clamp(carve * 1.8, 0.0, 1.0)
+			h = int(f32(h) * (1 - height_carve) + f32(target) * height_carve)
 		}
 	}
-	river_carve = carve
 
 	if h < 4 do h = 4
 	if h > CHUNK_H - 8 do h = CHUNK_H - 8
@@ -213,27 +225,6 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			surf := surface_block(biome, h)
 			sub := subsurface_block(biome)
 
-			// A river channel needs its own local water table, not just "is
-			// this column below global sea level": the smoothstepped carve
-			// (see world_height_and_biome) only partially lowers h through
-			// its transition band, so a hillside river can end up with h
-			// still above SEA_LEVEL there — a visible carved trench with no
-			// water in it, i.e. a river that looks like it just stops.
-			//
-			// A hard "carve > 0.15 -> +3 water" threshold here made exactly
-			// the same mistake the vertical-canyon-wall bug did, just moved
-			// into the water fill instead of the height carve: the river
-			// noise is very low-frequency, so "carve > 0.15" can hold true
-			// across huge, nearly-uniform swaths of the map at once (not a
-			// narrow band), and every one of those columns jumped from 0 to
-			// +3 blocks of water together the instant they crossed the
-			// threshold — a literal flooded plateau with a sharp edge, i.e.
-			// a wall of water, not a river. Scaling the extra water
-			// continuously with the carve strength itself (same field that
-			// shaped the height) means neighbouring columns can only ever
-			// differ by one block, so it reads as ordinary terracing.
-			river_water_top := h - 1 + int(river_carve * 3.0)
-
 			for y in 0 ..< CHUNK_H {
 				b: BlockId = .Air
 				if y == 0 {
@@ -246,7 +237,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 					} else {
 						b = .Stone
 					}
-				} else if y <= SEA_LEVEL || y <= river_water_top {
+				} else if y <= SEA_LEVEL {
 					b = .Water
 				}
 
