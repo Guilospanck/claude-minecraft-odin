@@ -273,12 +273,24 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 					}
 				}
 
-				// Ore in connected veins, only deep underground (shows in
-				// cave/ravine walls since it's placed after carving).
-				if b == .Stone && y < 42 {
+				// Ore in connected veins (shows in cave/ravine walls since
+				// it's placed after carving), one shared noise field
+				// bucketed into depth tiers instead of a single generic
+				// type: coal is common and shallow, iron mid-depth
+				// (unchanged from before), gold deeper and rarer, diamond
+				// deepest and rarest. Checked deepest-tier-first so a block
+				// that just misses the diamond threshold still gets a
+				// chance at gold/iron/coal instead of nothing.
+				if b == .Stone {
 					ov := fbm3(seed + 777, fx * 0.08, f32(y) * 0.08, fz * 0.08, 2)
-					if ov > 0.74 {
+					if y < 14 && ov > 0.84 {
+						b = .DiamondOre
+					} else if y < 24 && ov > 0.80 {
+						b = .GoldOre
+					} else if y < 42 && ov > 0.74 {
 						b = .Ore
+					} else if y < 90 && ov > 0.68 {
+						b = .CoalOre
 					}
 				}
 
@@ -459,6 +471,11 @@ oak_or_birch :: proc(hsh: u64) -> TreeKind {
 	return (hsh >> 20) % 4 == 0 ? TreeKind.Birch : TreeKind.Oak
 }
 
+@(private = "file")
+flower_kind :: proc(hsh: u64) -> BlockId {
+	return (hsh >> 15) % 2 == 0 ? BlockId.FlowerRed : BlockId.FlowerYellow
+}
+
 // Per-biome surface decoration: trees (density/type varies) and desert cacti.
 @(private = "file")
 generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
@@ -481,11 +498,19 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					for i in 0 ..< 1 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
 				}
 			case .Forest:
-				if surf == .Grass && r < 45 do place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+				if surf == .Grass && r < 45 {
+					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+				} else if surf == .Grass && r < 70 {
+					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				}
 			case .Swamp:
 				if surf == .Grass && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Plains:
-				if surf == .Grass && r < 8 do place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+				if surf == .Grass && r < 8 {
+					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+				} else if surf == .Grass && r < 40 {
+					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				}
 			case .Savanna:
 				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Taiga:

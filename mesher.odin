@@ -260,8 +260,24 @@ emit_door :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, d: Door, b
 }
 
 @(private = "file")
-emit_fence :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
-	emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0, 1.0, 0.4, 0.6, bl) // a slender centred post
+emit_fence :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
+	emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0, 1.0, 0.4, 0.6, bl) // the post
+	// A horizontal rail toward each neighbouring fence post (only, so a
+	// lone post doesn't sprout stubs pointing at nothing) — each side's
+	// rail reaches to the cell edge, so two adjacent posts' rails meet in
+	// the middle and read as one connected line instead of isolated posts.
+	if world_block(w, wx - 1, wy, wz) == .Fence {
+		emit_box(arr, b, wx, wy, wz, 0, 0.5, 0.35, 0.55, 0.4, 0.6, bl)
+	}
+	if world_block(w, wx + 1, wy, wz) == .Fence {
+		emit_box(arr, b, wx, wy, wz, 0.5, 1.0, 0.35, 0.55, 0.4, 0.6, bl)
+	}
+	if world_block(w, wx, wy, wz - 1) == .Fence {
+		emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0.35, 0.55, 0, 0.5, bl)
+	}
+	if world_block(w, wx, wy, wz + 1) == .Fence {
+		emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0.35, 0.55, 0.5, 1.0, bl)
+	}
 }
 
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
@@ -297,7 +313,7 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				}
 				if b == .Fence {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
-					emit_fence(&md.opaque, b, wx, y, wz, bl)
+					emit_fence(w, &md.opaque, b, wx, y, wz, bl)
 					continue
 				}
 				if block_is_lowbox(b) {

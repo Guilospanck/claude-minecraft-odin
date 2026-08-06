@@ -471,35 +471,48 @@ near_furnace :: proc(w: ^World, p: ^Player) -> bool {
 	return false
 }
 
-// Smelting near a placed furnace: Wood is fuel; Ore -> Iron, Sand -> Glass.
+// Smelting near a placed furnace: Wood or Coal Ore is fuel (Wood preferred
+// when both are on hand); Ore -> Iron, Gold Ore -> Gold, Sand -> Glass.
+// Diamond Ore deliberately doesn't smelt — it's used raw for crafting, same
+// as breaking it works in real Minecraft.
 try_smelt :: proc(w: ^World, p: ^Player) {
 	if !near_furnace(w, p) {
 		toast_show("SMELT: STAND NEXT TO A FURNACE")
 		return
 	}
-	if p.inventory[.Wood] < 1 {
-		toast_show("SMELT: NEED WOOD AS FUEL")
+	fuel: BlockId
+	if p.inventory[.Wood] >= 1 {
+		fuel = .Wood
+	} else if p.inventory[.CoalOre] >= 1 {
+		fuel = .CoalOre
+	} else {
+		toast_show("SMELT: NEED WOOD OR COAL AS FUEL")
 		return
 	}
 	if p.raw_food >= 1 {
-		p.inventory[.Wood] -= 1
+		p.inventory[fuel] -= 1
 		p.raw_food -= 1
 		p.cooked_food += 1
 		toast_show(fmt.tprintf("COOKED FOOD (HAVE %d)", p.cooked_food))
 		return
 	}
 	if p.inventory[.Ore] >= 1 {
-		p.inventory[.Wood] -= 1
+		p.inventory[fuel] -= 1
 		p.inventory[.Ore] -= 1
 		p.inventory[.Iron] += 1
 		toast_show(fmt.tprintf("SMELTED IRON (HAVE %d)", p.inventory[.Iron]))
+	} else if p.inventory[.GoldOre] >= 1 {
+		p.inventory[fuel] -= 1
+		p.inventory[.GoldOre] -= 1
+		p.inventory[.Gold] += 1
+		toast_show(fmt.tprintf("SMELTED GOLD (HAVE %d)", p.inventory[.Gold]))
 	} else if p.inventory[.Sand] >= 1 {
-		p.inventory[.Wood] -= 1
+		p.inventory[fuel] -= 1
 		p.inventory[.Sand] -= 1
 		p.inventory[.Glass] += 1
 		toast_show(fmt.tprintf("SMELTED GLASS (HAVE %d)", p.inventory[.Glass]))
 	} else {
-		toast_show("SMELT: NEED ORE OR SAND")
+		toast_show("SMELT: NEED ORE, GOLD ORE, OR SAND")
 	}
 }
 

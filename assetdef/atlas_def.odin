@@ -40,3 +40,9 @@ CHEST      :: Tile{11, 1}
 RED_SAND   :: Tile{0, 2}
 DOOR       :: Tile{1, 2}
 FENCE      :: Tile{2, 2}
+COAL_ORE     :: Tile{3, 2}
+GOLD_ORE     :: Tile{4, 2}
+DIAMOND_ORE  :: Tile{5, 2}
+GOLD         :: Tile{6, 2}
+FLOWER_RED   :: Tile{7, 2} // sprite
+FLOWER_YELLOW :: Tile{8, 2} // sprite

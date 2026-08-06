@@ -9,6 +9,7 @@ MobKind :: enum {
 	Cow,
 	Chicken,
 	Rabbit,
+	Horse,
 	Zombie,
 	Skeleton,
 	Piglin, // nether melee hostile
@@ -18,7 +19,7 @@ MobKind :: enum {
 }
 
 MOB_KIND_COUNT :: len(MobKind)
-PASSIVE_COUNT :: 5 // Pig..Rabbit; hostiles/aquatic spawn separately
+PASSIVE_COUNT :: 6 // Pig..Horse; hostiles/aquatic spawn separately
 
 ZOMBIE_DETECT :: f32(18.0)
 ZOMBIE_REACH :: f32(1.5)
@@ -112,6 +113,7 @@ MOB_DIMS := [MobKind]MobDims {
 	.Cow      = {0.5, 1.4, 1.9},
 	.Chicken  = {0.3, 0.7, 2.6},
 	.Rabbit   = {0.25, 0.5, 2.8},
+	.Horse    = {0.55, 1.6, 3.0},
 	.Zombie   = {0.35, 1.9, 3.2},
 	.Skeleton = {0.33, 1.85, 3.8},
 	.Piglin   = {0.35, 1.9, 3.4},
@@ -505,10 +507,11 @@ passive_kind_for_biome :: proc(b: Biome) -> MobKind {
 	r := rng_int(100)
 	#partial switch b {
 	case .Plains, .Savanna:
-		if r < 30 do return .Cow
-		if r < 55 do return .Sheep
-		if r < 80 do return .Chicken
-		if r < 92 do return .Pig
+		if r < 25 do return .Cow
+		if r < 45 do return .Sheep
+		if r < 65 do return .Horse // open grassland grazer
+		if r < 85 do return .Chicken
+		if r < 95 do return .Pig
 		return .Rabbit
 	case .Forest, .Taiga:
 		if r < 35 do return .Rabbit
@@ -727,6 +730,8 @@ mob_kind_label :: proc(k: MobKind) -> string {
 		return "CHICKEN"
 	case .Rabbit:
 		return "RABBIT"
+	case .Horse:
+		return "HORSE"
 	case .Zombie:
 		return "ZOMBIE"
 	case .Skeleton:

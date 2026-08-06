@@ -21,6 +21,7 @@ Profession :: enum {
 	Priest,
 	Blacksmith,
 	Merchant,
+	Guard,
 }
 
 Villager :: struct {
@@ -88,6 +89,12 @@ MERCHANT_GREETINGS := []string {
 	"ALWAYS LOOKING FOR NEW TRADE.",
 }
 
+GUARD_GREETINGS := []string {
+	"QUIET NIGHT SO FAR.",
+	"KEEP YOUR WEAPON READY AFTER DARK.",
+	"I WATCH THIS TOWER DAY AND NIGHT.",
+}
+
 profession_greetings :: proc(p: Profession) -> []string {
 	switch p {
 	case .Farmer:
@@ -98,6 +105,8 @@ profession_greetings :: proc(p: Profession) -> []string {
 		return BLACKSMITH_GREETINGS
 	case .Merchant:
 		return MERCHANT_GREETINGS
+	case .Guard:
+		return GUARD_GREETINGS
 	case .None:
 		return GENERIC_GREETINGS
 	}

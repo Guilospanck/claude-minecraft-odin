@@ -34,16 +34,20 @@ village_biome_ok :: proc(b: Biome) -> bool {
 // A tapering square roof/spire: radii[i] is the half-width at layer
 // base_y+i, so e.g. {3,2,1,0} makes a 7x7 -> 5x5 -> 3x3 -> 1x1 pyramid.
 // Shared by house roofs and the church spire (a longer, thinner radii list)
-// instead of two copies of the same nested-loop shape.
+// instead of two copies of the same nested-loop shape. The base course
+// (the widest layer, where the roof actually meets the walls) is laid in
+// Slab instead of full blocks — a real half-height eave line instead of a
+// blocky step, now that Slab exists as a real partial-height shape.
 @(private = "file")
 place_tapering_roof :: proc(c: ^Chunk, cx, base_y, cz: int, radii: []int, material: BlockId) {
 	for i in 0 ..< len(radii) {
 		r := radii[i]
 		y := base_y + i
+		layer_material := i == 0 ? BlockId.Slab : material
 		for dz in -r ..= r {
 			for dx in -r ..= r {
 				if r > 1 && abs(dx) == r && abs(dz) == r do continue // clip corners
-				chunk_set(c, cx + dx, y, cz + dz, material)
+				chunk_set(c, cx + dx, y, cz + dz, layer_material)
 			}
 		}
 	}
@@ -193,6 +197,48 @@ generate_farm :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: int)
 	place_fence_ring(c, lx - 1, lz - 1, SIZE + 2, base_y, lx + SIZE / 2, lz - 1)
 }
 
+// A small stone-ringed water pool at the village crossroads. Pure chunk_set
+// calls, no new mechanism — sits right where the four plots meet, so it
+// deliberately touches a corner fence-post cell of each neighbouring yard
+// (reads as "built into the shared plaza", not a conflict).
+@(private = "file")
+generate_well :: proc(c: ^Chunk, cx, cz, surf_y: int) {
+	base_y := surf_y + 1
+	for dx in -1 ..= 1 {
+		for dz in -1 ..= 1 {
+			edge := dx == 0 && dz == 0 ? false : true
+			if edge {
+				chunk_set(c, cx + dx, base_y, cz + dz, .Stone)
+			} else {
+				chunk_set(c, cx + dx, base_y - 1, cz + dz, .Water)
+			}
+		}
+	}
+}
+
+// A slender stone watchtower with a fence-railed platform on top, for the
+// Guard (see villager.odin) to have somewhere to actually stand watch from
+// instead of just being a recoloured wanderer. Deliberately narrow (3x3) to
+// fit the free 1-wide crossroad column between plots without needing a
+// bigger village layout.
+@(private = "file")
+generate_watchtower :: proc(c: ^Chunk, cx, cz, surf_y: int) -> Ivec3 {
+	base_y := surf_y + 1
+	HEIGHT :: 8
+	for dy in 0 ..< HEIGHT {
+		for dx in -1 ..= 1 {
+			for dz in -1 ..= 1 {
+				edge := dx != 0 || dz != 0
+				if edge do chunk_set(c, cx + dx, base_y + dy, cz + dz, .Stone)
+			}
+		}
+	}
+	// hollow the interior so it isn't a solid pillar
+	for dy in 0 ..< HEIGHT do chunk_set(c, cx, base_y + dy, cz, .Air)
+	place_fence_ring(c, cx - 1, cz - 1, 3, base_y + HEIGHT, cx + 99, cz + 99) // no gap: a full rail
+	return Ivec3{cx, base_y + HEIGHT, cz} // the platform, where the Guard stands
+}
+
 // Called once per generated chunk (from worldgen_fill, after everything
 // else so a building always wins over a tree that happened to land on the
 // same columns). Lays out a 2x2 grid of 7x7 plots inside the chunk — two
@@ -236,7 +282,12 @@ generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, h
 	generate_church(w, c, base_x, base_z, 10, 2, church_surf)
 	generate_farm(w, c, base_x, base_z, 10, 10, farm_surf)
 
-	center := Ivec3{base_x + 8, h_at(heights, 8, 8) + 1, base_z + 8}
+	well_surf := h_at(heights, 8, 8)
+	generate_well(c, 8, 8, well_surf)
+	tower_surf := h_at(heights, 8, 4)
+	tower_top := generate_watchtower(c, 8, 4, tower_surf)
+
+	center := Ivec3{base_x + 8, well_surf + 1, base_z + 8}
 	append(&w.villages, Village{center = center, houses = 2})
 
 	spawn_villager :: proc(
@@ -266,6 +317,23 @@ generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, h
 	if hsh % (VILLAGE_CHANCE * 2) == 0 { 	// half of villages get a second farmer
 		spawn_villager(w, base_x, base_z, 13, 13, farm_surf, hsh + 5, .Farmer)
 	}
+
+	// The Guard's home is the watchtower platform itself, not a house/
+	// church/farm — already an absolute Y (the platform level), unlike
+	// spawn_villager's other callers which pass a surface height and let
+	// it add +1.
+	guard_home := Ivec3{base_x + tower_top.x, tower_top.y, base_z + tower_top.z}
+	append(
+		&w.villagers,
+		Villager {
+			pos = Vec3{f32(guard_home.x) + 0.5, f32(guard_home.y), f32(guard_home.z) + 0.5},
+			yaw = rng_range(0, 2 * math.PI),
+			health = 14,
+			name = villager_pick_name(hsh + 6),
+			home = guard_home,
+			profession = .Guard,
+		},
+	)
 
 	// Farm animals now live inside the fenced farm plot, not at an
 	// arbitrary nearby point.

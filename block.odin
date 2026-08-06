@@ -33,6 +33,13 @@ BlockId :: enum u8 {
 	RedSand,
 	Door,
 	Fence,
+	CoalOre,
+	GoldOre,
+	DiamondOre,
+	Gold, // smelted from GoldOre
+	Slab,
+	FlowerRed,
+	FlowerYellow,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -53,7 +60,7 @@ block_emission :: proc(b: BlockId) -> u8 {
 // Cross-sprite blocks (two crossed quads with a cutout texture) instead of cubes.
 block_is_sprite :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Wheat1, .Wheat2, .Wheat3, .Torch:
+	case .Wheat1, .Wheat2, .Wheat3, .Torch, .FlowerRed, .FlowerYellow:
 		return true
 	}
 	return false
@@ -64,7 +71,7 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 // block". Still solid for collision (block_is_solid below) — the visual
 // shrink is cosmetic only, same trade-off sprites already accept.
 block_is_lowbox :: proc(b: BlockId) -> bool {
-	return b == .Bed
+	return b == .Bed || b == .Slab
 }
 
 // Fraction of a full cell's height a low-box block's top face sits at.
@@ -93,7 +100,7 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
+	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .FlowerRed, .FlowerYellow:
 		return false
 	}
 	return true
@@ -102,7 +109,18 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door, .Fence:
+	case .Air,
+	     .Water,
+	     .Glass,
+	     .Portal,
+	     .Wheat1,
+	     .Wheat2,
+	     .Wheat3,
+	     .Torch,
+	     .Door,
+	     .Fence,
+	     .FlowerRed,
+	     .FlowerYellow:
 		return false
 	}
 	return true // Lava renders opaque (solid-looking) though it isn't collidable
@@ -188,6 +206,20 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.DOOR
 	case .Fence:
 		return ad.FENCE
+	case .CoalOre:
+		return ad.COAL_ORE
+	case .GoldOre:
+		return ad.GOLD_ORE
+	case .DiamondOre:
+		return ad.DIAMOND_ORE
+	case .Gold:
+		return ad.GOLD
+	case .Slab:
+		return ad.STONE
+	case .FlowerRed:
+		return ad.FLOWER_RED
+	case .FlowerYellow:
+		return ad.FLOWER_YELLOW
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -255,6 +287,20 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.55, 0.40, 0.24}
 	case .Fence:
 		return {0.42, 0.30, 0.18}
+	case .CoalOre:
+		return {0.22, 0.22, 0.24}
+	case .GoldOre:
+		return {0.72, 0.60, 0.20}
+	case .DiamondOre:
+		return {0.45, 0.85, 0.85}
+	case .Gold:
+		return {0.90, 0.76, 0.22}
+	case .Slab:
+		return {0.50, 0.50, 0.52}
+	case .FlowerRed:
+		return {0.80, 0.16, 0.20}
+	case .FlowerYellow:
+		return {0.90, 0.80, 0.15}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -323,6 +369,20 @@ block_name :: proc(b: BlockId) -> string {
 		return "Door"
 	case .Fence:
 		return "Fence"
+	case .CoalOre:
+		return "Coal Ore"
+	case .GoldOre:
+		return "Gold Ore"
+	case .DiamondOre:
+		return "Diamond Ore"
+	case .Gold:
+		return "Gold"
+	case .Slab:
+		return "Slab"
+	case .FlowerRed:
+		return "Red Flower"
+	case .FlowerYellow:
+		return "Yellow Flower"
 	}
 	return "?"
 }

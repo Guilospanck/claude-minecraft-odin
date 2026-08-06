@@ -94,6 +94,32 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 			case "cactus":
 				ridge := (px % 5 == 0)
 				c = shade(Color{54, 112, 54, 255}, jitter(gx, gy, 10) + (ridge ? -20 : 8))
+			case "coal_ore":
+				spec := ((jitter(gx * 3, gy * 3, 100) + 100) % 6) < 2
+				c = spec ? Color{20, 20, 22, 255} : shade(base, jitter(gx, gy, 10))
+			case "gold_ore":
+				spec := ((jitter(gx * 3, gy * 3, 100) + 100) % 8) < 2
+				c = spec ? Color{240, 200, 60, 255} : shade(base, jitter(gx, gy, 10))
+			case "diamond_ore":
+				spec := ((jitter(gx * 3, gy * 3, 100) + 100) % 9) < 2
+				c = spec ? Color{140, 235, 230, 255} : shade(base, jitter(gx, gy, 10))
+			case "gold":
+				band := (py % 6 < 3)
+				c = shade(Color{224, 188, 60, 255}, jitter(gx, gy, 10) + (band ? 10 : -10))
+			case "flower_red", "flower_yellow":
+				c = Color{0, 0, 0, 0} // transparent background (cutout sprite)
+				stem := (px == 7 || px == 8) && py >= 9
+				petal := px >= 4 && px <= 11 && py >= 3 && py <= 9
+				center := px >= 6 && px <= 9 && py >= 5 && py <= 7
+				if stem {
+					c = shade(Color{60, 120, 50, 255}, jitter(gx, gy, 8))
+					c.a = 255
+				} else if petal {
+					pc := kind == "flower_red" ? Color{204, 40, 48, 255} : Color{224, 196, 40, 255}
+					if center do pc = Color{230, 190, 60, 255}
+					c = shade(pc, jitter(gx, gy, 10))
+					c.a = 255
+				}
 			case "obsidian":
 				spec := ((jitter(gx * 2, gy * 2, 100) + 100) % 9) < 2
 				c = spec ? Color{80, 50, 110, 255} : shade(Color{28, 20, 40, 255}, jitter(gx, gy, 8))
@@ -232,6 +258,12 @@ main :: proc() {
 	paint(ad.RED_SAND, Color{181, 99, 56, 255}, "red_sand")
 	paint(ad.DOOR, Color{96, 66, 34, 255}, "door")
 	paint(ad.FENCE, Color{110, 78, 42, 255}, "fence")
+	paint(ad.COAL_ORE, Color{128, 128, 132, 255}, "coal_ore")
+	paint(ad.GOLD_ORE, Color{128, 128, 132, 255}, "gold_ore")
+	paint(ad.DIAMOND_ORE, Color{128, 128, 132, 255}, "diamond_ore")
+	paint(ad.GOLD, Color{224, 188, 60, 255}, "gold")
+	paint(ad.FLOWER_RED, Color{0, 0, 0, 0}, "flower_red")
+	paint(ad.FLOWER_YELLOW, Color{0, 0, 0, 0}, "flower_yellow")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

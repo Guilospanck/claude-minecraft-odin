@@ -1241,7 +1241,10 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	_, ok := w.doors[Ivec3{4, 40, 2}]
 	testing.expect(t, ok, "the placed door is registered in w.doors")
 	// the tapering roof starts right above the walls, centred on the house
-	testing.expect(t, chunk_get(c, 4, 43, 4) == .Stone, "a stone roof caps the house")
+	// the roof's base course (the widest layer) is a real half-height eave
+	// (Slab), not a full block; the layers above it taper in full Stone
+	testing.expect(t, chunk_get(c, 4, 43, 4) == .Slab, "the roof's base course is a slab eave")
+	testing.expect(t, chunk_get(c, 4, 44, 4) == .Stone, "the roof tapers to stone above the eave")
 	// a fenced yard surrounds the house, with a gap left open for the door
 	testing.expect(t, chunk_get(c, 1, 40, 1) == .Fence, "a fence yard surrounds the house")
 	testing.expect(t, chunk_get(c, 4, 40, 1) != .Fence, "the fence leaves a gap aligned with the door")

@@ -15,9 +15,9 @@ ToolKind :: enum {
 }
 TOOL_KIND_COUNT :: len(ToolKind)
 
-// Durability granted at tier 1..3 (index 0 unused = "not owned").
-TOOL_DUR := [4]int{0, 60, 132, 251}
-TIER_NAMES := [4]string{"None", "Wood", "Stone", "Iron"}
+// Durability granted at tier 1..4 (index 0 unused = "not owned").
+TOOL_DUR := [5]int{0, 60, 132, 251, 480}
+TIER_NAMES := [5]string{"None", "Wood", "Stone", "Iron", "Diamond"}
 
 tool_name :: proc(k: ToolKind) -> string {
 	switch k {
@@ -36,11 +36,23 @@ tool_name :: proc(k: ToolKind) -> string {
 // Which tool mines a block fastest. `applies` is false for hand-only blocks.
 mine_tool :: proc(b: BlockId) -> (kind: ToolKind, applies: bool) {
 	#partial switch b {
-	case .Stone, .Ore, .Iron, .Furnace, .Glowstone, .Obsidian, .Netherrack, .Glass:
+	case .Stone,
+	     .Ore,
+	     .Iron,
+	     .Furnace,
+	     .Glowstone,
+	     .Obsidian,
+	     .Netherrack,
+	     .Glass,
+	     .CoalOre,
+	     .GoldOre,
+	     .DiamondOre,
+	     .Gold,
+	     .Slab:
 		return .Pickaxe, true
-	case .Wood, .Leaves, .Cactus, .Bed, .Chest:
+	case .Wood, .Leaves, .Cactus, .Bed, .Chest, .Door, .Fence:
 		return .Axe, true
-	case .Dirt, .Grass, .Sand, .Snow, .Farmland:
+	case .Dirt, .Grass, .Sand, .Snow, .Farmland, .RedSand:
 		return .Shovel, true
 	}
 	return .Pickaxe, false
@@ -51,24 +63,30 @@ block_hardness :: proc(b: BlockId) -> f32 {
 	#partial switch b {
 	case .Obsidian:
 		return 9.0
-	case .Stone, .Ore, .Iron, .Furnace, .Netherrack:
+	case .DiamondOre:
+		return 3.5
+	case .GoldOre:
+		return 3.0
+	case .Stone, .Ore, .Iron, .Furnace, .Netherrack, .CoalOre, .Gold, .Slab:
 		return 2.2
-	case .Wood, .Chest:
+	case .Wood, .Chest, .Door, .Fence:
 		return 1.6
-	case .Dirt, .Grass, .Sand, .Snow, .Farmland:
+	case .Dirt, .Grass, .Sand, .Snow, .Farmland, .RedSand:
 		return 0.7
 	case .Glowstone, .Glass, .Leaves, .Cactus, .Bed:
 		return 0.4
-	case .Wheat1, .Wheat2, .Wheat3, .Torch:
+	case .Wheat1, .Wheat2, .Wheat3, .Torch, .FlowerRed, .FlowerYellow:
 		return 0.15 // sprites pop almost instantly
 	}
 	return 0.8
 }
 
 // Minimum tool+tier required to break a block at all (0 = hand is fine).
-// Obsidian needs an iron pickaxe.
+// Obsidian needs an iron pickaxe; gold and diamond ore are that little bit
+// tougher too, matching real veins being deeper/rarer than plain stone.
 block_min_tier :: proc(b: BlockId) -> (kind: ToolKind, tier: int) {
 	if b == .Obsidian do return .Pickaxe, 3
+	if b == .GoldOre || b == .DiamondOre do return .Pickaxe, 3
 	return .Pickaxe, 0
 }
 
@@ -90,7 +108,7 @@ mining_time :: proc(p: ^Player, b: BlockId) -> f32 {
 }
 
 sword_bonus :: proc(p: ^Player) -> int {
-	bonus := [4]int{0, 1, 2, 4}
+	bonus := [5]int{0, 1, 2, 4, 7}
 	return bonus[p.tool_tier[.Sword]]
 }
 
@@ -105,20 +123,30 @@ tool_wear :: proc(p: ^Player, k: ToolKind) {
 	}
 }
 
-// Cost to craft/upgrade a tool to its next tier.
+// Cost to craft/upgrade a tool to its next tier. Diamond doesn't need
+// smelting (unlike Ore -> Iron) so it uses the raw DiamondOre block
+// directly, matching how mining it works in real Minecraft too.
 tool_next :: proc(p: ^Player, k: ToolKind) -> (tier: int, block: BlockId, count: int, ok: bool) {
 	cur := p.tool_tier[k]
 	next := cur + 1
-	if next > 3 do return 0, .Air, 0, false
-	block = next == 1 ? .Wood : (next == 2 ? .Stone : .Iron)
-	count = next == 1 ? 2 : 3
+	if next > 4 do return 0, .Air, 0, false
+	switch next {
+	case 1:
+		block, count = .Wood, 2
+	case 2:
+		block, count = .Stone, 3
+	case 3:
+		block, count = .Iron, 3
+	case 4:
+		block, count = .DiamondOre, 3
+	}
 	return next, block, count, true
 }
 
 tool_craft :: proc(p: ^Player, k: ToolKind) {
 	next, block, count, ok := tool_next(p, k)
 	if !ok {
-		toast_show(fmt.tprintf("%s IS ALREADY IRON (MAX)", tool_name(k)))
+		toast_show(fmt.tprintf("%s IS ALREADY DIAMOND (MAX)", tool_name(k)))
 		return
 	}
 	if p.inventory[block] < count {

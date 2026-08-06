@@ -18,7 +18,7 @@ ArmorSlot :: enum {
 }
 ARMOR_SLOT_COUNT :: len(ArmorSlot)
 
-ARMOR_DUR := [4]int{0, 80, 176, 336} // tier 0 unused = "not owned"
+ARMOR_DUR := [5]int{0, 80, 176, 336, 600} // tier 0 unused = "not owned"
 
 armor_name :: proc(s: ArmorSlot) -> string {
 	switch s {
@@ -34,20 +34,29 @@ armor_name :: proc(s: ArmorSlot) -> string {
 	return "?"
 }
 
-// Cost to craft/upgrade one armor piece to its next tier (mirrors tool_next).
+// Cost to craft/upgrade one armor piece to its next tier (mirrors tool_next,
+// including Diamond using the raw ore block directly, no smelting needed).
 armor_next :: proc(p: ^Player, s: ArmorSlot) -> (tier: int, block: BlockId, count: int, ok: bool) {
 	cur := p.armor_tier[s]
 	next := cur + 1
-	if next > 3 do return 0, .Air, 0, false
-	block = next == 1 ? .Wood : (next == 2 ? .Stone : .Iron)
-	count = next == 1 ? 2 : 3
+	if next > 4 do return 0, .Air, 0, false
+	switch next {
+	case 1:
+		block, count = .Wood, 2
+	case 2:
+		block, count = .Stone, 3
+	case 3:
+		block, count = .Iron, 3
+	case 4:
+		block, count = .DiamondOre, 3
+	}
 	return next, block, count, true
 }
 
 armor_craft :: proc(p: ^Player, s: ArmorSlot) {
 	next, block, count, ok := armor_next(p, s)
 	if !ok {
-		toast_show(fmt.tprintf("%s IS ALREADY IRON (MAX)", armor_name(s)))
+		toast_show(fmt.tprintf("%s IS ALREADY DIAMOND (MAX)", armor_name(s)))
 		return
 	}
 	if p.inventory[block] < count {
@@ -61,15 +70,17 @@ armor_craft :: proc(p: ^Player, s: ArmorSlot) {
 	audio_play(.Place, 0.5)
 }
 
-// Total armor points across all worn pieces (0..16: four slots, 0/1/2/4 each).
+// Total armor points across all worn pieces (four slots, 0/1/2/4/6 each).
 armor_points :: proc(p: ^Player) -> int {
-	bonus := [4]int{0, 1, 2, 4}
+	bonus := [5]int{0, 1, 2, 4, 6}
 	total := 0
 	for s in ArmorSlot do total += bonus[p.armor_tier[s]]
 	return total
 }
 
-// Fraction of incoming damage armor absorbs, capped at 80% (full iron set).
+// Fraction of incoming damage armor absorbs, capped at 80% (was a full iron
+// set; a full diamond set now reaches the cap with room to spare, which is
+// fine — the cap is the actual ceiling, not the iron-set total).
 armor_reduction :: proc(p: ^Player) -> f32 {
 	return min(f32(armor_points(p)) * 0.05, 0.8)
 }

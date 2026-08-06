@@ -445,6 +445,41 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_ORES places a row of solid stone with one of each ore tier
+	// embedded, at eye level directly ahead, for screenshotting them
+	// without digging.
+	if os.get_env("MC_ORES", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 4
+		ores := [5]BlockId{.CoalOre, .Ore, .GoldOre, .DiamondOre, .Gold}
+		for i in 0 ..< 5 {
+			bp := base + right * f32(i - 2) * 1.5
+			bx, by, bz := int(bp.x), int(bp.y), int(bp.z)
+			world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+			world_set_block(&world, bx, by, bz, ores[i])
+		}
+	}
+
+	// Debug: MC_HORSE spawns a horse directly ahead at ground level.
+	if os.get_env("MC_HORSE", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		bx := int(player.pos.x + fwd.x * 5)
+		bz := int(player.pos.z + fwd.z * 5)
+		world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+		by := SEA_LEVEL
+		for y := CHUNK_H - 2; y >= 1; y -= 1 {
+			if block_is_solid(world_block(&world, bx, y, bz)) {
+				by = y
+				break
+			}
+		}
+		append(
+			&world.mobs,
+			Mob{kind = .Horse, pos = Vec3{f32(bx) + 0.5, f32(by + 1), f32(bz) + 0.5}, yaw = player.yaw + math.PI, health = 8},
+		)
+	}
+
 	// Debug: MC_BED places a bed on the real ground directly ahead (and
 	// drops the camera to eye level there) for screenshotting the low-box
 	// furniture shape without having to guess terrain height up front.
@@ -484,9 +519,9 @@ main :: proc() {
 		}
 		if len(world.villages) > 0 {
 			t := world.villages[0].center
-			player.pos = Vec3{f32(t.x) - 8, f32(t.y) + 18, f32(t.z) - 8}
-			player.yaw = 0.78
-			player.pitch = -0.95
+			player.pos = Vec3{f32(t.x) - 14, f32(t.y) + 9, f32(t.z) - 14}
+			player.yaw = 2.35
+			player.pitch = -0.35
 			player.fly = true
 			fmt.println(
 				"MC_VILLAGE: found village at",

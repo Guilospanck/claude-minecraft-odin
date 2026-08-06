@@ -83,12 +83,34 @@ cow_parts := [7]MobPart {
 }
 
 @(private = "file")
-chicken_parts := [5]MobPart {
-	{{0, 0.34, 0}, {0.36, 0.4, 0.5}, WHITE, 0},
-	{{0, 0.56, -0.22}, {0.3, 0.32, 0.3}, WHITE, 0},
-	{{0, 0.53, -0.42}, {0.14, 0.1, 0.16}, ORANGE, 0},
-	{{-0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, 1},
-	{{0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, -1},
+HORSEC :: Vec3{0.42, 0.26, 0.14}
+@(private = "file")
+HORSEMANE :: Vec3{0.20, 0.12, 0.08}
+
+// Taller and leaner than Cow (bigger stride, higher chest), with a separate
+// neck/head instead of a flush front block and a mane/tail accent, so it
+// reads as its own animal rather than a recoloured cow.
+@(private = "file")
+horse_parts := [9]MobPart {
+	{{0, 1.05, 0}, {0.62, 0.62, 1.2}, HORSEC, 0}, // body
+	{{0, 1.35, -0.68}, {0.3, 0.5, 0.32}, HORSEC, 0}, // neck (angled up-forward)
+	{{0, 1.55, -0.92}, {0.26, 0.26, 0.34}, HORSEC, 0}, // head
+	{{0, 1.68, -0.78}, {0.08, 0.16, 0.32}, HORSEMANE, 0}, // mane ridge
+	{{0, 1.0, 0.62}, {0.08, 0.34, 0.1}, HORSEMANE, 0}, // tail
+	{{-0.22, 0.4, -0.4}, {0.18, 0.8, 0.18}, HORSEC, 1}, // front-left leg
+	{{0.22, 0.4, -0.4}, {0.18, 0.8, 0.18}, HORSEC, -1}, // front-right leg
+	{{-0.22, 0.4, 0.4}, {0.18, 0.8, 0.18}, HORSEC, -1}, // back-left leg
+	{{0.22, 0.4, 0.4}, {0.18, 0.8, 0.18}, HORSEC, 1}, // back-right leg
+}
+
+@(private = "file")
+chicken_parts := [6]MobPart {
+	{{0, 0.34, 0}, {0.36, 0.4, 0.5}, WHITE, 0}, // body
+	{{0, 0.56, -0.22}, {0.3, 0.32, 0.3}, WHITE, 0}, // head
+	{{0, 0.53, -0.42}, {0.14, 0.1, 0.16}, ORANGE, 0}, // beak
+	{{-0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, 1}, // left leg
+	{{0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, -1}, // right leg
+	{{0, 0.46, 0.3}, {0.08, 0.24, 0.06}, WHITE, 0}, // tail feathers
 }
 
 @(private = "file")
@@ -157,19 +179,23 @@ FISHC :: Vec3{0.80, 0.55, 0.30}
 SQUIDC :: Vec3{0.68, 0.58, 0.72}
 
 @(private = "file")
-fish_parts := [3]MobPart {
-	{{0, 0.14, 0}, {0.16, 0.14, 0.34}, FISHC, 0}, // body
+fish_parts := [5]MobPart {
+	{{0, 0.14, -0.02}, {0.15, 0.13, 0.28}, FISHC, 0}, // body
+	{{0, 0.14, -0.18}, {0.09, 0.09, 0.10}, FISHC, 0}, // head, tapered narrower
 	{{0, 0.14, 0.20}, {0.03, 0.12, 0.14}, FISHC, 1}, // tail fin (wiggles)
-	{{0, 0.22, -0.02}, {0.10, 0.03, 0.10}, FISHC, 0}, // top fin
+	{{0, 0.22, -0.02}, {0.10, 0.03, 0.10}, FISHC, 0}, // dorsal fin
+	{{0.08, 0.10, -0.02}, {0.08, 0.02, 0.08}, FISHC, 0}, // pectoral fin
 }
 
 @(private = "file")
-squid_parts := [5]MobPart {
-	{{0, 0.32, 0}, {0.34, 0.30, 0.34}, SQUIDC, 0}, // mantle
+squid_parts := [7]MobPart {
+	{{0, 0.32, 0}, {0.34, 0.30, 0.34}, SQUIDC, 0}, // mantle (lower, wider)
+	{{0, 0.50, 0}, {0.22, 0.18, 0.22}, SQUIDC, 0}, // mantle taper (upper, narrower)
 	{{-0.10, 0.06, -0.10}, {0.06, 0.30, 0.06}, SQUIDC, 1}, // tentacles (sway)
 	{{0.10, 0.06, -0.10}, {0.06, 0.30, 0.06}, SQUIDC, -1},
 	{{-0.10, 0.06, 0.10}, {0.06, 0.30, 0.06}, SQUIDC, -1},
 	{{0.10, 0.06, 0.10}, {0.06, 0.30, 0.06}, SQUIDC, 1},
+	{{0, 0.06, 0}, {0.06, 0.28, 0.06}, SQUIDC, -1}, // centre tentacle
 }
 
 @(private = "file")
@@ -218,11 +244,21 @@ profession_color :: proc(p: Profession) -> Vec3 {
 		return Vec3{0.30, 0.26, 0.24} // dark leather apron
 	case .Merchant:
 		return Vec3{0.55, 0.16, 0.18} // deep red
+	case .Guard:
+		return Vec3{0.40, 0.42, 0.46} // steel grey
 	case .None:
 		return Vec3{0.50, 0.46, 0.36} // fallback; nomads use NOMAD_PALETTE instead
 	}
 	return Vec3{0.42, 0.34, 0.58}
 }
+
+// A Guard's spear, drawn as one extra part on top of the shared humanoid
+// base — the first villager accessory beyond palette, so a Guard is
+// silhouette-distinct on top of being colour-distinct.
+@(private = "file")
+GUARD_SPEAR :: Vec3{0.55, 0.48, 0.38}
+@(private = "file")
+guard_spear_part := MobPart{{0.32, 1.35, 0}, {0.07, 1.3, 0.07}, GUARD_SPEAR, 0}
 
 // Nomads (Profession.None) have no building to anchor a role colour, and
 // they're the villager a player is statistically most likely to actually
@@ -311,6 +347,15 @@ villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient:
 			gl.Uniform3f(e_color, col.r, col.g, col.b)
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
+		if v.profession == .Guard {
+			model :=
+				base *
+				linalg.matrix4_translate_f32(guard_spear_part.offset) *
+				linalg.matrix4_scale_f32(guard_spear_part.size)
+			ent_set_mat4(e_mvp, vp * model)
+			gl.Uniform3f(e_color, GUARD_SPEAR.r, GUARD_SPEAR.g, GUARD_SPEAR.b)
+			gl.DrawArrays(gl.TRIANGLES, 0, 36)
+		}
 	}
 	gl.BindVertexArray(0)
 }
@@ -355,6 +400,8 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return chicken_parts[:]
 	case .Rabbit:
 		return rabbit_parts[:]
+	case .Horse:
+		return horse_parts[:]
 	case .Zombie:
 		return zombie_parts[:]
 	case .Skeleton:
