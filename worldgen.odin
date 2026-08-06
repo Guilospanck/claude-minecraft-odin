@@ -213,6 +213,19 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			surf := surface_block(biome, h)
 			sub := subsurface_block(biome)
 
+			// A river channel needs its own local water table, not just "is
+			// this column below global sea level": the smoothstepped carve
+			// (see world_height_and_biome) only partially lowers h through
+			// its transition band, so a hillside river can end up with h
+			// still above SEA_LEVEL there — a visible carved trench with no
+			// water in it, i.e. a river that looks like it just stops. Any
+			// column meaningfully inside the channel gets a few blocks of
+			// water above its (already carved) floor regardless of where
+			// that sits relative to sea level, so the channel always reads
+			// as a continuous river instead of an empty ditch.
+			river_water_top := h - 1
+			if river_carve > 0.15 do river_water_top = h + 3
+
 			for y in 0 ..< CHUNK_H {
 				b: BlockId = .Air
 				if y == 0 {
@@ -225,7 +238,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 					} else {
 						b = .Stone
 					}
-				} else if y <= SEA_LEVEL {
+				} else if y <= SEA_LEVEL || y <= river_water_top {
 					b = .Water
 				}
 
