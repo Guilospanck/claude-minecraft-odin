@@ -16,6 +16,9 @@ MobKind :: enum {
 	Ghast, // nether floating ranged hostile
 	Fish, // aquatic: never leaves water
 	Squid, // aquatic: never leaves water
+	Dolphin, // aquatic: fast swimmer
+	Pufferfish, // aquatic: small and round
+	Jellyfish, // aquatic: drifts
 	SnowLeopard, // biome specialist: snow/taiga
 	Camel, // biome specialist: desert/badlands
 	Llama, // biome specialist: savanna/mountains
@@ -42,7 +45,13 @@ mob_burns_in_day :: proc(k: MobKind) -> bool {
 // Aquatic mobs swim freely but must always stay fully submerged; land mobs
 // (everything else) treat water as an obstacle and never wade into it.
 mob_is_aquatic :: proc(k: MobKind) -> bool {
-	return k == .Fish || k == .Squid
+	return(
+		k == .Fish ||
+		k == .Squid ||
+		k == .Dolphin ||
+		k == .Pufferfish ||
+		k == .Jellyfish \
+	)
 }
 
 // Why a mob's health last reached zero — tags the generic despawn-on-death
@@ -123,6 +132,9 @@ MOB_DIMS := [MobKind]MobDims {
 	.Ghast    = {0.7, 1.4, 2.0},
 	.Fish     = {0.18, 0.22, 1.8},
 	.Squid    = {0.28, 0.55, 1.3},
+	.Dolphin    = {0.3, 0.5, 2.6}, // fast
+	.Pufferfish = {0.22, 0.28, 1.3},
+	.Jellyfish  = {0.25, 0.5, 0.9}, // slow drift
 	.SnowLeopard = {0.4, 0.85, 2.9}, // lithe and quick
 	.Camel       = {0.55, 2.1, 1.7}, // tall and slow
 	.Llama       = {0.45, 1.6, 2.2},
@@ -653,7 +665,10 @@ water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if world_block(w, wx, SEA_LEVEL, wz) != .Water do return
 	if world_block(w, wx, SEA_LEVEL - 1, wz) != .Water do return
 
-	kind: MobKind = rng_f32() < 0.5 ? .Fish : .Squid
+	// Weighted so the common little fish/squid still dominate, with the newer
+	// dolphin/pufferfish/jellyfish showing up as rarer finds.
+	kinds := [?]MobKind{.Fish, .Fish, .Squid, .Squid, .Dolphin, .Pufferfish, .Jellyfish}
+	kind := kinds[rng_int(len(kinds))]
 	append(
 		mobs,
 		Mob {
@@ -661,7 +676,7 @@ water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 			pos = Vec3{f32(wx) + 0.5, f32(SEA_LEVEL - 1), f32(wz) + 0.5},
 			yaw = rng_range(0, 2 * math.PI),
 			ai_timer = rng_range(0, 2),
-			health = 4,
+			health = kind == .Dolphin ? 6 : 4,
 		},
 	)
 }
@@ -814,6 +829,12 @@ mob_kind_label :: proc(k: MobKind) -> string {
 		return "FISH"
 	case .Squid:
 		return "SQUID"
+	case .Dolphin:
+		return "DOLPHIN"
+	case .Pufferfish:
+		return "PUFFERFISH"
+	case .Jellyfish:
+		return "JELLYFISH"
 	case .SnowLeopard:
 		return "SNOW LEOPARD"
 	case .Camel:

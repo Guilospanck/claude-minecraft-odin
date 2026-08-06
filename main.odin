@@ -488,6 +488,39 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_AQUA floods a big pool ahead and spawns one of every aquatic
+	// mob inside it, then submerges the camera to view them (like MC_FISH but
+	// for the full aquatic roster).
+	if os.get_env("MC_AQUA", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		base := player.pos + fwd * 8
+		bx, by, bz := int(base.x), int(base.y) - 3, int(base.z)
+		for dx in -5 ..= 5 {
+			for dy in 0 ..= 6 {
+				for dz in -5 ..= 5 {
+					world_set_block(&world, bx + dx, by + dy, bz + dz, .Water)
+				}
+			}
+		}
+		kinds := [5]MobKind{.Fish, .Squid, .Dolphin, .Pufferfish, .Jellyfish}
+		for k, i in kinds {
+			append(
+				&world.mobs,
+				Mob {
+					kind = k,
+					pos = Vec3{f32(bx) + f32(i - 2) * 1.6, f32(by) + 3, f32(bz)},
+					yaw = 1.4,
+					health = 6,
+				},
+			)
+		}
+		player.pos = Vec3{f32(bx) - 4, f32(by) + 3.2, f32(bz)}
+		player.yaw = math.PI * 0.5
+		player.pitch = 0.0
+		player.fly = true
+		fmt.println("MC_AQUA: aquatic mobs at", bx, by + 3, bz)
+	}
+
 	// Debug: MC_HORSE spawns a horse directly ahead at ground level.
 	if os.get_env("MC_HORSE", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)

@@ -250,6 +250,47 @@ squid_parts := [7]MobPart {
 }
 
 @(private = "file")
+DOLPHINC :: Vec3{0.56, 0.63, 0.72}
+@(private = "file")
+PUFFERC :: Vec3{0.86, 0.74, 0.32}
+@(private = "file")
+JELLYC :: Vec3{0.80, 0.62, 0.86}
+
+// Dolphin: sleek torpedo body with a snout, dorsal fin, flippers and a
+// side-swaying tail.
+@(private = "file")
+dolphin_parts := [6]MobPart {
+	{{0, 0.28, 0}, {0.26, 0.26, 0.7}, DOLPHINC, 0}, // body
+	{{0, 0.26, -0.42}, {0.16, 0.15, 0.24}, DOLPHINC, 0}, // snout
+	{{0, 0.44, 0.02}, {0.06, 0.14, 0.14}, DOLPHINC, 0}, // dorsal fin
+	{{0, 0.28, 0.44}, {0.04, 0.16, 0.2}, DOLPHINC, 1}, // tail (sways)
+	{{-0.15, 0.2, -0.06}, {0.14, 0.03, 0.1}, DOLPHINC, 0}, // left flipper
+	{{0.15, 0.2, -0.06}, {0.14, 0.03, 0.1}, DOLPHINC, 0}, // right flipper
+}
+
+// Pufferfish: a round body bristling with little spikes.
+@(private = "file")
+pufferfish_parts := [6]MobPart {
+	{{0, 0.24, 0}, {0.26, 0.26, 0.26}, PUFFERC, 0}, // round body
+	{{0, 0.24, 0.18}, {0.03, 0.1, 0.1}, PUFFERC, 1}, // tail
+	{{0, 0.41, 0}, {0.06, 0.08, 0.06}, PUFFERC, 0}, // top spike
+	{{0, 0.07, 0}, {0.06, 0.08, 0.06}, PUFFERC, 0}, // bottom spike
+	{{-0.16, 0.24, 0.02}, {0.08, 0.06, 0.06}, PUFFERC, 0}, // left spike
+	{{0.16, 0.24, 0.02}, {0.08, 0.06, 0.06}, PUFFERC, 0}, // right spike
+}
+
+// Jellyfish: a domed bell over four drifting tentacles.
+@(private = "file")
+jellyfish_parts := [6]MobPart {
+	{{0, 0.42, 0}, {0.3, 0.22, 0.3}, JELLYC, 0}, // bell top
+	{{0, 0.3, 0}, {0.24, 0.1, 0.24}, JELLYC, 0}, // bell rim
+	{{-0.08, 0.12, -0.08}, {0.04, 0.24, 0.04}, JELLYC, 1}, // tentacles (sway)
+	{{0.08, 0.12, -0.08}, {0.04, 0.24, 0.04}, JELLYC, -1},
+	{{-0.08, 0.12, 0.08}, {0.04, 0.24, 0.04}, JELLYC, -1},
+	{{0.08, 0.12, 0.08}, {0.04, 0.24, 0.04}, JELLYC, 1},
+}
+
+@(private = "file")
 PSKIN :: Vec3{0.86, 0.70, 0.56}
 @(private = "file")
 PSHIRT :: Vec3{0.20, 0.55, 0.75}
@@ -522,6 +563,12 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return fish_parts[:]
 	case .Squid:
 		return squid_parts[:]
+	case .Dolphin:
+		return dolphin_parts[:]
+	case .Pufferfish:
+		return pufferfish_parts[:]
+	case .Jellyfish:
+		return jellyfish_parts[:]
 	case .SnowLeopard:
 		return snowleopard_parts[:]
 	case .Camel:
@@ -697,8 +744,10 @@ face_def_for_mob :: proc(k: MobKind) -> MobFace {
 		return {{0, 1.68, 0}, {0.52, 0.44, 0.44}, .Animal, {}, {}, EYE_DARK}
 	case .Ghast:
 		return {{0, 0.95, 0}, {1.3, 1.3, 1.3}, .Animal, {}, {}, GHASTFACE}
-	case .Fish, .Squid:
+	case .Fish, .Squid, .Pufferfish, .Jellyfish:
 		return {style = .None}
+	case .Dolphin:
+		return {{0, 0.26, -0.42}, {0.16, 0.15, 0.24}, .Animal, {}, {}, EYE_DARK}
 	case .SnowLeopard:
 		return {{0, 0.6, -0.62}, {0.34, 0.32, 0.34}, .Animal, {}, {}, EYE_DARK}
 	case .Camel:

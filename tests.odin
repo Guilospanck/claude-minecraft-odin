@@ -1333,6 +1333,14 @@ test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_new_aquatic_mobs :: proc(t: ^testing.T) {
+	for k in ([?]MobKind{.Dolphin, .Pufferfish, .Jellyfish}) {
+		testing.expect(t, mob_is_aquatic(k), "new water mobs are aquatic (stay submerged)")
+		testing.expect(t, !mob_is_hostile(k), "new water mobs are passive")
+	}
+}
+
+@(test)
 test_biome_specialist_animals :: proc(t: ^testing.T) {
 	k, ok := biome_specialist(.Snow)
 	testing.expect(t, ok && k == .SnowLeopard, "snow biomes get snow leopards")
