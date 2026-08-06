@@ -1333,6 +1333,29 @@ test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_snowy_tree_caps_canopy_with_snow :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Grass)
+
+	place_snowy_tree(c, 8, 39, 8, 6, .Pine)
+
+	leaves, snow := 0, 0
+	for y in 40 ..< 60 {
+		for dz in -2 ..= 2 {
+			for dx in -2 ..= 2 {
+				b := chunk_get(c, 8 + dx, y, 8 + dz)
+				if b == .Leaves do leaves += 1
+				// snow must rest directly on a leaf (the dusted canopy)
+				if b == .Snow && chunk_get(c, 8 + dx, y - 1, 8 + dz) == .Leaves do snow += 1
+			}
+		}
+	}
+	testing.expect(t, leaves > 0, "the pine has a leafy canopy")
+	testing.expect(t, snow > 0, "snow is dusted on top of the canopy")
+}
+
+@(test)
 test_new_aquatic_mobs :: proc(t: ^testing.T) {
 	for k in ([?]MobKind{.Dolphin, .Pufferfish, .Jellyfish}) {
 		testing.expect(t, mob_is_aquatic(k), "new water mobs are aquatic (stay submerged)")

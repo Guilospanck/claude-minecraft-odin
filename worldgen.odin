@@ -469,6 +469,7 @@ TreeKind :: enum {
 	Spruce,
 	Birch,
 	Acacia, // flat, wide savanna umbrella
+	Pine, // tall narrow conifer spire
 }
 
 // Build a tree (round oak, conical spruce, slim birch, or a flat-topped
@@ -537,8 +538,44 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
 				}
 			}
 		}
+	case .Pine:
+		// A tall, narrow spire: many short rings tapering steeply to a point,
+		// slimmer and pointier than the spruce.
+		for dy := -5; dy <= 1; dy += 1 {
+			layer := dy + 5 // 0 (bottom) .. 6 (top)
+			r := layer < 2 ? 2 : (layer < 5 ? 1 : 0)
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if r > 0 && abs(dx) == r && abs(dz) == r do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
 	}
-	if kind != .Acacia do chunk_set(c, lx, crown + 2, lz, .Leaves) // rounded top for the others
+	if kind != .Acacia do chunk_set(c, lx, crown + 2, lz, .Leaves) // rounded/pointed top for the others
+}
+
+// Place a conifer and dust its canopy with snow: for every column the crown
+// covers, cap the topmost leaf with a Snow block. Gives cold-biome trees the
+// snow-laden look without needing a whole separate snowy-leaf block.
+// Not file-private: tests exercise it directly.
+place_snowy_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
+	place_tree(c, lx, surf_y, lz, trunk_h, kind)
+	top := surf_y + 1 + trunk_h + 2 // a little above the highest possible leaf
+	for dz in -2 ..= 2 {
+		for dx in -2 ..= 2 {
+			for y := top; y > surf_y; y -= 1 {
+				if chunk_get(c, lx + dx, y, lz + dz) == .Leaves {
+					if chunk_get(c, lx + dx, y + 1, lz + dz) == .Air {
+						chunk_set(c, lx + dx, y + 1, lz + dz, .Snow)
+					}
+					break
+				}
+			}
+		}
+	}
 }
 
 // ~1 in 4 trees in mixed-forest biomes come out as a birch instead of an
@@ -671,7 +708,9 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				}
 			case .Taiga:
 				if grass && site_ok && r < 34 {
-					place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
+					// snow-dusted conifers, spruce and the taller pine mixed
+					kind := (hsh >> 18) % 3 == 0 ? TreeKind.Pine : TreeKind.Spruce
+					place_snowy_tree(c, lx, surf_y, lz, 6 + th, kind)
 				} else if grass && r < 66 {
 					put_plant(
 						c,
@@ -711,11 +750,12 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					)
 				}
 			case .Snow:
-				// Barren, but a rare spruce or dead bush pokes through the snow.
-				if surf == .Snow && site_ok && r < 6 {
-					place_tree(c, lx, surf_y, lz, 5 + th % 2, .Spruce)
-				} else if surf == .Snow && r < 14 {
-					put_plant(c, lx, surf_y, lz, r < 10 ? .DeadBush : .FlowerWhite)
+				// Sparse snow-laden conifers (spruce + pine) and the odd bush.
+				if surf == .Snow && site_ok && r < 9 {
+					kind := (hsh >> 18) % 3 == 0 ? TreeKind.Pine : TreeKind.Spruce
+					place_snowy_tree(c, lx, surf_y, lz, 5 + th, kind)
+				} else if surf == .Snow && r < 16 {
+					put_plant(c, lx, surf_y, lz, r < 12 ? .DeadBush : .FlowerWhite)
 				}
 			case .Mountains, .Ocean, .Beach:
 			// bare
