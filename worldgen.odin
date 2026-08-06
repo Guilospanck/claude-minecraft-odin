@@ -258,7 +258,14 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 					// riverbed the water carve already shaped.
 					ravine_floor := max(9, h - RAVINE_MAX_DEPTH)
 					if rav_a < 0.016 && y > ravine_floor && river_carve < 0.2 {
-						b = .Air // ravine: narrow gorge open to the surface
+						// Open to the surface (unlike the sealed caverns
+						// below), so a ravine that dips below sea level near
+						// a coastline floods instead of leaving a dry pit
+						// right next to open water — the same "y <=
+						// SEA_LEVEL" rule everywhere else already uses,
+						// rather than a special-cased water table that could
+						// disagree with it again.
+						b = y <= SEA_LEVEL ? .Water : .Air
 					} else if deep || cave_mouth {
 						cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)
 						if cave > 0.72 {
