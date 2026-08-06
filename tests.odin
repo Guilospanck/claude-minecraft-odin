@@ -27,6 +27,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.crops)
 	delete(w.chests)
 	delete(w.doors)
+	delete(w.stairs)
 	delete(w.villagers)
 	delete(w.villages)
 }
@@ -723,7 +724,7 @@ test_spawn_builds_platform_when_no_land_nearby :: proc(t: ^testing.T) {
 		for _, c in w.chunks do chunk_free(c)
 		delete(w.chunks)
 		delete(w.mobs);delete(w.items);delete(w.arrows);delete(w.particles)
-		delete(w.crops);delete(w.chests);delete(w.doors)
+		delete(w.crops);delete(w.chests);delete(w.doors);delete(w.stairs)
 		delete(w.villagers);delete(w.villages)
 	}
 	// Flood every chunk within the spawn search radius with deep water (an
@@ -1271,7 +1272,8 @@ test_generate_church_has_spire_beacon_and_door :: proc(t: ^testing.T) {
 
 	testing.expect(t, chunk_get(c, 10, 40, 2) == .Stone, "the church walls are stone, not wood")
 	testing.expect(t, chunk_get(c, 12, 40, 2) == .Door, "the church has a front door")
-	testing.expect(t, chunk_get(c, 12, 50, 4) == .Glowstone, "the spire is capped with a lit beacon")
+	testing.expect(t, chunk_get(c, 12, 51, 4) == .Glowstone, "the spire is capped with a lit beacon")
+	testing.expect(t, chunk_get(c, 10, 45, 2) == .Stair, "a flared stair eave rings the roofline")
 	testing.expect(t, chunk_get(c, 9, 40, 1) == .Fence, "the church has a churchyard fence")
 }
 

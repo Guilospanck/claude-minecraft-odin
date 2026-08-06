@@ -97,6 +97,14 @@ place_foundation :: proc(c: ^Chunk, heights: []int, lx0, lz0, lx1, lz1, base_y: 
 	}
 }
 
+// Place a Stair block with a facing (0:+Z 1:-Z 2:+X 3:-X tall side), recording
+// the facing in w.stairs so the mesher can render it oriented.
+@(private = "file")
+place_stair :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, y, lz: int, facing: u8) {
+	chunk_set(c, lx, y, lz, .Stair)
+	w.stairs[Ivec3{base_x + lx, y, base_z + lz}] = facing
+}
+
 // A fenced square perimeter with a single-cell gap (the entrance), used for
 // house yards, the churchyard, and the farm plot boundary.
 @(private = "file")
@@ -172,6 +180,11 @@ generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y, var
 	chunk_set(c, door_lx, base_y + 1, door_lz, .Air)
 	w.doors[Ivec3{base_x + door_lx, base_y, base_z + door_lz}] = Door{facing = 0, open = false}
 
+	// A doorstep and a torch by the entrance (torch sits just outside the wall
+	// so it lights the door without punching a hole in it).
+	place_stair(w, c, base_x, base_z, door_lx, base_y, door_lz - 1, 0)
+	chunk_set(c, door_lx + 1, base_y + 2, door_lz - 1, .Torch)
+
 	chunk_set(c, cx, base_y + 1, lz + SIZE - 1, .Glass) // window opposite the door
 	if variant == 1 {
 		chunk_set(c, lx, base_y + 1, cz, .Glass) // second window, side wall
@@ -208,15 +221,39 @@ generate_church :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: in
 		}
 	}
 
+	// A flared stone eave: a ring of outward-facing stairs around the top of
+	// the walls, the tall side toward the building so the slab overhangs — a
+	// pitched roofline instead of a flat parapet.
+	eave_y := base_y + HEIGHT
+	for d in 0 ..< SIZE {
+		place_stair(w, c, base_x, base_z, lx + d, eave_y, lz, 0) // front (-Z outside): tall +Z
+		place_stair(w, c, base_x, base_z, lx + d, eave_y, lz + SIZE - 1, 1) // back
+		place_stair(w, c, base_x, base_z, lx, eave_y, lz + d, 2) // -X side: tall +X
+		place_stair(w, c, base_x, base_z, lx + SIZE - 1, eave_y, lz + d, 3) // +X side
+	}
+
 	spire_radii := []int{3, 2, 1, 0, 0, 0}
-	place_tapering_roof(c, cx, base_y + HEIGHT, cz, spire_radii, .Stone)
-	chunk_set(c, cx, base_y + HEIGHT + len(spire_radii) - 1, cz, .Glowstone) // lit beacon
+	place_tapering_roof(c, cx, base_y + HEIGHT + 1, cz, spire_radii, .Stone)
+	chunk_set(c, cx, base_y + HEIGHT + 1 + len(spire_radii) - 1, cz, .Glowstone) // lit beacon
+
+	// Corner pinnacles topped with torches, so the church reads as a proper
+	// stone landmark rather than a plain box.
+	corners := [4][2]int{{0, 0}, {SIZE - 1, 0}, {0, SIZE - 1}, {SIZE - 1, SIZE - 1}}
+	for cr in corners {
+		chunk_set(c, lx + cr[0], eave_y + 1, lz + cr[1], .Stone)
+		chunk_set(c, lx + cr[0], eave_y + 2, lz + cr[1], .Torch)
+	}
 
 	door_lx := cx
 	door_lz := lz
 	chunk_set(c, door_lx, base_y, door_lz, .Door)
 	chunk_set(c, door_lx, base_y + 1, door_lz, .Air)
 	w.doors[Ivec3{base_x + door_lx, base_y, base_z + door_lz}] = Door{facing = 0, open = false}
+
+	// A front stoop stepping up to the door, and torches flanking it.
+	place_stair(w, c, base_x, base_z, door_lx, base_y, door_lz - 1, 0) // tall toward the door
+	chunk_set(c, door_lx - 1, base_y + 2, door_lz - 1, .Torch)
+	chunk_set(c, door_lx + 1, base_y + 2, door_lz - 1, .Torch)
 
 	chunk_set(c, lx + 1, base_y + 1, lz, .Glass) // twin front windows flanking the door
 	chunk_set(c, lx + SIZE - 2, base_y + 1, lz, .Glass)
@@ -277,9 +314,15 @@ generate_watchtower :: proc(c: ^Chunk, cx, cz, surf_y: int) -> Ivec3 {
 			}
 		}
 	}
-	// hollow the interior so it isn't a solid pillar
+	// hollow the interior so it isn't a solid pillar...
 	for dy in 0 ..< HEIGHT do chunk_set(c, cx, base_y + dy, cz, .Air)
+	// ...but cap it with a solid platform floor so the guard has something to
+	// stand on instead of dropping down the shaft.
+	chunk_set(c, cx, base_y + HEIGHT - 1, cz, .Stone)
 	place_fence_ring(c, cx - 1, cz - 1, 3, base_y + HEIGHT, cx + 99, cz + 99) // no gap: a full rail
+	// Corner torches turn the platform into a lit beacon at night.
+	chunk_set(c, cx - 1, base_y + HEIGHT + 1, cz - 1, .Torch)
+	chunk_set(c, cx + 1, base_y + HEIGHT + 1, cz + 1, .Torch)
 	return Ivec3{cx, base_y + HEIGHT, cz} // the platform, where the Guard stands
 }
 

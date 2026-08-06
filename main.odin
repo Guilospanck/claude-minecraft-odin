@@ -540,6 +540,28 @@ main :: proc() {
 		)
 	}
 
+	// Debug: MC_STAIRS lays out one stair of each facing (0..3) on a stone pad
+	// ahead and drops the camera to eye level to check the oriented geometry.
+	if os.get_env("MC_STAIRS", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		bx := int(player.pos.x + fwd.x * 5)
+		bz := int(player.pos.z + fwd.z * 5)
+		world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+		by := SEA_LEVEL
+		for y := CHUNK_H - 2; y >= 1; y -= 1 {
+			if block_is_solid(world_block(&world, bx, y, bz)) {by = y;break}
+		}
+		for f in 0 ..< 4 {
+			sx := bx + f - 1
+			world_set_block(&world, sx, by, bz, .Stone) // a pad under each stair
+			world_set_block(&world, sx, by + 1, bz, .Stair)
+			world.stairs[Ivec3{sx, by + 1, bz}] = u8(f)
+		}
+		player.pos = Vec3{f32(bx) - fwd.x * 3, f32(by) + 2, f32(bz) - fwd.z * 3}
+		player.pitch = -0.25
+		player.fly = true
+	}
+
 	// Debug: MC_BED places a bed on the real ground directly ahead (and
 	// drops the camera to eye level there) for screenshotting the low-box
 	// furniture shape without having to guess terrain height up front.

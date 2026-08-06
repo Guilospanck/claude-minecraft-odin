@@ -253,6 +253,24 @@ emit_door :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, d: Door, b
 	emit_box(arr, b, wx, wy, wz, x0, x1, 0, 0.95, z0, z1, bl)
 }
 
+// A stair: a full lower slab plus an upper half-block on the "tall" side. The
+// facing (0..3) says which side the tall half sits on, so the step you climb
+// faces the opposite way (see stair_facing use sites in village.odin).
+@(private = "file")
+emit_stair :: proc(arr: ^[dynamic]Vertex, wx, wy, wz: int, facing: u8, bl: f32) {
+	emit_box(arr, .Stair, wx, wy, wz, 0, 1, 0, 0.5, 0, 1, bl) // lower slab
+	switch facing {
+	case 0:
+		emit_box(arr, .Stair, wx, wy, wz, 0, 1, 0.5, 1, 0.5, 1, bl) // tall on +Z
+	case 1:
+		emit_box(arr, .Stair, wx, wy, wz, 0, 1, 0.5, 1, 0, 0.5, bl) // tall on -Z
+	case 2:
+		emit_box(arr, .Stair, wx, wy, wz, 0.5, 1, 0.5, 1, 0, 1, bl) // tall on +X
+	case:
+		emit_box(arr, .Stair, wx, wy, wz, 0, 0.5, 0.5, 1, 0, 1, bl) // tall on -X
+	}
+}
+
 @(private = "file")
 emit_fence :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
 	emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0, 1.0, 0.4, 0.6, bl) // the post
@@ -308,6 +326,11 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				if b == .Fence {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
 					emit_fence(w, &md.opaque, b, wx, y, wz, bl)
+					continue
+				}
+				if b == .Stair {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_stair(&md.opaque, wx, y, wz, w.stairs[Ivec3{wx, y, wz}], bl)
 					continue
 				}
 				if block_is_lowbox(b) {

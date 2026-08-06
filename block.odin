@@ -46,6 +46,7 @@ BlockId :: enum u8 {
 	TallGrass, // grassy tuft
 	Fern, // forest/taiga/jungle understory
 	DeadBush, // dry twigs: desert/badlands/savanna
+	Stair, // stepped block; facing 0..3 in w.stairs
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -137,7 +138,7 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door, .Fence:
+	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door, .Fence, .Stair:
 		return false
 	}
 	if block_is_plant(b) do return false
@@ -250,6 +251,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.FERN
 	case .DeadBush:
 		return ad.DEAD_BUSH
+	case .Stair:
+		return ad.STONE
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -343,6 +346,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.32, 0.56, 0.28}
 	case .DeadBush:
 		return {0.55, 0.42, 0.22}
+	case .Stair:
+		return {0.50, 0.50, 0.52}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -437,6 +442,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Fern"
 	case .DeadBush:
 		return "Dead Bush"
+	case .Stair:
+		return "Stairs"
 	}
 	return "?"
 }
