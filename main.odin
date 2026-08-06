@@ -436,6 +436,14 @@ main :: proc() {
 		fwd := camera_front(player.yaw, 0)
 		right := Vec3{-fwd.z, 0, fwd.x}
 		base := player.pos + fwd * 5
+		// MC_NPCBIOME=snow|desert dresses the row for that climate (coats/hats).
+		npc_biome := Biome.Plains
+		switch os.get_env("MC_NPCBIOME", context.temp_allocator) {
+		case "snow":
+			npc_biome = .Snow
+		case "desert":
+			npc_biome = .Desert
+		}
 		professions := [5]Profession{.None, .Farmer, .Priest, .Blacksmith, .Merchant}
 		names := [5]string{"NOMAD", "FARMER", "PRIEST", "SMITH", "MERCH"}
 		for i in 0 ..< 5 {
@@ -448,6 +456,7 @@ main :: proc() {
 					health = 10,
 					name = names[i],
 					profession = professions[i],
+					home_biome = npc_biome,
 				},
 			)
 		}

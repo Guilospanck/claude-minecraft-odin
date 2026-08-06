@@ -353,14 +353,70 @@ individual_color_jitter :: proc(h: u64) -> Vec3 {
 	return Vec3{r, g, b} * 0.12
 }
 
+// Villagers dress for where they live: heavy coats + fur hats in the cold,
+// light linen + sun hats in the hot/arid biomes, ordinary robes elsewhere.
+@(private = "file")
+VClimate :: enum {
+	Temperate,
+	Cold,
+	Arid,
+}
+
+@(private = "file")
+villager_climate :: proc(b: Biome) -> VClimate {
+	#partial switch b {
+	case .Snow, .Taiga, .Mountains:
+		return .Cold
+	case .Desert, .Badlands, .Savanna:
+		return .Arid
+	}
+	return .Temperate
+}
+
+@(private = "file")
+mix3 :: proc(a, b: Vec3, t: f32) -> Vec3 {
+	return a * (1 - t) + b * t
+}
+
 @(private = "file")
 villager_robe_color :: proc(v: ^Villager) -> Vec3 {
 	h := hash_string(v.name)
+	col: Vec3
 	if v.profession == .None {
-		return NOMAD_PALETTE[h % u64(len(NOMAD_PALETTE))]
+		col = NOMAD_PALETTE[h % u64(len(NOMAD_PALETTE))]
+	} else {
+		col = profession_color(v.profession) + individual_color_jitter(h)
 	}
-	col := profession_color(v.profession) + individual_color_jitter(h)
+	// Bias the garment toward the biome's clothing: a bundled dark coat in the
+	// cold, pale linen in the heat.
+	switch villager_climate(v.home_biome) {
+	case .Cold:
+		col = mix3(col, Vec3{0.32, 0.30, 0.38}, 0.42)
+	case .Arid:
+		col = mix3(col, Vec3{0.84, 0.76, 0.56}, 0.40)
+	case .Temperate:
+	}
 	return Vec3{clamp(col.r, 0, 1), clamp(col.g, 0, 1), clamp(col.b, 0, 1)}
+}
+
+// A hat drawn on top of the head for cold/arid villagers, so their outfit reads
+// at a glance even in silhouette.
+@(private = "file")
+FUR_HAT :: Vec3{0.42, 0.30, 0.20}
+@(private = "file")
+SUN_HAT :: Vec3{0.82, 0.74, 0.48}
+
+@(private = "file")
+emit_headwear :: proc(vp, base: Mat4, v: ^Villager) {
+	switch villager_climate(v.home_biome) {
+	case .Cold:
+		draw_cube(vp, base, Vec3{0, 1.92, 0}, Vec3{0.48, 0.20, 0.48}, FUR_HAT) // fur cap
+		draw_cube(vp, base, Vec3{0, 1.80, -0.2}, Vec3{0.46, 0.10, 0.10}, FUR_HAT) // front band
+	case .Arid:
+		draw_cube(vp, base, Vec3{0, 1.90, 0}, Vec3{0.72, 0.06, 0.72}, SUN_HAT) // wide brim
+		draw_cube(vp, base, Vec3{0, 1.97, 0}, Vec3{0.34, 0.12, 0.34}, SUN_HAT) // crown
+	case .Temperate:
+	}
 }
 
 // A little build variation (0.92x-1.08x) from the same name hash, so
@@ -397,6 +453,7 @@ villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient:
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
 		emit_face(vp, base, villager_face_def(v))
+		emit_headwear(vp, base, v)
 		if v.profession == .Guard {
 			model :=
 				base *

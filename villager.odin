@@ -36,6 +36,7 @@ Villager :: struct {
 	home:       Ivec3, // own building's position; ignored (is_nomad) for nomads
 	is_nomad:   bool,
 	profession: Profession,
+	home_biome: Biome, // biome they live in; drives their clothing (see entity_render)
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -181,6 +182,7 @@ nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Ve
 	if world_block(w, wx, sy + 1, wz) == .Water do return
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return
 
+	_, nbiome, _ := world_height_and_biome(w.seed, wx, wz)
 	group := 1 + rng_int(2) // 1..2
 	salt := hash_u64(u64(i64(wx)) ~ (u64(i64(wz)) << 32) ~ u64(len(villagers^)))
 	for k in 0 ..< group {
@@ -192,6 +194,7 @@ nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Ve
 				health = 10,
 				name = villager_pick_name(salt + u64(k)),
 				is_nomad = true,
+				home_biome = nbiome,
 			},
 		)
 	}

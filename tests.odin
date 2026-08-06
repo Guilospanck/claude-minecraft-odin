@@ -1239,7 +1239,7 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	defer free_test_world(&w)
 	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
 
-	generate_house(&w, c, 0, 0, 2, 2, 39, 0)
+	generate_house(&w, c, 0, 0, 2, 2, 39, 0, biome_build_mats(.Plains))
 
 	// a wall corner: stone foundation course, then wood above it
 	testing.expect(t, chunk_get(c, 2, 40, 2) == .Stone, "wall corner starts with a stone foundation")
@@ -1315,6 +1315,21 @@ test_place_foundation_grounds_sloped_columns :: proc(t: ^testing.T) {
 	// natural one-block gap between the terrain top and the foundation course.
 	testing.expect(t, chunk_get(c, 5, 45, 5) == .Stone, "a level column still gets grounded")
 	testing.expect(t, chunk_get(c, 5, 46, 5) == .Air, "a level column isn't filled into the building")
+}
+
+@(test)
+test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
+	// Villages now settle in cold and arid biomes too (so there are snow/desert
+	// villages to dress for), but not in ocean/jungle/swamp.
+	testing.expect(t, village_biome_ok(.Snow), "villages can settle in snow")
+	testing.expect(t, village_biome_ok(.Desert), "villages can settle in desert")
+	testing.expect(t, village_biome_ok(.Taiga), "villages can settle in taiga")
+	testing.expect(t, !village_biome_ok(.Ocean), "no villages at sea")
+	testing.expect(t, !village_biome_ok(.Jungle), "no villages in dense jungle")
+	// Buildings take on the biome's materials.
+	testing.expect(t, biome_build_mats(.Snow).roof == .Snow, "snow villages get white roofs")
+	testing.expect(t, biome_build_mats(.Desert).wall == .Sand, "desert villages get sand walls")
+	testing.expect(t, biome_build_mats(.Plains).roof == .Stone, "temperate villages keep stone roofs")
 }
 
 @(test)
