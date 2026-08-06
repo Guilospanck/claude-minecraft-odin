@@ -30,6 +30,7 @@ BlockId :: enum u8 {
 	Torch,
 	Bed,
 	Chest,
+	RedSand,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -168,6 +169,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.BED
 	case .Chest:
 		return ad.CHEST
+	case .RedSand:
+		return ad.RED_SAND
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -229,6 +232,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.80, 0.20, 0.24}
 	case .Chest:
 		return {0.62, 0.44, 0.22}
+	case .RedSand:
+		return {0.71, 0.39, 0.22}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -291,6 +296,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Bed"
 	case .Chest:
 		return "Chest"
+	case .RedSand:
+		return "Red Sand"
 	}
 	return "?"
 }

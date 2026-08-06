@@ -11,10 +11,17 @@ Vertex :: struct {
 }
 
 // Biome grass tint: warmer/yellower when hot-dry, cooler/blue-green when cold-wet.
+// Mirrors worldgen_fill's temperature/humidity sampling exactly (same
+// frequency, octaves and domain warp) so the tint never drifts from the
+// biome the ground was actually generated as.
 @(private = "file")
 grass_tint :: proc(seed: u64, wx, wz: int) -> Vec3 {
-	temp := fbm2(seed + 101, f32(wx) * 0.004, f32(wz) * 0.004, 3)
-	moist := fbm2(seed + 202, f32(wx) * 0.004, f32(wz) * 0.004, 3)
+	fx := f32(wx)
+	fz := f32(wz)
+	warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
+	warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
+	temp := fbm2(seed + 101, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+	moist := fbm2(seed + 202, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
 	return Vec3 {
 		clamp(1.0 + 0.20 * temp - 0.05 * moist, 0.65, 1.3),
 		clamp(1.0 - 0.03 * abs(temp) + 0.06 * moist, 0.70, 1.15),

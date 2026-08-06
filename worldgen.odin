@@ -1,9 +1,12 @@
 package main
 
 Biome :: enum {
+	Ocean,
+	Beach,
 	Plains,
 	Forest,
 	Desert,
+	Badlands,
 	Snow,
 	Mountains,
 	Savanna,
@@ -17,11 +20,28 @@ wg_smoothstep :: proc(e0, e1, x: f32) -> f32 {
 	return t * t * (3 - 2 * t)
 }
 
+// Picks a biome from the full noise field for a column, not just
+// temperature/humidity: continentalness separates ocean/beach from land,
+// erosion (already folded into erosion_amp: high amp = rugged, low = flat)
+// and peaks & valleys pick out mountains, and — the key idea from Kniberg's
+// Minecraft 1.18 talk — desert and badlands share the same temperature and
+// humidity range and only split apart once erosion is considered too
+// (flat = dunes, rugged = mesa).
 @(private = "file")
-classify_biome :: proc(temp, moist, mountain: f32, h: int) -> Biome {
-	if mountain > 0.45 || h > SEA_LEVEL + 30 do return .Mountains
+classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: int) -> Biome {
+	// Ocean/Beach come from the actual generated height, not a separate
+	// continentalness check — h already reflects continentalness (via the
+	// spline) plus every other contribution (peaks & valleys, detail,
+	// rivers), so re-deriving "is this ocean" from continentalness alone
+	// could disagree with what was actually built.
+	if h <= SEA_LEVEL - 2 do return .Ocean
+	if h <= SEA_LEVEL + 1 do return .Beach
+	if (pv > 0.55 && erosion_amp > 0.55) || h > SEA_LEVEL + 30 do return .Mountains
 	if temp < -0.35 do return moist > 0.0 ? .Taiga : .Snow
-	if temp > 0.35 do return moist < -0.15 ? .Desert : .Savanna
+	if temp > 0.35 {
+		if moist < -0.15 do return erosion_amp < 0.35 ? .Badlands : .Desert
+		return .Savanna
+	}
 	if moist > 0.30 && h < SEA_LEVEL + 6 do return .Swamp
 	if moist > 0.15 do return .Forest
 	return .Plains
@@ -31,8 +51,10 @@ classify_biome :: proc(temp, moist, mountain: f32, h: int) -> Biome {
 surface_block :: proc(biome: Biome, h: int) -> BlockId {
 	if h <= SEA_LEVEL + 1 do return .Sand // beach / seabed
 	switch biome {
-	case .Desert:
+	case .Ocean, .Beach, .Desert:
 		return .Sand
+	case .Badlands:
+		return .RedSand
 	case .Snow, .Taiga:
 		return .Snow
 	case .Mountains:
@@ -46,13 +68,53 @@ surface_block :: proc(biome: Biome, h: int) -> BlockId {
 @(private = "file")
 subsurface_block :: proc(biome: Biome) -> BlockId {
 	#partial switch biome {
-	case .Desert:
+	case .Ocean, .Beach, .Desert:
 		return .Sand
+	case .Badlands:
+		return .RedSand
 	case .Mountains:
 		return .Stone
 	}
 	return .Dirt
 }
+
+// Continentalness -> base terrain height offset from SEA_LEVEL. Deep ocean
+// far out, a smooth shelf up through the coastline, then rolling inland
+// height — the spline shape is what gives natural-looking coasts instead of
+// a single linear ramp.
+// fbm noise concentrates near 0 (bell-curve, not uniform), so continentalness
+// == 0 is the COMMON case, not a midpoint that rarely occurs. The peaks &
+// valleys contribution (below) also nets negative most of the time even
+// after shaping. So the 0-point here needs enough headroom above sea level
+// to absorb that typical downward pull and still land on dry ground — this
+// is tuned against a large scanned sample (see MC_SCAN), not just the shape
+// in isolation.
+@(private = "file")
+CONTINENTAL_SPLINE := []SplinePoint {
+	{-1.0, -32},
+	{-0.6, -14},
+	{-0.35, -4},
+	{-0.15, 3},
+	{0.0, 12},
+	{0.25, 18},
+	{0.5, 24},
+	{1.0, 34},
+}
+
+// Erosion -> amplitude multiplier: high erosion means the land has been worn
+// down flat, low erosion means peaks & valleys and small-scale detail get to
+// express themselves at full strength.
+@(private = "file")
+EROSION_SPLINE := []SplinePoint{{-1.0, 1.0}, {-0.3, 0.7}, {0.2, 0.35}, {1.0, 0.15}}
+
+// Raw peaks-and-valleys fold (see below) is negative far more often than
+// positive: fbm-summed noise concentrates near 0, and the fold formula maps
+// exactly "weirdness near 0" to its most negative output (-1, deep valley).
+// Left unshaped, that systematically drags most of the map underwater. This
+// spline compresses the (common) valley side and lets the (rare) peak side
+// through at full strength, instead of a raw linear multiply.
+@(private = "file")
+PV_SPLINE := []SplinePoint{{-1.0, -0.3}, {-0.3, -0.15}, {0.0, 0.0}, {0.3, 0.3}, {0.6, 0.9}, {1.0, 1.0}}
 
 worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 	base_x := c.coord.x * CHUNK_W
@@ -68,17 +130,33 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			fx := f32(wx)
 			fz := f32(wz)
 
-			// Large-scale continent + local roughness blend flat plains and
-			// rough highlands continuously (no cliffs at biome seams).
-			continent := fbm2(seed + 7, fx * 0.0016, fz * 0.0016, 2)
-			rough := wg_smoothstep(-0.15, 0.45, fbm2(seed + 13, fx * 0.004, fz * 0.004, 2))
-			hn := fbm2(seed, fx * 0.010, fz * 0.010, 4)
-			mountain := fbm2(seed + 31, fx * 0.006, fz * 0.006, 3)
+			// The five independent noise axes behind Minecraft's 1.18+ world
+			// generator (see Henrik Kniberg's "Reinventing Minecraft World
+			// Generation"): continentalness (ocean <-> inland), erosion
+			// (rugged <-> flat), peaks & valleys (folded from a raw
+			// "weirdness" field into sharp ridges/valleys), temperature and
+			// humidity (biome only). They modulate each other below instead
+			// of just summing, so e.g. mountains can't spike inside terrain
+			// erosion has flattened.
+			continentalness := fbm2(seed + 7, fx * 0.0011, fz * 0.0011, 4)
+			erosion := fbm2(seed + 13, fx * 0.0028, fz * 0.0028, 3)
+			weirdness := fbm2(seed + 31, fx * 0.005, fz * 0.005, 3)
+			pv := 1.0 - abs(3.0 * abs(weirdness) - 2.0) // fold into ridges/valleys
+			pv = clamp(pv, -1.0, 1.0)
 
-			h := SEA_LEVEL + int(continent * 10.0)
-			h += int(hn * (4.0 + rough * 22.0)) // flat where smooth, hilly where rough
-			mfac := wg_smoothstep(0.30, 0.75, mountain)
-			h += int(mfac * 44.0 * (0.5 + 0.5 * rough))
+			// Small domain warp so temperature/humidity bands aren't
+			// axis-aligned blobs.
+			warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
+			warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
+			temp := fbm2(seed + 101, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+			moist := fbm2(seed + 202, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+
+			base_h := spline_eval(CONTINENTAL_SPLINE, continentalness)
+			erosion_amp := spline_eval(EROSION_SPLINE, erosion)
+			pv_h := spline_eval(PV_SPLINE, pv) * erosion_amp * 40.0
+			detail := fbm2(seed, fx * 0.02, fz * 0.02, 4) * erosion_amp * 6.0
+
+			h := SEA_LEVEL + int(base_h + pv_h + detail)
 
 			// Rivers: winding channels along a low-frequency zero-crossing, only
 			// in lowlands (so they don't gouge canyons through mountains) with
@@ -96,9 +174,7 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			if h < 4 do h = 4
 			if h > CHUNK_H - 8 do h = CHUNK_H - 8
 
-			temp := fbm2(seed + 101, fx * 0.004, fz * 0.004, 3)
-			moist := fbm2(seed + 202, fx * 0.004, fz * 0.004, 3)
-			biome := classify_biome(temp, moist, mountain, h)
+			biome := classify_biome(continentalness, erosion_amp, pv, temp, moist, h)
 
 			heights[lx + lz * CHUNK_W] = h
 			biomes[lx + lz * CHUNK_W] = biome
@@ -312,7 +388,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, false)
 			case .Taiga:
 				if surf == .Snow && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, true)
-			case .Snow, .Mountains:
+			case .Snow, .Mountains, .Ocean, .Beach, .Badlands:
 			// bare
 			}
 		}

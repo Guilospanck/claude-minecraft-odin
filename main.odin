@@ -17,9 +17,11 @@ scan_biomes :: proc(w: ^World) {
 		}
 	}
 	lim := SR * CHUNK_W
-	best_g, best_w, best_s, best_d := 1 << 30, 1 << 30, 1 << 30, 1 << 30
-	gx, gy, gz, wx0, wy0, wz0, sx, sy0, sz, dx0, dy0, dz0 := 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-	fg, fw, fs, fd := false, false, false, false
+	best_g, best_w, best_s, best_d, best_r := 1 << 30, 1 << 30, 1 << 30, 1 << 30, 1 << 30
+	gx, gy, gz, wx0, wy0, wz0, sx, sy0, sz, dx0, dy0, dz0, rx, ry0, rz := 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	fg, fw, fs, fd, fr := false, false, false, false, false
+	hist: map[BlockId]int
+	defer delete(hist)
 	for wz in -lim ..< lim {
 		for wx in -lim ..< lim {
 			surf_y := -1
@@ -33,12 +35,14 @@ scan_biomes :: proc(w: ^World) {
 				}
 			}
 			if surf_y < 0 do continue
+			hist[surf_b] += 1
 			d := wx * wx + wz * wz
 			if surf_b == .Grass && d < best_g {best_g = d;gx, gy, gz = wx, surf_y, wz;fg = true}
 			if surf_b == .Snow && d < best_s {best_s = d;sx, sy0, sz = wx, surf_y, wz;fs = true}
 			if surf_b == .Sand && surf_y > SEA_LEVEL + 2 && d < best_d {
 				best_d = d;dx0, dy0, dz0 = wx, surf_y, wz;fd = true
 			}
+			if surf_b == .RedSand && d < best_r {best_r = d;rx, ry0, rz = wx, surf_y, wz;fr = true}
 			if world_block(w, wx, SEA_LEVEL, wz) == .Water && d < best_w {
 				best_w = d
 				wx0, wy0, wz0 = wx, SEA_LEVEL, wz
@@ -50,6 +54,8 @@ scan_biomes :: proc(w: ^World) {
 	fmt.println("water:", fw, wx0, wy0, wz0)
 	fmt.println("snow: ", fs, sx, sy0, sz)
 	fmt.println("desert:", fd, dx0, dy0, dz0)
+	fmt.println("badlands:", fr, rx, ry0, rz)
+	fmt.println("surface block histogram:", hist)
 }
 
 // Natural terrain blocks a spawn point may rest on — never water/lava, and
@@ -58,7 +64,7 @@ scan_biomes :: proc(w: ^World) {
 @(private = "file")
 is_spawnable_ground :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Grass, .Dirt, .Stone, .Sand, .Snow, .Netherrack, .Farmland, .Ore, .Bedrock:
+	case .Grass, .Dirt, .Stone, .Sand, .Snow, .Netherrack, .Farmland, .Ore, .Bedrock, .RedSand:
 		return true
 	}
 	return false

@@ -107,6 +107,10 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				c = hot ? Color{255, 180, 40, 255} : shade(Color{224, 96, 24, 255}, jitter(gx, gy, 18))
 			case "water":
 				c = shade(base, jitter(gx, gy, 8))
+			case "red_sand":
+				// horizontal mesa strata: alternating dark/light bands
+				band := (py / 3) % 2
+				c = shade(base, jitter(gx, gy, 10) + (band == 0 ? -14 : 10))
 			case "farmland":
 				furrow := (py % 5) == 2
 				c =
@@ -207,6 +211,7 @@ main :: proc() {
 	paint(ad.TORCH, Color{0, 0, 0, 0}, "torch")
 	paint(ad.BED, Color{176, 44, 52, 255}, "bed")
 	paint(ad.CHEST, Color{150, 106, 54, 255}, "chest")
+	paint(ad.RED_SAND, Color{181, 99, 56, 255}, "red_sand")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
