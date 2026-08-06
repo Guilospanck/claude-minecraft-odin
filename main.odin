@@ -564,6 +564,51 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_SNOWVILLAGE=<biome> force-builds a village in the nearest chunk
+	// of that biome (default Snow), bypassing only the rarity roll — the real
+	// biome + flatness gates still apply — then teleports the camera there. For
+	// eyeballing biome-specific building materials (white snow roofs etc.)
+	// without hunting for a naturally rare cold/arid village.
+	if s := os.get_env("MC_SNOWVILLAGE", context.temp_allocator); s != "" {
+		want := Biome.Snow
+		switch s {
+		case "desert":
+			want = .Desert
+		case "taiga":
+			want = .Taiga
+		case "savanna":
+			want = .Savanna
+		}
+		SR :: 48
+		search: for r in 0 ..= SR {
+			for cz in -r ..= r {
+				for cx in -r ..= r {
+					if max(abs(cx), abs(cz)) != r do continue
+					// cheap biome probe first — only pay to generate chunks that
+					// are actually the biome we want
+					_, b, _ := world_height_and_biome(world.seed, cx * CHUNK_W + 8, cz * CHUNK_D + 8)
+					if b != want do continue
+					before := len(world.villages)
+					g_force_village = true
+					g_force_village_chunk = Ivec2{cx, cz}
+					world_ensure_chunk(&world, Ivec2{cx, cz})
+					if len(world.villages) > before do break search // flatness passed too
+				}
+			}
+		}
+		g_force_village = false
+		if len(world.villages) > 0 {
+			t := world.villages[len(world.villages) - 1].center
+			player.pos = Vec3{f32(t.x) - 14, f32(t.y) + 9, f32(t.z) - 14}
+			player.yaw = 2.35
+			player.pitch = -0.35
+			player.fly = true
+			fmt.println("MC_SNOWVILLAGE:", want, "village at", t)
+		} else {
+			fmt.println("MC_SNOWVILLAGE: no flat", want, "chunk found within", SR)
+		}
+	}
+
 	// Debug: MC_DOOR places a door on the real ground directly ahead (open
 	// if MC_DOOR=open) and drops the camera to eye level there, for
 	// screenshotting the open/closed low-box door shape.

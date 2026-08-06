@@ -283,6 +283,13 @@ generate_watchtower :: proc(c: ^Chunk, cx, cz, surf_y: int) -> Ivec3 {
 	return Ivec3{cx, base_y + HEIGHT, cz} // the platform, where the Guard stands
 }
 
+// Debug-only: when set, the one named chunk skips the rarity roll and builds a
+// village if it otherwise qualifies (biome + flatness). Used by the
+// MC_SNOWVILLAGE hook to force a village into a specific biome for screenshots;
+// zero-valued (off) in normal play.
+g_force_village: bool
+g_force_village_chunk: Ivec2
+
 // Called once per generated chunk (from worldgen_fill, after everything
 // else so a building always wins over a tree that happened to land on the
 // same columns). Lays out a 2x2 grid of 7x7 plots inside the chunk — two
@@ -296,7 +303,8 @@ generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, h
 			(u64(i64(c.coord.y)) * 0x85EBCA77) ~
 			0xF00D_FACE,
 		)
-	if hsh % VILLAGE_CHANCE != 0 do return
+	forced := g_force_village && c.coord == g_force_village_chunk
+	if !forced && hsh % VILLAGE_CHANCE != 0 do return
 
 	if !village_biome_ok(biomes[8 + 8 * CHUNK_W]) do return
 
