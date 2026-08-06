@@ -45,6 +45,11 @@ Audio :: struct {
 	music_cur:    int, // MusicTrack currently sounding (callback-owned)
 	music_pos:    int, // loop read position (callback-owned)
 	music_gain:   f32, // current fade gain (callback-owned)
+	rain:         []f32, // looping rain ambience buffer
+	rain_target:  bool, // whether it's raining right now (game thread -> callback, atomic)
+	rain_master:  f32, // rain volume from settings (benign cross-thread read)
+	rain_pos:     int, // loop read position (callback-owned)
+	rain_gain:    f32, // current fade gain (callback-owned)
 }
 
 @(private = "file")
@@ -163,6 +168,23 @@ make_pickup :: proc() -> []f32 {
 		freq := t < 0.06 ? f32(880.0) : f32(1320.0) // hop up a fifth partway through
 		phase += 2 * math.PI * freq / AUDIO_SR
 		buf[i] = math.sin(phase) * env * 0.35
+	}
+	return buf
+}
+
+@(private = "file")
+make_rain :: proc() -> []f32 {
+	// Band-passed noise (fast lowpass minus a slow lowpass) reads as a steady
+	// hiss/patter; edge_fade hides the loop seam the same way music tracks do.
+	n := secs(8)
+	buf := make([]f32, n)
+	lp: f32 = 0
+	lp_slow: f32 = 0
+	for i in 0 ..< n {
+		nz := noise()
+		lp = lp * 0.85 + nz * 0.15
+		lp_slow = lp_slow * 0.995 + nz * 0.005
+		buf[i] = (lp - lp_slow) * 0.5 * edge_fade(i, n)
 	}
 	return buf
 }
@@ -286,6 +308,19 @@ audio_callback :: proc "c" (dev: ^ma.device, out, inp: rawptr, frames: u32) {
 		}
 	}
 
+	// rain ambience: a steady looping bed, faded in/out like the music tracks
+	if len(g_audio.rain) > 0 {
+		want_rain := intrinsics.atomic_load(&g_audio.rain_target) ? g_audio.rain_master * 0.4 : 0
+		for i in 0 ..< n {
+			g_audio.rain_gain += (want_rain - g_audio.rain_gain) * 0.00004
+			val := g_audio.rain[g_audio.rain_pos] * g_audio.rain_gain
+			buf[i * 2] += val
+			buf[i * 2 + 1] += val
+			g_audio.rain_pos += 1
+			if g_audio.rain_pos >= len(g_audio.rain) do g_audio.rain_pos = 0
+		}
+	}
+
 	// soft clip
 	for i in 0 ..< n * 2 {
 		if buf[i] > 1 do buf[i] = 1
@@ -305,6 +340,7 @@ audio_init :: proc() {
 	g_audio.music[.Calm] = make_music_calm()
 	g_audio.music[.Combat] = make_music_combat()
 	g_audio.music[.Nether] = make_music_nether()
+	g_audio.rain = make_rain()
 
 	cfg := ma.device_config_init(.playback)
 	cfg.playback.format = .f32
@@ -334,6 +370,7 @@ audio_shutdown :: proc() {
 	for m in MusicTrack {
 		delete(g_audio.music[m])
 	}
+	delete(g_audio.rain)
 }
 
 // Select the background music track (called each frame by the game). The gain
@@ -342,6 +379,14 @@ audio_set_music :: proc(track: MusicTrack) {
 	if !g_audio.ok do return
 	intrinsics.atomic_store(&g_audio.music_target, int(track))
 	g_audio.music_master = g_settings.volume
+}
+
+// Toggle the looping rain ambience (called each frame with w.raining). The
+// mixer glides the gain in/out, so calling this every frame doesn't click.
+audio_set_rain :: proc(active: bool) {
+	if !g_audio.ok do return
+	intrinsics.atomic_store(&g_audio.rain_target, active)
+	g_audio.rain_master = g_settings.volume
 }
 
 // Play a one-shot sound on the first free voice (dropped if all are busy).

@@ -228,6 +228,11 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		ambient *= 0.72
 	} else if w.raining {
 		fog_col = fog_col * 0.55 + Vec3{0.5, 0.54, 0.58} * 0.45 // grey overcast haze
+		// Both ends must shrink together — scaling only fog_end left
+		// fog_start (still the full render-distance value) past the new
+		// fog_end, inverting the fog shader's (vDist-start)/(end-start)
+		// ratio so nearly everything on screen clamped to full fog colour.
+		fog_start *= 0.55
 		fog_end *= 0.55 // shorter visibility in the rain
 		ambient *= 0.8
 	}

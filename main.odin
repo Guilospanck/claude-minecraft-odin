@@ -822,6 +822,7 @@ main :: proc() {
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)
 			if cur.raining do rain_particles_spawn(&cur.particles, player.pos)
+			audio_set_rain(cur.raining)
 			particles_update(cur, &cur.particles, dt)
 
 			// background music by context: nether > combat > calm
