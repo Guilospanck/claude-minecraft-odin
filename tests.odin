@@ -1318,6 +1318,19 @@ test_place_foundation_grounds_sloped_columns :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_plant_blocks_are_nonsolid_sprites :: proc(t: ^testing.T) {
+	// New ground-cover plants must behave like the existing sprites: rendered
+	// as cross-sprites, walkable, and not occluding neighbours.
+	plants := [?]BlockId{.FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush}
+	for b in plants {
+		testing.expect(t, block_is_sprite(b), "a plant renders as a sprite")
+		testing.expect(t, block_is_plant(b), "a plant is classified as a plant")
+		testing.expect(t, !block_is_solid(b), "a plant is walkable, not solid")
+		testing.expect(t, !block_is_opaque(b), "a plant doesn't occlude neighbours")
+	}
+}
+
+@(test)
 test_climate_spread_widens_and_keeps_sign :: proc(t: ^testing.T) {
 	// zero stays put, sign is preserved, and a mid-range input is pushed
 	// meaningfully further out toward the extremes (that widening is the whole

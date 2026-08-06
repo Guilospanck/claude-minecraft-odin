@@ -46,3 +46,9 @@ DIAMOND_ORE  :: Tile{5, 2}
 GOLD         :: Tile{6, 2}
 FLOWER_RED   :: Tile{7, 2} // sprite
 FLOWER_YELLOW :: Tile{8, 2} // sprite
+FLOWER_BLUE  :: Tile{9, 2} // sprite
+FLOWER_PINK  :: Tile{10, 2} // sprite
+FLOWER_WHITE :: Tile{11, 2} // sprite
+TALL_GRASS   :: Tile{12, 2} // sprite
+FERN         :: Tile{13, 2} // sprite
+DEAD_BUSH    :: Tile{14, 2} // sprite

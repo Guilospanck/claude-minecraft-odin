@@ -106,11 +106,14 @@ surface_block :: proc(biome: Biome, h: int) -> BlockId {
 		return .Sand
 	case .Badlands:
 		return .RedSand
-	case .Snow, .Taiga:
+	case .Snow:
 		return .Snow
 	case .Mountains:
 		return h > SEA_LEVEL + 34 ? .Snow : .Stone
-	case .Plains, .Forest, .Savanna, .Swamp, .Jungle, .Meadow:
+	case .Plains, .Forest, .Savanna, .Swamp, .Jungle, .Meadow, .Taiga:
+		// Taiga is a cold conifer forest on grass, not a barren snowfield — a
+		// grass surface keeps it visually distinct from the Snow biome and lets
+		// its understory (ferns, tall grass) grow.
 		return .Grass
 	}
 	return .Grass
@@ -465,10 +468,11 @@ TreeKind :: enum {
 	Oak,
 	Spruce,
 	Birch,
+	Acacia, // flat, wide savanna umbrella
 }
 
-// Build a tree (round oak, conical spruce, or a smaller round-crowned
-// birch). chunk_set clips any leaves that spill past the chunk edge.
+// Build a tree (round oak, conical spruce, slim birch, or a flat-topped
+// acacia). chunk_set clips any leaves that spill past the chunk edge.
 @(private = "file")
 place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
 	base := surf_y + 1
@@ -515,8 +519,26 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
 				}
 			}
 		}
+	case .Acacia:
+		// A flat, wide umbrella: a broad single-layer disc at the crown with a
+		// smaller cap just above it — the signature savanna silhouette.
+		for dz in -2 ..= 2 {
+			for dx in -2 ..= 2 {
+				if abs(dx) == 2 && abs(dz) == 2 do continue // round the corners
+				if chunk_get(c, lx + dx, crown, lz + dz) == .Air {
+					chunk_set(c, lx + dx, crown, lz + dz, .Leaves)
+				}
+			}
+		}
+		for dz in -1 ..= 1 {
+			for dx in -1 ..= 1 {
+				if chunk_get(c, lx + dx, crown + 1, lz + dz) == .Air {
+					chunk_set(c, lx + dx, crown + 1, lz + dz, .Leaves)
+				}
+			}
+		}
 	}
-	chunk_set(c, lx, crown + 2, lz, .Leaves)
+	if kind != .Acacia do chunk_set(c, lx, crown + 2, lz, .Leaves) // rounded top for the others
 }
 
 // ~1 in 4 trees in mixed-forest biomes come out as a birch instead of an
@@ -529,6 +551,24 @@ oak_or_birch :: proc(hsh: u64) -> TreeKind {
 @(private = "file")
 flower_kind :: proc(hsh: u64) -> BlockId {
 	return (hsh >> 15) % 2 == 0 ? BlockId.FlowerRed : BlockId.FlowerYellow
+}
+
+// Pick one entry from a biome's flora palette by a column's hash, so a biome's
+// ground cover is a varied mix (several flower colours, grass, ferns) instead
+// of one repeated sprite.
+@(private = "file")
+pick_plant :: proc(hsh: u64, palette: []BlockId) -> BlockId {
+	return palette[(hsh >> 28) % u64(len(palette))]
+}
+
+// Place a surface sprite plant on a column if the cell above the surface is
+// clear. Dead bushes tolerate barren ground (sand/red sand/snow); the leafy
+// plants want grass.
+@(private = "file")
+put_plant :: proc(c: ^Chunk, lx, surf_y, lz: int, b: BlockId) {
+	if chunk_get(c, lx, surf_y + 1, lz) == .Air {
+		chunk_set(c, lx, surf_y + 1, lz, b)
+	}
 }
 
 // A tree's canopy spreads up to 2 blocks past its trunk (see place_tree),
@@ -568,44 +608,116 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			r := hsh % 1000
 			th := int((hsh >> 10) % 3)
 
+			// Each vegetated biome gets its own tree(s) plus a distinct palette
+			// of ground cover (4+ flora types apiece), so biomes read as
+			// genuinely different places rather than the same trees everywhere.
+			grass := surf == .Grass
 			switch biome {
 			case .Desert:
+				// Cacti + dead bushes on the sand — sparse by nature.
 				if surf == .Sand && r < 8 {
 					for i in 0 ..< 1 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
+				} else if surf == .Sand && r < 22 {
+					put_plant(c, lx, surf_y, lz, .DeadBush)
+				}
+			case .Badlands:
+				// Dead bushes and the occasional cactus on red sand.
+				if surf == .RedSand && r < 6 {
+					for i in 0 ..< 1 + th % 2 do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
+				} else if surf == .RedSand && r < 24 {
+					put_plant(c, lx, surf_y, lz, .DeadBush)
 				}
 			case .Forest:
-				if surf == .Grass && site_ok && r < 45 {
+				if grass && site_ok && r < 42 {
 					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
-				} else if surf == .Grass && r < 70 {
-					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				} else if grass && r < 78 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(hsh, {.TallGrass, .Fern, .TallGrass, .FlowerRed, .FlowerBlue}),
+					)
 				}
 			case .Swamp:
-				if surf == .Grass && site_ok && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				if grass && site_ok && r < 16 {
+					place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				} else if grass && r < 70 {
+					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .Fern, .FlowerBlue, .DeadBush}))
+				}
 			case .Plains:
-				if surf == .Grass && site_ok && r < 8 {
+				if grass && site_ok && r < 8 {
 					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
-				} else if surf == .Grass && r < 40 {
-					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				} else if grass && r < 60 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(hsh, {.TallGrass, .TallGrass, .FlowerRed, .FlowerYellow, .FlowerBlue}),
+					)
 				}
 			case .Savanna:
-				if surf == .Grass && site_ok && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				if grass && site_ok && r < 6 {
+					place_tree(c, lx, surf_y, lz, 5 + th % 2, .Acacia)
+				} else if grass && r < 55 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(hsh, {.TallGrass, .TallGrass, .DeadBush, .FlowerYellow}),
+					)
+				}
 			case .Taiga:
-				if surf == .Snow && site_ok && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
+				if grass && site_ok && r < 34 {
+					place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
+				} else if grass && r < 66 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerWhite}),
+					)
+				}
 			case .Jungle:
-				// Dense, tall canopy with a flowery understorey.
-				if surf == .Grass && site_ok && r < 60 {
+				// Dense, tall canopy over a lush understorey.
+				if grass && site_ok && r < 58 {
 					place_tree(c, lx, surf_y, lz, 7 + th, .Oak)
-				} else if surf == .Grass && r < 85 {
-					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				} else if grass && r < 90 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerPink, .TallGrass}),
+					)
 				}
 			case .Meadow:
 				// Flower-carpeted grass, only the occasional tree.
-				if surf == .Grass && site_ok && r < 5 {
+				if grass && site_ok && r < 5 {
 					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
-				} else if surf == .Grass && r < 60 {
-					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				} else if grass && r < 72 {
+					put_plant(
+						c,
+						lx,
+						surf_y,
+						lz,
+						pick_plant(
+							hsh,
+							{.FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass},
+						),
+					)
 				}
-			case .Snow, .Mountains, .Ocean, .Beach, .Badlands:
+			case .Snow:
+				// Barren, but a rare spruce or dead bush pokes through the snow.
+				if surf == .Snow && site_ok && r < 6 {
+					place_tree(c, lx, surf_y, lz, 5 + th % 2, .Spruce)
+				} else if surf == .Snow && r < 14 {
+					put_plant(c, lx, surf_y, lz, r < 10 ? .DeadBush : .FlowerWhite)
+				}
+			case .Mountains, .Ocean, .Beach:
 			// bare
 			}
 		}

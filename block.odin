@@ -40,6 +40,12 @@ BlockId :: enum u8 {
 	Slab,
 	FlowerRed,
 	FlowerYellow,
+	FlowerBlue,
+	FlowerPink,
+	FlowerWhite,
+	TallGrass, // grassy tuft
+	Fern, // forest/taiga/jungle understory
+	DeadBush, // dry twigs: desert/badlands/savanna
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -60,7 +66,28 @@ block_emission :: proc(b: BlockId) -> u8 {
 // Cross-sprite blocks (two crossed quads with a cutout texture) instead of cubes.
 block_is_sprite :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Wheat1, .Wheat2, .Wheat3, .Torch, .FlowerRed, .FlowerYellow:
+	case .Wheat1,
+	     .Wheat2,
+	     .Wheat3,
+	     .Torch,
+	     .FlowerRed,
+	     .FlowerYellow,
+	     .FlowerBlue,
+	     .FlowerPink,
+	     .FlowerWhite,
+	     .TallGrass,
+	     .Fern,
+	     .DeadBush:
+		return true
+	}
+	return false
+}
+
+// Sprite plants (flowers/grass/ferns/bushes) that scatter on the surface and
+// share the same non-solid, non-occluding, ray-stopping behaviour.
+block_is_plant :: proc(b: BlockId) -> bool {
+	#partial switch b {
+	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush:
 		return true
 	}
 	return false
@@ -100,29 +127,20 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .FlowerRed, .FlowerYellow:
+	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
 		return false
 	}
+	if block_is_plant(b) do return false
 	return true
 }
 
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air,
-	     .Water,
-	     .Glass,
-	     .Portal,
-	     .Wheat1,
-	     .Wheat2,
-	     .Wheat3,
-	     .Torch,
-	     .Door,
-	     .Fence,
-	     .FlowerRed,
-	     .FlowerYellow:
+	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door, .Fence:
 		return false
 	}
+	if block_is_plant(b) do return false
 	return true // Lava renders opaque (solid-looking) though it isn't collidable
 }
 
@@ -220,6 +238,18 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.FLOWER_RED
 	case .FlowerYellow:
 		return ad.FLOWER_YELLOW
+	case .FlowerBlue:
+		return ad.FLOWER_BLUE
+	case .FlowerPink:
+		return ad.FLOWER_PINK
+	case .FlowerWhite:
+		return ad.FLOWER_WHITE
+	case .TallGrass:
+		return ad.TALL_GRASS
+	case .Fern:
+		return ad.FERN
+	case .DeadBush:
+		return ad.DEAD_BUSH
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -301,6 +331,18 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.80, 0.16, 0.20}
 	case .FlowerYellow:
 		return {0.90, 0.80, 0.15}
+	case .FlowerBlue:
+		return {0.30, 0.42, 0.82}
+	case .FlowerPink:
+		return {0.90, 0.55, 0.70}
+	case .FlowerWhite:
+		return {0.95, 0.95, 0.95}
+	case .TallGrass:
+		return {0.40, 0.68, 0.32}
+	case .Fern:
+		return {0.32, 0.56, 0.28}
+	case .DeadBush:
+		return {0.55, 0.42, 0.22}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -383,6 +425,18 @@ block_name :: proc(b: BlockId) -> string {
 		return "Red Flower"
 	case .FlowerYellow:
 		return "Yellow Flower"
+	case .FlowerBlue:
+		return "Blue Flower"
+	case .FlowerPink:
+		return "Pink Flower"
+	case .FlowerWhite:
+		return "White Flower"
+	case .TallGrass:
+		return "Tall Grass"
+	case .Fern:
+		return "Fern"
+	case .DeadBush:
+		return "Dead Bush"
 	}
 	return "?"
 }

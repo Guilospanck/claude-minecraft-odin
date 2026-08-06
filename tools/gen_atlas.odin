@@ -106,7 +106,7 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 			case "gold":
 				band := (py % 6 < 3)
 				c = shade(Color{224, 188, 60, 255}, jitter(gx, gy, 10) + (band ? 10 : -10))
-			case "flower_red", "flower_yellow":
+			case "flower_red", "flower_yellow", "flower_blue", "flower_pink", "flower_white":
 				c = Color{0, 0, 0, 0} // transparent background (cutout sprite)
 				stem := (px == 7 || px == 8) && py >= 9
 				petal := px >= 4 && px <= 11 && py >= 3 && py <= 9
@@ -115,9 +115,48 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(Color{60, 120, 50, 255}, jitter(gx, gy, 8))
 					c.a = 255
 				} else if petal {
-					pc := kind == "flower_red" ? Color{204, 40, 48, 255} : Color{224, 196, 40, 255}
+					pc: Color
+					switch kind {
+					case "flower_red":
+						pc = Color{204, 40, 48, 255}
+					case "flower_yellow":
+						pc = Color{224, 196, 40, 255}
+					case "flower_blue":
+						pc = Color{72, 108, 210, 255}
+					case "flower_pink":
+						pc = Color{228, 140, 178, 255}
+					case:
+						pc = Color{238, 238, 240, 255} // white
+					}
 					if center do pc = Color{230, 190, 60, 255}
 					c = shade(pc, jitter(gx, gy, 10))
+					c.a = 255
+				}
+			case "tall_grass":
+				c = Color{0, 0, 0, 0}
+				// several upright blades of varying height
+				blade := px == 2 || px == 5 || px == 8 || px == 11 || px == 13
+				top := 4 + (int(px) % 3) * 2
+				if blade && py >= top {
+					c = shade(Color{70, 148, 60, 255}, jitter(gx, gy, 14))
+					c.a = 255
+				}
+			case "fern":
+				c = Color{0, 0, 0, 0}
+				// a central stem with fronds angling out to either side
+				stem := px == 7 || px == 8
+				frond := (abs(int(px) - 7) == (15 - int(py)) / 2) && py >= 4
+				if (stem && py >= 3) || frond {
+					c = shade(Color{58, 120, 52, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
+			case "dead_bush":
+				c = Color{0, 0, 0, 0}
+				// sparse dry twigs splaying up from the base
+				twig := (px == 7 || px == 8) && py >= 5
+				branch := (abs(int(px) - 7) == (13 - int(py))) && py >= 5 && py <= 11
+				if twig || branch {
+					c = shade(Color{140, 104, 52, 255}, jitter(gx, gy, 16))
 					c.a = 255
 				}
 			case "obsidian":
@@ -264,6 +303,12 @@ main :: proc() {
 	paint(ad.GOLD, Color{224, 188, 60, 255}, "gold")
 	paint(ad.FLOWER_RED, Color{0, 0, 0, 0}, "flower_red")
 	paint(ad.FLOWER_YELLOW, Color{0, 0, 0, 0}, "flower_yellow")
+	paint(ad.FLOWER_BLUE, Color{0, 0, 0, 0}, "flower_blue")
+	paint(ad.FLOWER_PINK, Color{0, 0, 0, 0}, "flower_pink")
+	paint(ad.FLOWER_WHITE, Color{0, 0, 0, 0}, "flower_white")
+	paint(ad.TALL_GRASS, Color{0, 0, 0, 0}, "tall_grass")
+	paint(ad.FERN, Color{0, 0, 0, 0}, "fern")
+	paint(ad.DEAD_BUSH, Color{0, 0, 0, 0}, "dead_bush")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
