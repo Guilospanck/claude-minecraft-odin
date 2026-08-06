@@ -152,16 +152,24 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome)
 
 	h = SEA_LEVEL + int(base_h + pv_h + detail)
 
-	// Rivers: winding channels along a low-frequency zero-crossing, only
-	// in lowlands (so they don't gouge canyons through mountains) with
-	// banks that slope smoothly into the channel.
+	// Rivers: winding channels along a low-frequency zero-crossing, only in
+	// lowlands (so they don't gouge canyons through mountains). Both factors
+	// that make up the carve are smoothstepped rather than hard-gated: a
+	// sharp `ra < 0.05` cutoff meant the *carved* height sat right next to
+	// the *untouched* natural height the instant either factor crossed its
+	// threshold, which on a hillside could be a 15-20+ block jump between
+	// neighbouring columns — a vertical canyon wall, not a riverbank. With
+	// both ramps continuous, neighbouring columns can only differ by a
+	// bounded amount, so banks always slope instead of stepping off a cliff.
 	river := fbm2(seed + 99, fx * 0.0035, fz * 0.0035, 2)
 	ra := abs(river)
-	if ra < 0.05 && h < SEA_LEVEL + 16 {
+	river_band := wg_smoothstep(0.14, 0.0, ra) // 0 well outside the channel .. 1 at its centre
+	lowland := wg_smoothstep(f32(SEA_LEVEL) + 30.0, f32(SEA_LEVEL) + 10.0, f32(h)) // 0 in the mountains .. 1 in true lowlands
+	carve := river_band * lowland
+	if carve > 0 {
 		target := SEA_LEVEL - 3
 		if h > target {
-			depth := (0.05 - ra) / 0.05 // 0 at bank .. 1 at centre
-			h = int(f32(h) * (1 - depth) + f32(target) * depth)
+			h = int(f32(h) * (1 - carve) + f32(target) * carve)
 		}
 	}
 
