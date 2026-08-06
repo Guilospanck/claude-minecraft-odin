@@ -218,13 +218,21 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			// (see world_height_and_biome) only partially lowers h through
 			// its transition band, so a hillside river can end up with h
 			// still above SEA_LEVEL there — a visible carved trench with no
-			// water in it, i.e. a river that looks like it just stops. Any
-			// column meaningfully inside the channel gets a few blocks of
-			// water above its (already carved) floor regardless of where
-			// that sits relative to sea level, so the channel always reads
-			// as a continuous river instead of an empty ditch.
-			river_water_top := h - 1
-			if river_carve > 0.15 do river_water_top = h + 3
+			// water in it, i.e. a river that looks like it just stops.
+			//
+			// A hard "carve > 0.15 -> +3 water" threshold here made exactly
+			// the same mistake the vertical-canyon-wall bug did, just moved
+			// into the water fill instead of the height carve: the river
+			// noise is very low-frequency, so "carve > 0.15" can hold true
+			// across huge, nearly-uniform swaths of the map at once (not a
+			// narrow band), and every one of those columns jumped from 0 to
+			// +3 blocks of water together the instant they crossed the
+			// threshold — a literal flooded plateau with a sharp edge, i.e.
+			// a wall of water, not a river. Scaling the extra water
+			// continuously with the carve strength itself (same field that
+			// shaped the height) means neighbouring columns can only ever
+			// differ by one block, so it reads as ordinary terracing.
+			river_water_top := h - 1 + int(river_carve * 3.0)
 
 			for y in 0 ..< CHUNK_H {
 				b: BlockId = .Air
