@@ -57,6 +57,17 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	return false
 }
 
+// Low-box blocks: rendered as a squat box (see emit_lowbox in mesher.odin)
+// instead of a full 1x1x1 cube, so furniture doesn't look like "just a
+// block". Still solid for collision (block_is_solid below) — the visual
+// shrink is cosmetic only, same trade-off sprites already accept.
+block_is_lowbox :: proc(b: BlockId) -> bool {
+	return b == .Bed
+}
+
+// Fraction of a full cell's height a low-box block's top face sits at.
+LOWBOX_HEIGHT :: f32(0.5625)
+
 block_is_crop :: proc(b: BlockId) -> bool {
 	return b == .Wheat1 || b == .Wheat2 || b == .Wheat3
 }

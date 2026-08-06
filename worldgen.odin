@@ -116,6 +116,62 @@ EROSION_SPLINE := []SplinePoint{{-1.0, 1.0}, {-0.3, 0.7}, {0.2, 0.35}, {1.0, 0.1
 @(private = "file")
 PV_SPLINE := []SplinePoint{{-1.0, -0.3}, {-0.3, -0.15}, {0.0, 0.0}, {0.3, 0.3}, {0.6, 0.9}, {1.0, 1.0}}
 
+// The full noise -> height -> biome pipeline for one world column. Factored
+// out of worldgen_fill so entity.odin's spawn logic can ask "what biome is
+// this column" without recomputing (and risking drifting out of sync with)
+// the five-noise formula that actually generated the terrain there.
+world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome) {
+	fx := f32(wx)
+	fz := f32(wz)
+
+	// The five independent noise axes behind Minecraft's 1.18+ world
+	// generator (see Henrik Kniberg's "Reinventing Minecraft World
+	// Generation"): continentalness (ocean <-> inland), erosion
+	// (rugged <-> flat), peaks & valleys (folded from a raw
+	// "weirdness" field into sharp ridges/valleys), temperature and
+	// humidity (biome only). They modulate each other below instead
+	// of just summing, so e.g. mountains can't spike inside terrain
+	// erosion has flattened.
+	continentalness := fbm2(seed + 7, fx * 0.0011, fz * 0.0011, 4)
+	erosion := fbm2(seed + 13, fx * 0.0028, fz * 0.0028, 3)
+	weirdness := fbm2(seed + 31, fx * 0.005, fz * 0.005, 3)
+	pv := 1.0 - abs(3.0 * abs(weirdness) - 2.0) // fold into ridges/valleys
+	pv = clamp(pv, -1.0, 1.0)
+
+	// Small domain warp so temperature/humidity bands aren't
+	// axis-aligned blobs.
+	warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
+	warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
+	temp := fbm2(seed + 101, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+	moist := fbm2(seed + 202, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+
+	base_h := spline_eval(CONTINENTAL_SPLINE, continentalness)
+	erosion_amp := spline_eval(EROSION_SPLINE, erosion)
+	pv_h := spline_eval(PV_SPLINE, pv) * erosion_amp * 40.0
+	detail := fbm2(seed, fx * 0.02, fz * 0.02, 4) * erosion_amp * 6.0
+
+	h = SEA_LEVEL + int(base_h + pv_h + detail)
+
+	// Rivers: winding channels along a low-frequency zero-crossing, only
+	// in lowlands (so they don't gouge canyons through mountains) with
+	// banks that slope smoothly into the channel.
+	river := fbm2(seed + 99, fx * 0.0035, fz * 0.0035, 2)
+	ra := abs(river)
+	if ra < 0.05 && h < SEA_LEVEL + 16 {
+		target := SEA_LEVEL - 3
+		if h > target {
+			depth := (0.05 - ra) / 0.05 // 0 at bank .. 1 at centre
+			h = int(f32(h) * (1 - depth) + f32(target) * depth)
+		}
+	}
+
+	if h < 4 do h = 4
+	if h > CHUNK_H - 8 do h = CHUNK_H - 8
+
+	biome = classify_biome(continentalness, erosion_amp, pv, temp, moist, h)
+	return
+}
+
 worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 	base_x := c.coord.x * CHUNK_W
 	base_z := c.coord.y * CHUNK_D
@@ -130,51 +186,7 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 			fx := f32(wx)
 			fz := f32(wz)
 
-			// The five independent noise axes behind Minecraft's 1.18+ world
-			// generator (see Henrik Kniberg's "Reinventing Minecraft World
-			// Generation"): continentalness (ocean <-> inland), erosion
-			// (rugged <-> flat), peaks & valleys (folded from a raw
-			// "weirdness" field into sharp ridges/valleys), temperature and
-			// humidity (biome only). They modulate each other below instead
-			// of just summing, so e.g. mountains can't spike inside terrain
-			// erosion has flattened.
-			continentalness := fbm2(seed + 7, fx * 0.0011, fz * 0.0011, 4)
-			erosion := fbm2(seed + 13, fx * 0.0028, fz * 0.0028, 3)
-			weirdness := fbm2(seed + 31, fx * 0.005, fz * 0.005, 3)
-			pv := 1.0 - abs(3.0 * abs(weirdness) - 2.0) // fold into ridges/valleys
-			pv = clamp(pv, -1.0, 1.0)
-
-			// Small domain warp so temperature/humidity bands aren't
-			// axis-aligned blobs.
-			warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
-			warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
-			temp := fbm2(seed + 101, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
-			moist := fbm2(seed + 202, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
-
-			base_h := spline_eval(CONTINENTAL_SPLINE, continentalness)
-			erosion_amp := spline_eval(EROSION_SPLINE, erosion)
-			pv_h := spline_eval(PV_SPLINE, pv) * erosion_amp * 40.0
-			detail := fbm2(seed, fx * 0.02, fz * 0.02, 4) * erosion_amp * 6.0
-
-			h := SEA_LEVEL + int(base_h + pv_h + detail)
-
-			// Rivers: winding channels along a low-frequency zero-crossing, only
-			// in lowlands (so they don't gouge canyons through mountains) with
-			// banks that slope smoothly into the channel.
-			river := fbm2(seed + 99, fx * 0.0035, fz * 0.0035, 2)
-			ra := abs(river)
-			if ra < 0.05 && h < SEA_LEVEL + 16 {
-				target := SEA_LEVEL - 3
-				if h > target {
-					depth := (0.05 - ra) / 0.05 // 0 at bank .. 1 at centre
-					h = int(f32(h) * (1 - depth) + f32(target) * depth)
-				}
-			}
-
-			if h < 4 do h = 4
-			if h > CHUNK_H - 8 do h = CHUNK_H - 8
-
-			biome := classify_biome(continentalness, erosion_amp, pv, temp, moist, h)
+			h, biome := world_height_and_biome(seed, wx, wz)
 
 			heights[lx + lz * CHUNK_W] = h
 			biomes[lx + lz * CHUNK_W] = biome
@@ -260,24 +272,42 @@ settle_water :: proc(c: ^Chunk) {
 
 // Water strands down cliff faces: at the foot of a tall in-chunk cliff, fill
 // the air column with water so it reads as a waterfall. Rare + interior-only.
+//
+// Must be an ISOLATED cliff-base point, not part of a long run: checking
+// only "is my tallest neighbor 8+ higher" made every column along a whole
+// cliff base qualify together (they mostly share the same tall neighbor),
+// and a coarse ~12-block-period noise gate didn't break that up, so a whole
+// straight wall of columns all got flood-filled to the same height — a flat
+// sheet of water pasted across the cliff instead of a waterfall. Requiring
+// exactly one of the four neighbors to be tall (a corner/point on the base,
+// not a uniform wall) plus a much finer per-column noise gate makes falls
+// sparse and narrow instead.
 @(private = "file")
 generate_waterfalls :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int) {
 	for lz in 1 ..< CHUNK_D - 1 {
 		for lx in 1 ..< CHUNK_W - 1 {
 			h := heights[lx + lz * CHUNK_W]
 			if h <= SEA_LEVEL + 1 do continue
-			nh := max(
+			neighbor_h := [4]int {
 				heights[(lx - 1) + lz * CHUNK_W],
 				heights[(lx + 1) + lz * CHUNK_W],
 				heights[lx + (lz - 1) * CHUNK_W],
 				heights[lx + (lz + 1) * CHUNK_W],
-			)
-			if nh < h + 8 do continue // needs a real cliff above
+			}
+			tall_count := 0
+			nh := h
+			for v in neighbor_h {
+				if v >= h + 8 {
+					tall_count += 1
+					nh = max(nh, v)
+				}
+			}
+			if tall_count != 1 do continue // an isolated point, not a whole cliff wall
 			wx := base_x + lx
 			wz := base_z + lz
-			if value_noise2(seed + 999, f32(wx) * 0.08, f32(wz) * 0.08) <= 0.72 do continue
+			if value_noise2(seed + 999, f32(wx) * 0.35, f32(wz) * 0.35) <= 0.55 do continue
 
-			top := min(nh - 1, h + 18)
+			top := min(nh - 1, h + 6) // a short trickle, not a towering sheet
 			for y in h ..= top {
 				if chunk_get(c, lx, y, lz) == .Air {
 					chunk_set(c, lx, y, lz, .Water)

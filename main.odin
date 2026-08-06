@@ -406,6 +406,25 @@ main :: proc() {
 		world_set_block(&world, bx, by + 1, bz, .Bed)
 	}
 
+	// Debug: MC_BED places a bed on the real ground directly ahead (and
+	// drops the camera to eye level there) for screenshotting the low-box
+	// furniture shape without having to guess terrain height up front.
+	if os.get_env("MC_BED", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		bx := int(player.pos.x + fwd.x * 4)
+		bz := int(player.pos.z + fwd.z * 4)
+		world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+		by := SEA_LEVEL
+		for y := CHUNK_H - 2; y >= 1; y -= 1 {
+			if block_is_solid(world_block(&world, bx, y, bz)) {
+				by = y
+				break
+			}
+		}
+		world_set_block(&world, bx, by + 1, bz, .Bed)
+		player.pos = Vec3{f32(bx) - fwd.x * 3, f32(by) + 1, f32(bz) - fwd.z * 3}
+	}
+
 	// Debug: MC_PARTICLES bursts break-particles ahead.
 	if os.get_env("MC_PARTICLES", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)

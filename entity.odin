@@ -52,6 +52,7 @@ MobDeathCause :: enum {
 	Starvation,
 	Predator,
 	Burned,
+	Fall,
 }
 
 Mob :: struct {
@@ -75,6 +76,7 @@ Mob :: struct {
 	old_age_accum:  f32, // fractional old-age damage
 	starve_accum:   f32, // fractional starvation damage
 	death_cause:    MobDeathCause, // why health last reached zero (see above)
+	fall_speed:     f32, // peak downward speed since last on_ground, for fall damage
 }
 
 BREED_LOVE_DURATION :: f32(30.0) // how long a fed mob stays in love mode
@@ -482,6 +484,64 @@ nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	)
 }
 
+// Biomes with real vegetation for a grazing animal to live on. Deserts,
+// badlands, mountains, snow, ocean and beaches have nothing to eat, so
+// passive mobs never spawn there regardless of what's directly underfoot.
+// Not file-private: tests exercise it directly.
+biome_supports_grazing :: proc(b: Biome) -> bool {
+	#partial switch b {
+	case .Plains, .Forest, .Savanna, .Swamp, .Taiga:
+		return true
+	}
+	return false
+}
+
+// Weighted pick of which passive kind fits a biome, instead of a flat
+// uniform roll over all 5 kinds everywhere: sheep/cows favour open
+// grassland, rabbits favour forest/taiga cover, pigs/chickens are
+// generalists that show up a bit everywhere vegetated.
+@(private = "file")
+passive_kind_for_biome :: proc(b: Biome) -> MobKind {
+	r := rng_int(100)
+	#partial switch b {
+	case .Plains, .Savanna:
+		if r < 30 do return .Cow
+		if r < 55 do return .Sheep
+		if r < 80 do return .Chicken
+		if r < 92 do return .Pig
+		return .Rabbit
+	case .Forest, .Taiga:
+		if r < 35 do return .Rabbit
+		if r < 60 do return .Pig
+		if r < 80 do return .Chicken
+		if r < 92 do return .Sheep
+		return .Cow
+	case .Swamp:
+		if r < 45 do return .Pig
+		if r < 75 do return .Chicken
+		if r < 90 do return .Rabbit
+		return .Sheep
+	}
+	return MobKind(rng_int(PASSIVE_COUNT))
+}
+
+// Resource gate: needs grass to graze or water to drink somewhere nearby,
+// not just under the exact spawn point - samples random columns in a
+// radius (with a little vertical slop for mild slopes) instead of an
+// exhaustive scan, since this only runs on the rare frames a spawn roll
+// succeeds. Not file-private: tests exercise it directly.
+food_or_water_nearby :: proc(w: ^World, wx, wz, sy: int) -> bool {
+	for _ in 0 ..< 8 {
+		dx := rng_int(21) - 10
+		dz := rng_int(21) - 10
+		for dy in -1 ..= 1 {
+			b := world_block(w, wx + dx, sy + dy, wz + dz)
+			if b == .Grass || b == .Water do return true
+		}
+	}
+	return false
+}
+
 mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(20, 44)
@@ -494,7 +554,11 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if world_block(w, wx, sy + 1, wz) == .Water do return // don't spawn on seabed
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
-	kind := MobKind(rng_int(PASSIVE_COUNT))
+	_, biome := world_height_and_biome(w.seed, wx, wz)
+	if !biome_supports_grazing(biome) do return
+	if !food_or_water_nearby(w, wx, wz, sy) do return
+
+	kind := passive_kind_for_biome(biome)
 	append(
 		mobs,
 		Mob {
@@ -641,6 +705,8 @@ mob_death_color :: proc(cause: MobDeathCause) -> Vec3 {
 		return Vec3{0.65, 0.12, 0.12}
 	case .Burned:
 		return Vec3{0.9, 0.5, 0.15}
+	case .Fall:
+		return Vec3{0.6, 0.6, 0.65}
 	}
 	return Vec3{}
 }
@@ -688,6 +754,8 @@ mob_death_label :: proc(cause: MobDeathCause) -> string {
 		return "WAS EATEN"
 	case .Burned:
 		return "BURNED UP"
+	case .Fall:
+		return "FELL TO ITS DEATH"
 	}
 	return ""
 }
@@ -759,7 +827,25 @@ mobs_update :: proc(w: ^World, p: ^Player, mobs: ^[dynamic]Mob, dt: f32) {
 			pop(mobs)
 			continue
 		}
+		// Fall damage, mirroring the player's physics.odin logic: track the
+		// peak downward speed while airborne, then damage past FALL_SAFE the
+		// instant it lands. mob_update is what actually runs body_physics
+		// and sets m.on_ground, so the "was airborne" check must happen
+		// before it and the landing check after.
+		if !m.on_ground && m.vel.y < 0 {
+			fs := -m.vel.y
+			if fs > m.fall_speed do m.fall_speed = fs
+		}
+		was_air := !m.on_ground
 		mob_update(w, p, m, i, dt)
+		if m.on_ground {
+			if was_air && m.fall_speed > FALL_SAFE {
+				dmg := int((m.fall_speed - FALL_SAFE) * 0.5)
+				m.health -= dmg
+				if dmg > 0 && m.death_cause == .None do m.death_cause = .Fall
+			}
+			m.fall_speed = 0
+		}
 		i += 1
 	}
 

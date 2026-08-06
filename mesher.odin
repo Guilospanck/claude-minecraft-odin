@@ -209,6 +209,37 @@ emit_sprite :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl, inse
 	)
 }
 
+// A squat box (all 6 faces, unculled) for furniture-style blocks that
+// shouldn't look like a plain full cube — reuses the same FACES corner
+// table as normal cubes, just remapping each corner's Y offset from the
+// full 0/1 down to 0/top_h. Unlike emit_face, this always emits every face
+// regardless of neighbours: the AO/occlusion math in emit_face assumes
+// flush full-height cells, which doesn't hold for a partial box, so — same
+// trade-off already accepted for cross-sprites — it skips AO and neighbour
+// culling entirely in favour of flat per-face directional shading.
+@(private = "file")
+emit_lowbox :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, top_h, bl: f32) {
+	for face in Face {
+		fd := FACES[face]
+		tile := block_tile(b, face)
+		u0, v0, u1, v1 := tile_uv(tile)
+		shade := FACE_SHADE[face]
+
+		verts: [4]Vertex
+		for i in 0 ..< 4 {
+			off := fd.pos[i]
+			y := off.y == 1 ? top_h : f32(0)
+			verts[i].pos = Vec3{f32(wx + off.x), f32(wy) + y, f32(wz + off.z)}
+			verts[i].tint = Vec3{1, 1, 1}
+			sel := fd.uv[i]
+			verts[i].uv = Vec2{sel[0] == 0 ? u0 : u1, sel[1] == 0 ? v0 : v1}
+			verts[i].shade = shade
+			verts[i].blocklight = bl
+		}
+		append(arr, verts[0], verts[1], verts[2], verts[0], verts[2], verts[3])
+	}
+}
+
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 	md: MeshData
 	md.opaque = make([dynamic]Vertex, 0, 4096)
@@ -233,6 +264,11 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 					} else {
 						emit_sprite(&md.opaque, b, wx, y, wz, bl, 0.05, 0.0, 0.95)
 					}
+					continue
+				}
+				if block_is_lowbox(b) {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_lowbox(w, &md.opaque, b, wx, y, wz, LOWBOX_HEIGHT, bl)
 					continue
 				}
 				for face in Face {

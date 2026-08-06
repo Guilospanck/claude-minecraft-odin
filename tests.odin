@@ -1136,3 +1136,51 @@ test_predation_damages_nearby_passive_mob :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+@(test)
+test_biome_supports_grazing_only_vegetated_biomes :: proc(t: ^testing.T) {
+	testing.expect(t, biome_supports_grazing(.Plains), "plains supports grazing")
+	testing.expect(t, biome_supports_grazing(.Forest), "forest supports grazing")
+	testing.expect(t, !biome_supports_grazing(.Desert), "desert has nothing to graze")
+	testing.expect(t, !biome_supports_grazing(.Ocean), "ocean has nothing to graze")
+	testing.expect(t, !biome_supports_grazing(.Badlands), "badlands has nothing to graze")
+	testing.expect(t, !biome_supports_grazing(.Mountains), "mountains has nothing to graze")
+}
+
+@(test)
+test_food_or_water_nearby_requires_grass_or_water :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	testing.expect(
+		t,
+		!food_or_water_nearby(&w, 8, 8, 40),
+		"an empty stone-and-air world has no food or water nearby",
+	)
+	// fill (nearly) the whole chunk with grass so the random radius-sample
+	// reliably lands on it, instead of relying on hitting one exact column
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 40, lz, .Grass)
+	testing.expect(t, food_or_water_nearby(&w, 8, 8, 40), "grass placed nearby is found")
+}
+
+@(test)
+test_mob_fall_damage_from_a_long_drop :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a full-chunk floor, not just one column: the mob can wander a bit
+	// horizontally while falling (ai_wander may set it moving), and a
+	// single-column platform would let it miss the ledge and fall through
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
+	p: Player
+	append(
+		&w.mobs,
+		Mob{kind = .Pig, pos = Vec3{8.5, 70, 8.5}, vel = Vec3{0, -40, 0}, health = 20},
+	)
+
+	mobs_update(&w, &p, &w.mobs, 1.0)
+
+	testing.expect(t, len(w.mobs) == 1, "the mob survives a 40 fall-speed drop from 20 health")
+	if len(w.mobs) == 1 {
+		testing.expect(t, w.mobs[0].health < 20, "landing hard enough deals fall damage")
+		testing.expect(t, w.mobs[0].death_cause == .Fall, "the damage is tagged as a fall")
+	}
+}
