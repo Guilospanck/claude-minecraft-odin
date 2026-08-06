@@ -111,6 +111,17 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				// horizontal mesa strata: alternating dark/light bands
 				band := (py / 3) % 2
 				c = shade(base, jitter(gx, gy, 10) + (band == 0 ? -14 : 10))
+			case "door":
+				// two raised wooden panels with a knob
+				panel := (py >= 2 && py <= 6) || (py >= 9 && py <= 13)
+				knob := px == 12 && py >= 7 && py <= 8
+				if knob {
+					c = Color{224, 200, 90, 255}
+				} else if panel {
+					c = shade(Color{112, 78, 42, 255}, jitter(gx, gy, 10))
+				} else {
+					c = shade(base, jitter(gx, gy, 8))
+				}
 			case "farmland":
 				furrow := (py % 5) == 2
 				c =
@@ -212,6 +223,7 @@ main :: proc() {
 	paint(ad.BED, Color{176, 44, 52, 255}, "bed")
 	paint(ad.CHEST, Color{150, 106, 54, 255}, "chest")
 	paint(ad.RED_SAND, Color{181, 99, 56, 255}, "red_sand")
+	paint(ad.DOOR, Color{96, 66, 34, 255}, "door")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -21,7 +21,15 @@ body_collides :: proc(w: ^World, pos: Vec3, hw, h: f32) -> bool {
 	for by in miny ..= maxy {
 		for bx in minx ..= maxx {
 			for bz in minz ..= maxz {
-				if block_is_solid(world_block(w, bx, by, bz)) do return true
+				b := world_block(w, bx, by, bz)
+				if !block_is_solid(b) do continue
+				// An open door doesn't block movement even though .Door is
+				// solid by default (so raycasts/interaction still find it
+				// when open) — this is the one place that distinction
+				// actually matters, so it's checked here rather than
+				// teaching block_is_solid about per-instance state.
+				if b == .Door && w.doors[Ivec3{bx, by, bz}].open do continue
+				return true
 			}
 		}
 	}

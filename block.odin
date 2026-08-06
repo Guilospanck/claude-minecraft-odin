@@ -31,6 +31,7 @@ BlockId :: enum u8 {
 	Bed,
 	Chest,
 	RedSand,
+	Door,
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -100,7 +101,7 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
+	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door:
 		return false
 	}
 	return true // Lava renders opaque (solid-looking) though it isn't collidable
@@ -182,6 +183,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.CHEST
 	case .RedSand:
 		return ad.RED_SAND
+	case .Door:
+		return ad.DOOR
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -245,6 +248,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.62, 0.44, 0.22}
 	case .RedSand:
 		return {0.71, 0.39, 0.22}
+	case .Door:
+		return {0.55, 0.40, 0.24}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -309,6 +314,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Chest"
 	case .RedSand:
 		return "Red Sand"
+	case .Door:
+		return "Door"
 	}
 	return "?"
 }

@@ -209,16 +209,22 @@ emit_sprite :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl, inse
 	)
 }
 
-// A squat box (all 6 faces, unculled) for furniture-style blocks that
+// An arbitrary box (all 6 faces, unculled) for furniture-style blocks that
 // shouldn't look like a plain full cube — reuses the same FACES corner
-// table as normal cubes, just remapping each corner's Y offset from the
-// full 0/1 down to 0/top_h. Unlike emit_face, this always emits every face
-// regardless of neighbours: the AO/occlusion math in emit_face assumes
-// flush full-height cells, which doesn't hold for a partial box, so — same
-// trade-off already accepted for cross-sprites — it skips AO and neighbour
-// culling entirely in favour of flat per-face directional shading.
+// table as normal cubes, just remapping each corner's 0/1 offsets to
+// caller-given [x0,x1]/[y0,y1]/[z0,z1] extents. Unlike emit_face, this
+// always emits every face regardless of neighbours: the AO/occlusion math
+// in emit_face assumes flush full-height cells, which doesn't hold for a
+// partial box, so — same trade-off already accepted for cross-sprites — it
+// skips AO and neighbour culling entirely in favour of flat per-face
+// directional shading.
 @(private = "file")
-emit_lowbox :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, top_h, bl: f32) {
+emit_box :: proc(
+	arr: ^[dynamic]Vertex,
+	b: BlockId,
+	wx, wy, wz: int,
+	x0, x1, y0, y1, z0, z1, bl: f32,
+) {
 	for face in Face {
 		fd := FACES[face]
 		tile := block_tile(b, face)
@@ -228,8 +234,10 @@ emit_lowbox :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: in
 		verts: [4]Vertex
 		for i in 0 ..< 4 {
 			off := fd.pos[i]
-			y := off.y == 1 ? top_h : f32(0)
-			verts[i].pos = Vec3{f32(wx + off.x), f32(wy) + y, f32(wz + off.z)}
+			x := off.x == 1 ? x1 : x0
+			y := off.y == 1 ? y1 : y0
+			z := off.z == 1 ? z1 : z0
+			verts[i].pos = Vec3{f32(wx) + x, f32(wy) + y, f32(wz) + z}
 			verts[i].tint = Vec3{1, 1, 1}
 			sel := fd.uv[i]
 			verts[i].uv = Vec2{sel[0] == 0 ? u0 : u1, sel[1] == 0 ? v0 : v1}
@@ -238,6 +246,17 @@ emit_lowbox :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: in
 		}
 		append(arr, verts[0], verts[1], verts[2], verts[0], verts[2], verts[3])
 	}
+}
+
+@(private = "file")
+emit_lowbox :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, top_h, bl: f32) {
+	emit_box(arr, b, wx, wy, wz, 0, 1, 0, top_h, 0, 1, bl)
+}
+
+@(private = "file")
+emit_door :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, d: Door, bl: f32) {
+	x0, x1, z0, z1 := door_extents(d)
+	emit_box(arr, b, wx, wy, wz, x0, x1, 0, 0.95, z0, z1, bl)
 }
 
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
@@ -266,9 +285,14 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 					}
 					continue
 				}
+				if b == .Door {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_door(&md.opaque, b, wx, y, wz, w.doors[Ivec3{wx, y, wz}], bl)
+					continue
+				}
 				if block_is_lowbox(b) {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
-					emit_lowbox(w, &md.opaque, b, wx, y, wz, LOWBOX_HEIGHT, bl)
+					emit_lowbox(&md.opaque, b, wx, y, wz, LOWBOX_HEIGHT, bl)
 					continue
 				}
 				for face in Face {

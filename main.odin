@@ -200,15 +200,19 @@ main :: proc() {
 	world: World
 	world_init(&world, seed)
 	load_chests(&world)
+	load_doors(&world)
 	defer world_save_all(&world)
 	defer save_chests(&world)
+	defer save_doors(&world)
 
 	// The Nether: a second world reached through portals.
 	nether: World
 	world_init(&nether, seed ~ 0x4E45_5448_4552_0001, .Nether)
 	load_chests(&nether)
+	load_doors(&nether)
 	defer world_save_all(&nether)
 	defer save_chests(&nether)
+	defer save_doors(&nether)
 	cur := &world // the dimension currently being played/rendered
 
 	// One-off: locate nearby biomes for this seed, print, and exit.
@@ -423,6 +427,27 @@ main :: proc() {
 		}
 		world_set_block(&world, bx, by + 1, bz, .Bed)
 		player.pos = Vec3{f32(bx) - fwd.x * 3, f32(by) + 1, f32(bz) - fwd.z * 3}
+	}
+
+	// Debug: MC_DOOR places a door on the real ground directly ahead (open
+	// if MC_DOOR=open) and drops the camera to eye level there, for
+	// screenshotting the open/closed low-box door shape.
+	if s := os.get_env("MC_DOOR", context.temp_allocator); s != "" {
+		fwd := camera_front(player.yaw, 0)
+		dx := int(player.pos.x + fwd.x * 4)
+		dz := int(player.pos.z + fwd.z * 4)
+		world_ensure_chunk(&world, world_chunk_at(&world, dx, dz))
+		dy := SEA_LEVEL
+		for y := CHUNK_H - 2; y >= 1; y -= 1 {
+			if block_is_solid(world_block(&world, dx, y, dz)) {
+				dy = y
+				break
+			}
+		}
+		world_set_block(&world, dx, dy + 1, dz, .Door)
+		world_set_block(&world, dx, dy + 2, dz, .Air)
+		world.doors[Ivec3{dx, dy + 1, dz}] = Door{facing = 0, open = s == "open"}
+		player.pos = Vec3{f32(dx) - fwd.x * 3, f32(dy) + 1, f32(dz) - fwd.z * 3}
 	}
 
 	// Debug: MC_PARTICLES bursts break-particles ahead.

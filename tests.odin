@@ -26,6 +26,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.particles)
 	delete(w.crops)
 	delete(w.chests)
+	delete(w.doors)
 }
 
 @(test)
@@ -720,7 +721,7 @@ test_spawn_builds_platform_when_no_land_nearby :: proc(t: ^testing.T) {
 		for _, c in w.chunks do chunk_free(c)
 		delete(w.chunks)
 		delete(w.mobs);delete(w.items);delete(w.arrows);delete(w.particles)
-		delete(w.crops);delete(w.chests)
+		delete(w.crops);delete(w.chests);delete(w.doors)
 	}
 	// Flood every chunk within the spawn search radius with deep water (an
 	// all-ocean seed near the origin) — no natural dry land exists anywhere
@@ -1183,4 +1184,28 @@ test_mob_fall_damage_from_a_long_drop :: proc(t: ^testing.T) {
 		testing.expect(t, w.mobs[0].health < 20, "landing hard enough deals fall damage")
 		testing.expect(t, w.mobs[0].death_cause == .Fall, "the damage is tagged as a fall")
 	}
+}
+
+@(test)
+test_door_extents_rotate_90_degrees_when_open :: proc(t: ^testing.T) {
+	cx0, cx1, cz0, cz1 := door_extents(Door{facing = 0, open = false})
+	testing.expect(t, cx1 - cx0 > cz1 - cz0, "facing-0 closed spans X (thin along Z)")
+
+	ox0, ox1, oz0, oz1 := door_extents(Door{facing = 0, open = true})
+	testing.expect(t, oz1 - oz0 > ox1 - ox0, "facing-0 open rotates to span Z (thin along X)")
+}
+
+@(test)
+test_door_toggle_flips_open_state :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 39, 8, .Stone)
+	chunk_set(c, 8, 40, 8, .Door)
+	pos := Ivec3{8, 40, 8}
+
+	testing.expect(t, !w.doors[pos].open, "a door not yet in w.doors defaults to closed")
+	door_toggle(&w, pos)
+	testing.expect(t, w.doors[pos].open, "toggling an unregistered door opens it")
+	door_toggle(&w, pos)
+	testing.expect(t, !w.doors[pos].open, "toggling again closes it")
 }

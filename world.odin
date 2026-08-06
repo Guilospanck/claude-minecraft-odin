@@ -18,6 +18,7 @@ World :: struct {
 	particles:   [dynamic]Particle,
 	crops:       [dynamic]Crop, // growing wheat being ticked toward ripeness
 	chests:      map[Ivec3]Chest, // placed storage keyed by world position
+	doors:       map[Ivec3]Door, // door facing/open state keyed by world position
 	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
 	raining:      bool, // overworld-only rain (see weather_tick)
 	weather_timer: f32, // seconds until the current weather state re-rolls
@@ -36,6 +37,7 @@ world_init :: proc(w: ^World, seed: u64, dim: Dimension = .Overworld) {
 	w.particles = make([dynamic]Particle, 0, 128)
 	w.crops = make([dynamic]Crop, 0, 32)
 	w.chests = make(map[Ivec3]Chest)
+	w.doors = make(map[Ivec3]Door)
 	w.time_of_day = 0.30 // start mid-morning
 	w.weather_timer = rng_range(WEATHER_DRY_MIN, WEATHER_DRY_MAX)
 }

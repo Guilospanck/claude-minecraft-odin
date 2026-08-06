@@ -83,6 +83,8 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		chest_open(w, Ivec3{hit.bx, hit.by, hit.bz})
 	case .Bed:
 		try_sleep(w, p)
+	case .Door:
+		door_toggle(w, Ivec3{hit.bx, hit.by, hit.bz})
 	case .Wheat3:
 		harvest_crop(w, p, hit.bx, hit.by, hit.bz)
 	case .Farmland:
