@@ -1307,6 +1307,46 @@ test_place_foundation_grounds_sloped_columns :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_climate_spread_widens_and_keeps_sign :: proc(t: ^testing.T) {
+	// zero stays put, sign is preserved, and a mid-range input is pushed
+	// meaningfully further out toward the extremes (that widening is the whole
+	// point — it's what makes cold/hot biomes common instead of rare tails).
+	testing.expect(t, climate_spread(0) == 0, "zero maps to zero")
+	testing.expect(t, climate_spread(-0.2) < 0, "sign is preserved (negative)")
+	testing.expect(t, climate_spread(0.2) > 0.2, "a mid input is spread further out")
+	testing.expect(t, climate_spread(0.2) <= 1.0 && climate_spread(1.0) <= 1.0, "output stays clamped to 1")
+}
+
+@(test)
+test_biomes_are_varied_and_cold_never_borders_hot :: proc(t: ^testing.T) {
+	// Deterministic for a fixed seed: over a broad grid the world must show a
+	// good spread of biomes (the "more of the same" fix) AND never place a
+	// frigid biome directly beside a torrid one (the "snow limiting a desert"
+	// fix, guaranteed by the temp-monotonic classification grid).
+	frigid :: proc(b: Biome) -> bool {return b == .Snow || b == .Taiga}
+	torrid :: proc(b: Biome) -> bool {
+		return b == .Desert || b == .Badlands || b == .Savanna || b == .Jungle
+	}
+	seed := u64(4242)
+	seen: map[Biome]bool
+	defer delete(seen)
+	violations := 0
+	STEP :: 8
+	for wz := -600; wz < 600; wz += STEP {
+		for wx := -600; wx < 600; wx += STEP {
+			_, b, _ := world_height_and_biome(seed, wx, wz)
+			seen[b] = true
+			_, bx, _ := world_height_and_biome(seed, wx + STEP, wz)
+			_, bz, _ := world_height_and_biome(seed, wx, wz + STEP)
+			if (frigid(b) && torrid(bx)) || (torrid(b) && frigid(bx)) do violations += 1
+			if (frigid(b) && torrid(bz)) || (torrid(b) && frigid(bz)) do violations += 1
+		}
+	}
+	testing.expect(t, violations == 0, "a frigid biome never borders a torrid one")
+	testing.expect(t, len(seen) >= 8, "a broad area shows a rich spread of biomes, not more of the same")
+}
+
+@(test)
 test_mob_faces_have_expected_styles :: proc(t: ^testing.T) {
 	testing.expect(t, face_def_for_mob(.Cow).style == .Animal, "animals get an eyes-only face")
 	testing.expect(t, face_def_for_mob(.Zombie).style == .Humanoid, "humanoid mobs get a full face")

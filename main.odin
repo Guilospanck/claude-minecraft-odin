@@ -61,6 +61,20 @@ scan_biomes :: proc(w: ^World) {
 	fmt.println("badlands:", fr, rx, ry0, rz)
 	fmt.println("tallest:", tx0, tallest_y, tz0)
 	fmt.println("surface block histogram:", hist)
+
+	// Biome distribution over a wide sample: the whole point of the climate
+	// rework is that a drive across the map hits many biomes, so this counts
+	// how much of a broad area each biome actually covers.
+	bhist: map[Biome]int
+	defer delete(bhist)
+	BR :: 700 // sample half-extent in blocks
+	for wz := -BR; wz < BR; wz += 6 {
+		for wx := -BR; wx < BR; wx += 6 {
+			_, b, _ := world_height_and_biome(w.seed, wx, wz)
+			bhist[b] += 1
+		}
+	}
+	fmt.println("biome histogram:", bhist)
 }
 
 // Natural terrain blocks a spawn point may rest on — never water/lava, and

@@ -519,7 +519,7 @@ nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 // Not file-private: tests exercise it directly.
 biome_supports_grazing :: proc(b: Biome) -> bool {
 	#partial switch b {
-	case .Plains, .Forest, .Savanna, .Swamp, .Taiga:
+	case .Plains, .Forest, .Savanna, .Swamp, .Taiga, .Jungle, .Meadow:
 		return true
 	}
 	return false
@@ -540,12 +540,18 @@ passive_kind_for_biome :: proc(b: Biome) -> MobKind {
 		if r < 85 do return .Chicken
 		if r < 95 do return .Pig
 		return .Rabbit
-	case .Forest, .Taiga:
+	case .Forest, .Taiga, .Jungle:
 		if r < 35 do return .Rabbit
 		if r < 60 do return .Pig
 		if r < 80 do return .Chicken
 		if r < 92 do return .Sheep
 		return .Cow
+	case .Meadow:
+		if r < 35 do return .Sheep
+		if r < 60 do return .Horse
+		if r < 80 do return .Cow
+		if r < 92 do return .Rabbit
+		return .Chicken
 	case .Swamp:
 		if r < 45 do return .Pig
 		if r < 75 do return .Chicken

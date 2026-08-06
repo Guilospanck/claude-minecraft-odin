@@ -1,5 +1,7 @@
 package main
 
+import "core:math"
+
 Biome :: enum {
 	Ocean,
 	Beach,
@@ -12,6 +14,8 @@ Biome :: enum {
 	Savanna,
 	Swamp,
 	Taiga,
+	Jungle, // hot + very wet: tall canopy, ferns, vines
+	Meadow, // cool + dry highland: flower-carpeted grass, few trees
 }
 
 @(private = "file")
@@ -20,13 +24,45 @@ wg_smoothstep :: proc(e0, e1, x: f32) -> f32 {
 	return t * t * (3 - 2 * t)
 }
 
-// Picks a biome from the full noise field for a column, not just
-// temperature/humidity: continentalness separates ocean/beach from land,
-// erosion (already folded into erosion_amp: high amp = rugged, low = flat)
-// and peaks & valleys pick out mountains, and — the key idea from Kniberg's
-// Minecraft 1.18 talk — desert and badlands share the same temperature and
-// humidity range and only split apart once erosion is considered too
-// (flat = dunes, rugged = mesa).
+// fbm noise is bell-shaped: its output clusters tightly around 0, so a raw
+// temperature/humidity field spends almost all its time in the temperate
+// middle and only rarely reaches the cold/hot extremes. That is exactly why
+// the old map read as "more of the same" — snow and desert live in the tails
+// the noise almost never visits. This pushes values outward toward ±1 (a
+// signed power < 1 widens the tails while keeping 0 at 0 and the sign intact),
+// turning the narrow bell into a spread that actually reaches every biome band
+// at drive-through scale. Not file-private: tests exercise it directly.
+climate_spread :: proc(x: f32) -> f32 {
+	s: f32 = x < 0 ? -1 : 1
+	return clamp(s * math.pow(min(abs(x) * 2.3, 1.0), 0.72), -1, 1)
+}
+
+// Temperature + humidity for a column, as one shared function so the terrain
+// generator and the grass tinter (mesher.odin) can never drift apart on what
+// climate a column has. Domain-warped so the bands aren't axis-aligned blobs,
+// then spread toward the extremes (see climate_spread).
+world_climate :: proc(seed: u64, wx, wz: int) -> (temp: f32, moist: f32) {
+	fx := f32(wx)
+	fz := f32(wz)
+	warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
+	warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
+	// Slightly lower frequency than before (0.003 vs 0.0035) so each biome
+	// region is a bit larger — big enough to travel across, still small enough
+	// that a short trip crosses several.
+	t := fbm2(seed + 101, (fx + warp_x) * 0.003, (fz + warp_z) * 0.003, 3)
+	m := fbm2(seed + 202, (fx + warp_x) * 0.003, (fz + warp_z) * 0.003, 3)
+	return climate_spread(t), climate_spread(m)
+}
+
+// Picks a biome from the full noise field for a column. Continentalness
+// separates ocean/beach from land (via the built height), erosion + peaks &
+// valleys pick out mountains, and the rest is a temperature x humidity grid.
+// The grid is laid out so temperature moves monotonically cold -> hot: the
+// frigid biomes (Snow/Taiga) and the torrid ones (Desert/Savanna/Jungle) sit
+// at opposite ends with the whole temperate band (Meadow/Plains/Forest/Swamp)
+// between them, so a cold biome can never border a hot one — you always pass
+// through the temperate middle, which is what makes transitions read as
+// gradual instead of snow slammed against desert.
 @(private = "file")
 classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: int) -> Biome {
 	// Ocean/Beach come from the actual generated height, not a separate
@@ -37,14 +73,29 @@ classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: in
 	if h <= SEA_LEVEL - 2 do return .Ocean
 	if h <= SEA_LEVEL + 1 do return .Beach
 	if (pv > 0.55 && erosion_amp > 0.55) || h > SEA_LEVEL + 30 do return .Mountains
-	if temp < -0.35 do return moist > 0.0 ? .Taiga : .Snow
-	if temp > 0.35 {
-		if moist < -0.15 do return erosion_amp < 0.35 ? .Badlands : .Desert
-		return .Savanna
+
+	// Low, very wet, and not cold: swamp (checked before the temp bands so it
+	// can claim wet lowlands out of what would otherwise be forest).
+	if temp > -0.3 && temp < 0.35 && moist > 0.5 && h < SEA_LEVEL + 6 do return .Swamp
+
+	if temp < -0.35 { 	// frigid: only the coldest columns, split dry/wet
+		return moist < 0.05 ? .Snow : .Taiga
 	}
-	if moist > 0.30 && h < SEA_LEVEL + 6 do return .Swamp
-	if moist > 0.15 do return .Forest
-	return .Plains
+	if temp > 0.4 { 	// torrid
+		// Desert/Badlands share the hot+dry corner and split on ruggedness —
+		// a flatter (low-amplitude) area mesas into Badlands, rougher stays
+		// open Desert dunes.
+		if moist < -0.25 do return erosion_amp < 0.35 ? .Badlands : .Desert
+		if moist < 0.15 do return .Savanna
+		return .Jungle
+	}
+	if temp < -0.1 { 	// cool temperate: flowery meadow when dry, else forest
+		return moist < -0.1 ? .Meadow : .Forest
+	}
+	// warm temperate
+	if moist < -0.25 do return .Savanna
+	if moist < 0.3 do return .Plains
+	return .Forest
 }
 
 @(private = "file")
@@ -59,7 +110,7 @@ surface_block :: proc(biome: Biome, h: int) -> BlockId {
 		return .Snow
 	case .Mountains:
 		return h > SEA_LEVEL + 34 ? .Snow : .Stone
-	case .Plains, .Forest, .Savanna, .Swamp:
+	case .Plains, .Forest, .Savanna, .Swamp, .Jungle, .Meadow:
 		return .Grass
 	}
 	return .Grass
@@ -138,12 +189,10 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome,
 	pv := 1.0 - abs(3.0 * abs(weirdness) - 2.0) // fold into ridges/valleys
 	pv = clamp(pv, -1.0, 1.0)
 
-	// Small domain warp so temperature/humidity bands aren't
-	// axis-aligned blobs.
-	warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
-	warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
-	temp := fbm2(seed + 101, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
-	moist := fbm2(seed + 202, (fx + warp_x) * 0.0035, (fz + warp_z) * 0.0035, 3)
+	// Temperature/humidity come from the shared climate function (warped +
+	// spread toward the extremes) so biome choice here and grass tint in the
+	// mesher stay in lockstep.
+	temp, moist := world_climate(seed, wx, wz)
 
 	base_h := spline_eval(CONTINENTAL_SPLINE, continentalness)
 	erosion_amp := spline_eval(EROSION_SPLINE, erosion)
@@ -542,6 +591,20 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				if surf == .Grass && site_ok && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Taiga:
 				if surf == .Snow && site_ok && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
+			case .Jungle:
+				// Dense, tall canopy with a flowery understorey.
+				if surf == .Grass && site_ok && r < 60 {
+					place_tree(c, lx, surf_y, lz, 7 + th, .Oak)
+				} else if surf == .Grass && r < 85 {
+					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				}
+			case .Meadow:
+				// Flower-carpeted grass, only the occasional tree.
+				if surf == .Grass && site_ok && r < 5 {
+					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+				} else if surf == .Grass && r < 60 {
+					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
+				}
 			case .Snow, .Mountains, .Ocean, .Beach, .Badlands:
 			// bare
 			}
