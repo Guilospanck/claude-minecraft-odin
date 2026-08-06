@@ -24,6 +24,7 @@ World :: struct {
 	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
 	raining:      bool, // overworld-only rain (see weather_tick)
 	weather_timer: f32, // seconds until the current weather state re-rolls
+	wind_x, wind_z: f32, // slowly drifting wind vector; blows precipitation sideways
 }
 
 // Set before sorting chunk work lists; the comparators read it (single-threaded).

@@ -998,8 +998,15 @@ main :: proc() {
 			items_update(cur, &player, &cur.items, dt)
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)
-			if cur.raining do rain_particles_spawn(&cur.particles, player.pos)
-			audio_set_rain(cur.raining)
+			// Precipitation type follows the biome the player is in: rain in
+			// temperate country, snow in the cold biomes, nothing in deserts.
+			precip := Precip.None
+			if cur.raining {
+				_, pbiome, _ := world_height_and_biome(cur.seed, int(player.pos.x), int(player.pos.z))
+				precip = biome_precip(pbiome)
+				precip_particles_spawn(&cur.particles, player.pos, precip, cur.wind_x, cur.wind_z)
+			}
+			audio_set_rain(precip == .Rain) // snow falls silently; deserts stay dry
 			particles_update(cur, &cur.particles, dt)
 
 			// background music by context: nether > combat > calm

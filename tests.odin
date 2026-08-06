@@ -813,6 +813,17 @@ test_weather_toggles_overworld_only :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_biome_precip_follows_biome :: proc(t: ^testing.T) {
+	testing.expect(t, biome_precip(.Snow) == .Snow, "cold biomes get snow")
+	testing.expect(t, biome_precip(.Taiga) == .Snow, "taiga gets snow")
+	testing.expect(t, biome_precip(.Mountains) == .Snow, "peaks get snow")
+	testing.expect(t, biome_precip(.Desert) == .None, "deserts stay dry")
+	testing.expect(t, biome_precip(.Badlands) == .None, "badlands stay dry")
+	testing.expect(t, biome_precip(.Forest) == .Rain, "temperate biomes get rain")
+	testing.expect(t, biome_precip(.Jungle) == .Rain, "jungle gets rain")
+}
+
+@(test)
 test_breeding_makes_a_baby :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)
