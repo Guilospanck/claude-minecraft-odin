@@ -1278,6 +1278,42 @@ test_generate_farm_has_farmland_wheat_and_fence :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_place_foundation_grounds_sloped_columns :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+
+	// A 2-wide footprint over sloping ground. Plot-centre surface is y=45 (so
+	// the building's base course sits at base_y = surf_y + 1 = 46, matching how
+	// generate_village calls this); the far column is three blocks lower at
+	// heights=42. Without a pedestal the building would float over that column.
+	heights: [CHUNK_W * CHUNK_D]int
+	for i in 0 ..< len(heights) do heights[i] = 45
+	heights[5 + 6 * CHUNK_W] = 42 // the lower column
+
+	base_y := 46
+	place_foundation(c, heights[:], 5, 5, 6, 6, base_y)
+
+	// The lower column is packed with stone from its own surface up to just
+	// below the building base — no air gap left to float over.
+	for y in 42 ..< base_y {
+		testing.expect(t, chunk_get(c, 5, y, 6) == .Stone, "the pedestal fills the gap under a low column")
+	}
+	// The fill stops exactly at the foundation-course level, never above it.
+	testing.expect(t, chunk_get(c, 5, base_y, 6) == .Air, "the pedestal never reaches into the building")
+	// A column already at grade still gets the single course that closes the
+	// natural one-block gap between the terrain top and the foundation course.
+	testing.expect(t, chunk_get(c, 5, 45, 5) == .Stone, "a level column still gets grounded")
+	testing.expect(t, chunk_get(c, 5, 46, 5) == .Air, "a level column isn't filled into the building")
+}
+
+@(test)
+test_mob_faces_have_expected_styles :: proc(t: ^testing.T) {
+	testing.expect(t, face_def_for_mob(.Cow).style == .Animal, "animals get an eyes-only face")
+	testing.expect(t, face_def_for_mob(.Zombie).style == .Humanoid, "humanoid mobs get a full face")
+	testing.expect(t, face_def_for_mob(.Fish).style == .None, "tiny aquatic mobs get no face")
+}
+
+@(test)
 test_villager_avoids_water :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

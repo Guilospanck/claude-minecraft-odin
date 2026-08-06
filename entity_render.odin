@@ -224,12 +224,12 @@ VROBE_MARKER :: Vec3{-1, -1, -1}
 
 @(private = "file")
 villager_parts := [6]MobPart {
-	{{-0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, 0}, // left leg
-	{{0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, 0}, // right leg
+	{{-0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, 1}, // left leg
+	{{0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, -1}, // right leg
 	{{0, 1.2, 0}, {0.42, 0.62, 0.24}, VROBE_MARKER, 0}, // body/robe
 	{{0, 1.66, 0}, {0.4, 0.42, 0.4}, VSKIN, 0}, // head
-	{{-0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE_MARKER, 0}, // left arm
-	{{0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE_MARKER, 0}, // right arm
+	{{-0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE_MARKER, -1}, // left arm (opposes left leg)
+	{{0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE_MARKER, 1}, // right arm
 }
 
 // Distinct robe colour per profession, so villagers read as different
@@ -339,14 +339,13 @@ villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient:
 		sw := math.sin(v.walk_phase)
 		robe := villager_robe_color(v)
 		for pt in villager_parts {
-			off := pt.offset
-			off.z += pt.swing * sw * 0.16
-			model := base * linalg.matrix4_translate_f32(off) * linalg.matrix4_scale_f32(pt.size)
+			model := limb_model(base, pt, sw, true)
 			ent_set_mat4(e_mvp, vp * model)
 			col := pt.color == VROBE_MARKER ? robe : pt.color
 			gl.Uniform3f(e_color, col.r, col.g, col.b)
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
+		emit_face(vp, base, villager_face_def(v))
 		if v.profession == .Guard {
 			model :=
 				base *
@@ -384,6 +383,7 @@ remotes_render_frame :: proc(vp: Mat4, ambient: f32) {
 			gl.Uniform3f(e_color, pt.color.r, pt.color.g, pt.color.b)
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
+		emit_face(vp, base, player_face)
 	}
 	gl.BindVertexArray(0)
 }
@@ -423,6 +423,191 @@ ent_set_mat4 :: proc(loc: i32, m: Mat4) {
 	mm := m
 	gl.UniformMatrix4fv(loc, 1, false, transmute([^]f32)(&mm[0, 0]))
 }
+
+// Model matrix for one body part, animating limbs from the walk phase.
+//   swing == 0        : a static part, drawn in place.
+//   pivot (legs/arms) : the limb rotates about its TOP edge (the hip or
+//                       shoulder) so the foot/hand arcs forward and back like a
+//                       real stride, instead of the whole rigid box sliding.
+//   else (fins etc.)  : the gentle z-sway aquatic parts always had.
+@(private = "file")
+limb_model :: proc(base: Mat4, pt: MobPart, sw: f32, pivot: bool) -> Mat4 {
+	if pt.swing == 0 {
+		return base * linalg.matrix4_translate_f32(pt.offset) * linalg.matrix4_scale_f32(pt.size)
+	}
+	if pivot {
+		angle := pt.swing * sw * 0.6
+		half := Vec3{0, pt.size.y * 0.5, 0}
+		return(
+			base *
+			linalg.matrix4_translate_f32(pt.offset + half) * // to the hip/shoulder
+			linalg.matrix4_rotate_f32(angle, Vec3{1, 0, 0}) *
+			linalg.matrix4_translate_f32(-half) * // back down to the box centre
+			linalg.matrix4_scale_f32(pt.size) \
+		)
+	}
+	off := pt.offset
+	off.z += pt.swing * sw * 0.16
+	return base * linalg.matrix4_translate_f32(off) * linalg.matrix4_scale_f32(pt.size)
+}
+
+// Facial features so heads read as faces, not blank boxes. Rather than hand-
+// adding eye/mouth/hair cubes to every model array (and threading them through
+// the limb animation), a MobFace describes just the head box; emit_face paints
+// the features onto its front (-Z, the heading) at draw time.
+MobFaceStyle :: enum {
+	None, // no face (tiny/aquatic mobs)
+	Humanoid, // eyes + nose + mouth + hair
+	Animal, // eyes only (snout/beak already modelled as body parts)
+}
+
+MobFace :: struct {
+	center: Vec3, // head-box centre offset (feet-relative, pre-yaw)
+	size:   Vec3, // head-box size
+	style:  MobFaceStyle,
+	skin:   Vec3, // nose colour (Humanoid)
+	hair:   Vec3, // hair colour (Humanoid)
+	eye:    Vec3, // pupil / socket colour
+}
+
+@(private = "file")
+EYE_WHITE :: Vec3{0.95, 0.95, 0.93}
+@(private = "file")
+EYE_DARK :: Vec3{0.11, 0.10, 0.10}
+@(private = "file")
+MOUTH :: Vec3{0.40, 0.20, 0.20}
+
+@(private = "file")
+draw_cube :: proc(vp, base: Mat4, center, size, color: Vec3) {
+	model := base * linalg.matrix4_translate_f32(center) * linalg.matrix4_scale_f32(size)
+	ent_set_mat4(e_mvp, vp * model)
+	gl.Uniform3f(e_color, color.r, color.g, color.b)
+	gl.DrawArrays(gl.TRIANGLES, 0, 36)
+}
+
+@(private = "file")
+emit_face :: proc(vp, base: Mat4, fd: MobFace) {
+	if fd.style == .None do return
+	hs := fd.size
+	// Front face is -Z; nudge features a hair further out so they never z-fight
+	// with the head cube.
+	fz := fd.center.z - hs.z * 0.5 - 0.005
+	ex := hs.x * 0.24 // eye offset either side of centre
+	ey := fd.center.y + hs.y * 0.10 // eyes a touch above the head centre
+	signs := [2]f32{-1, 1}
+
+	if fd.style == .Humanoid {
+		for s in signs {
+			draw_cube(vp, base, Vec3{s * ex, ey, fz}, Vec3{hs.x * 0.16, hs.y * 0.15, 0.04}, EYE_WHITE)
+			draw_cube(
+				vp,
+				base,
+				Vec3{s * ex, ey, fz - 0.012},
+				Vec3{hs.x * 0.08, hs.y * 0.10, 0.05},
+				fd.eye,
+			)
+		}
+		draw_cube(
+			vp,
+			base,
+			Vec3{0, ey - hs.y * 0.16, fz},
+			Vec3{hs.x * 0.10, hs.y * 0.14, 0.05},
+			fd.skin,
+		) // nose
+		draw_cube(
+			vp,
+			base,
+			Vec3{0, fd.center.y - hs.y * 0.30, fz},
+			Vec3{hs.x * 0.40, hs.y * 0.06, 0.03},
+			MOUTH,
+		)
+		// Hair: a cap over the crown, a curtain down the back, and a short
+		// fringe across the top of the forehead.
+		t := hs.y * 0.18
+		draw_cube(
+			vp,
+			base,
+			Vec3{0, fd.center.y + hs.y * 0.5 - t * 0.4, 0},
+			Vec3{hs.x * 1.06, t, hs.z * 1.06},
+			fd.hair,
+		)
+		draw_cube(
+			vp,
+			base,
+			Vec3{0, fd.center.y + hs.y * 0.08, fd.center.z + hs.z * 0.5 + 0.01},
+			Vec3{hs.x * 1.06, hs.y * 0.72, 0.05},
+			fd.hair,
+		)
+		draw_cube(
+			vp,
+			base,
+			Vec3{0, fd.center.y + hs.y * 0.34, fz},
+			Vec3{hs.x * 1.02, hs.y * 0.14, 0.04},
+			fd.hair,
+		)
+	} else { 	// Animal: just eyes
+		for s in signs {
+			draw_cube(vp, base, Vec3{s * ex, ey, fz}, Vec3{hs.x * 0.17, hs.y * 0.17, 0.05}, EYE_WHITE)
+			draw_cube(
+				vp,
+				base,
+				Vec3{s * ex, ey, fz - 0.012},
+				Vec3{hs.x * 0.10, hs.y * 0.11, 0.06},
+				fd.eye,
+			)
+		}
+	}
+}
+
+// Head geometry per mob, mirroring the head part in each *_parts array above.
+// Not file-private: tests exercise it directly.
+face_def_for_mob :: proc(k: MobKind) -> MobFace {
+	switch k {
+	case .Pig:
+		return {{0, 0.55, -0.55}, {0.5, 0.5, 0.45}, .Animal, {}, {}, EYE_DARK}
+	case .Sheep:
+		return {{0, 0.88, -0.62}, {0.45, 0.5, 0.42}, .Animal, {}, {}, EYE_DARK}
+	case .Cow:
+		return {{0, 0.98, -0.72}, {0.5, 0.5, 0.45}, .Animal, {}, {}, EYE_DARK}
+	case .Chicken:
+		return {{0, 0.56, -0.22}, {0.3, 0.32, 0.3}, .Animal, {}, {}, EYE_DARK}
+	case .Rabbit:
+		return {{0, 0.30, -0.18}, {0.22, 0.22, 0.20}, .Animal, {}, {}, EYE_DARK}
+	case .Horse:
+		return {{0, 1.55, -0.92}, {0.26, 0.26, 0.34}, .Animal, {}, {}, EYE_DARK}
+	case .Zombie:
+		return {{0, 1.68, 0}, {0.42, 0.42, 0.42}, .Humanoid, ZSKIN, {0.14, 0.12, 0.10}, EYE_DARK}
+	case .Skeleton:
+		return {{0, 1.66, 0}, {0.4, 0.4, 0.4}, .Animal, {}, {}, EYE_DARK} // dark skull sockets
+	case .Piglin:
+		return {{0, 1.68, 0}, {0.52, 0.44, 0.44}, .Animal, {}, {}, EYE_DARK}
+	case .Ghast:
+		return {{0, 0.95, 0}, {1.3, 1.3, 1.3}, .Animal, {}, {}, GHASTFACE}
+	case .Fish, .Squid:
+		return {style = .None}
+	}
+	return {style = .None}
+}
+
+// A few natural hair tones, picked per villager by name hash so heads vary.
+@(private = "file")
+HAIR_TONES := []Vec3 {
+	{0.16, 0.11, 0.07}, // near black
+	{0.34, 0.22, 0.10}, // brown
+	{0.52, 0.30, 0.12}, // auburn
+	{0.60, 0.54, 0.42}, // ash blond
+	{0.46, 0.46, 0.46}, // grey
+}
+
+@(private = "file")
+villager_face_def :: proc(v: ^Villager) -> MobFace {
+	h := hash_string(v.name)
+	hair := HAIR_TONES[(h >> 40) % u64(len(HAIR_TONES))]
+	return {{0, 1.66, 0}, {0.4, 0.42, 0.4}, .Humanoid, VSKIN, hair, EYE_DARK}
+}
+
+@(private = "file")
+player_face := MobFace{{0, 1.66, 0}, {0.42, 0.42, 0.42}, .Humanoid, PSKIN, {0.20, 0.14, 0.09}, EYE_DARK}
 
 entity_render_init :: proc() {
 	ok: bool
@@ -477,17 +662,15 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 			base = base * linalg.matrix4_scale_f32(Vec3{0.55, 0.55, 0.55}) // shrink around the feet
 		}
 		sw := math.sin(m.walk_phase)
+		// Land creatures stride from the hip; aquatic fins/tentacles just sway.
+		pivot := !mob_is_aquatic(m.kind) && m.kind != .Ghast
 		for pt in mob_parts(m.kind) {
-			off := pt.offset
-			off.z += pt.swing * sw * 0.16 // leg shuffle
-			model :=
-				base *
-				linalg.matrix4_translate_f32(off) *
-				linalg.matrix4_scale_f32(pt.size)
+			model := limb_model(base, pt, sw, pivot)
 			ent_set_mat4(e_mvp, vp * model)
 			gl.Uniform3f(e_color, pt.color.r, pt.color.g, pt.color.b)
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
+		emit_face(vp, base, face_def_for_mob(m.kind))
 	}
 	gl.BindVertexArray(0)
 }

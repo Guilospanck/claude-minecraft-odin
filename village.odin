@@ -53,6 +53,29 @@ place_tapering_roof :: proc(c: ^Chunk, cx, base_y, cz: int, radii: []int, materi
 	}
 }
 
+// Fill a solid pedestal under a building footprint so it never floats over
+// sloping ground. Each plot builds from a single plot-centre height, but the
+// columns around that centre sit at their own (often lower) terrain heights,
+// and even a flat plot leaves a one-block gap because the foundation course is
+// laid one block above the surface. For every column the structure plus its
+// fenced yard covers, this stacks Stone from that column's own surface up to
+// just below base_y (the foundation-course level). Columns whose own ground is
+// already at/above base_y are left untouched — the building beds into the
+// hillside there instead of floating. Run BEFORE the building so the building's
+// own blocks (well water, farmland, door) always win on the cells they share.
+// Not file-private: tests exercise it directly.
+place_foundation :: proc(c: ^Chunk, heights: []int, lx0, lz0, lx1, lz1, base_y: int) {
+	for lz in lz0 ..= lz1 {
+		for lx in lx0 ..= lx1 {
+			if lx < 0 || lz < 0 || lx >= CHUNK_W || lz >= CHUNK_D do continue
+			ground := heights[lx + lz * CHUNK_W] // first air cell above the terrain
+			for y in ground ..< base_y {
+				chunk_set(c, lx, y, lz, .Stone)
+			}
+		}
+	}
+}
+
 // A fenced square perimeter with a single-cell gap (the entrance), used for
 // house yards, the churchyard, and the farm plot boundary.
 @(private = "file")
@@ -277,14 +300,22 @@ generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, h
 	church_surf := h_at(heights, 9 + 3, 1 + 3)
 	farm_surf := h_at(heights, 9 + 3, 9 + 3)
 
+	// Ground each structure (footprint + fenced yard, lx-1..lx+SIZE) before
+	// raising it, so nothing hangs in the air over sloping terrain.
+	place_foundation(c, heights, 1, 1, 7, 7, house_a_surf + 1)
 	generate_house(w, c, base_x, base_z, 2, 2, house_a_surf, 0)
+	place_foundation(c, heights, 1, 9, 7, 15, house_b_surf + 1)
 	generate_house(w, c, base_x, base_z, 2, 10, house_b_surf, 1)
+	place_foundation(c, heights, 9, 1, 15, 7, church_surf + 1)
 	generate_church(w, c, base_x, base_z, 10, 2, church_surf)
+	place_foundation(c, heights, 9, 9, 15, 15, farm_surf + 1)
 	generate_farm(w, c, base_x, base_z, 10, 10, farm_surf)
 
 	well_surf := h_at(heights, 8, 8)
+	place_foundation(c, heights, 7, 7, 9, 9, well_surf + 1)
 	generate_well(c, 8, 8, well_surf)
 	tower_surf := h_at(heights, 8, 4)
+	place_foundation(c, heights, 7, 3, 9, 5, tower_surf + 1)
 	tower_top := generate_watchtower(c, 8, 4, tower_surf)
 
 	center := Ivec3{base_x + 8, well_surf + 1, base_z + 8}
