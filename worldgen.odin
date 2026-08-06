@@ -476,8 +476,28 @@ flower_kind :: proc(hsh: u64) -> BlockId {
 	return (hsh >> 15) % 2 == 0 ? BlockId.FlowerRed : BlockId.FlowerYellow
 }
 
-// Per-biome surface decoration: trees (density/type varies) and desert cacti.
+// A tree's canopy spreads up to 2 blocks past its trunk (see place_tree),
+// but that spread is computed purely from the trunk's own height — it never
+// checks what's actually at those neighbouring columns. Planting a tree
+// right at a shoreline or cliff edge let the canopy hang out over open
+// water/air with no visible support, reading as a floating box of leaves
+// rather than a tree. Requiring every column within the canopy's radius to
+// be reasonably close to the trunk's own height (not a sharp drop-off)
+// keeps trees away from edges where that would happen.
 @(private = "file")
+TREE_SITE_RADIUS :: 2
+@(private = "file")
+tree_site_clear :: proc(heights: []int, lx, lz, surf_y: int) -> bool {
+	for dz in -TREE_SITE_RADIUS ..= TREE_SITE_RADIUS {
+		for dx in -TREE_SITE_RADIUS ..= TREE_SITE_RADIUS {
+			nh := heights[(lx + dx) + (lz + dz) * CHUNK_W]
+			if surf_y - nh > 2 do return false
+		}
+	}
+	return true
+}
+
+// Per-biome surface decoration: trees (density/type varies) and desert cacti.
 generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
 	for lz in 2 ..< CHUNK_D - 2 {
 		for lx in 2 ..< CHUNK_W - 2 {
@@ -485,6 +505,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			surf_y := heights[lx + lz * CHUNK_W] - 1
 			if surf_y < SEA_LEVEL do continue
 			surf := chunk_get(c, lx, surf_y, lz)
+			site_ok := tree_site_clear(heights, lx, lz, surf_y)
 
 			wx := base_x + lx
 			wz := base_z + lz
@@ -498,23 +519,23 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					for i in 0 ..< 1 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
 				}
 			case .Forest:
-				if surf == .Grass && r < 45 {
+				if surf == .Grass && site_ok && r < 45 {
 					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
 				} else if surf == .Grass && r < 70 {
 					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
 				}
 			case .Swamp:
-				if surf == .Grass && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				if surf == .Grass && site_ok && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Plains:
-				if surf == .Grass && r < 8 {
+				if surf == .Grass && site_ok && r < 8 {
 					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
 				} else if surf == .Grass && r < 40 {
 					chunk_set(c, lx, surf_y + 1, lz, flower_kind(hsh))
 				}
 			case .Savanna:
-				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				if surf == .Grass && site_ok && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Taiga:
-				if surf == .Snow && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
+				if surf == .Snow && site_ok && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
 			case .Snow, .Mountains, .Ocean, .Beach, .Badlands:
 			// bare
 			}

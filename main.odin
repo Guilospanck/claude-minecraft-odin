@@ -21,6 +21,8 @@ scan_biomes :: proc(w: ^World) {
 	best_g, best_w, best_s, best_d, best_r := 1 << 30, 1 << 30, 1 << 30, 1 << 30, 1 << 30
 	gx, gy, gz, wx0, wy0, wz0, sx, sy0, sz, dx0, dy0, dz0, rx, ry0, rz := 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 	fg, fw, fs, fd, fr := false, false, false, false, false
+	tallest_y := -1
+	tx0, tz0 := 0, 0
 	hist: map[BlockId]int
 	defer delete(hist)
 	for wz in -lim ..< lim {
@@ -37,6 +39,7 @@ scan_biomes :: proc(w: ^World) {
 			}
 			if surf_y < 0 do continue
 			hist[surf_b] += 1
+			if surf_y > tallest_y {tallest_y = surf_y;tx0, tz0 = wx, wz}
 			d := wx * wx + wz * wz
 			if surf_b == .Grass && d < best_g {best_g = d;gx, gy, gz = wx, surf_y, wz;fg = true}
 			if surf_b == .Snow && d < best_s {best_s = d;sx, sy0, sz = wx, surf_y, wz;fs = true}
@@ -56,6 +59,7 @@ scan_biomes :: proc(w: ^World) {
 	fmt.println("snow: ", fs, sx, sy0, sz)
 	fmt.println("desert:", fd, dx0, dy0, dz0)
 	fmt.println("badlands:", fr, rx, ry0, rz)
+	fmt.println("tallest:", tx0, tallest_y, tz0)
 	fmt.println("surface block histogram:", hist)
 }
 
