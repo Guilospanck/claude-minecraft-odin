@@ -10,17 +10,31 @@ import "core:math"
 // nomads roam freely with no home. Both are ephemeral (not persisted),
 // consistent with mobs, which already aren't saved either.
 
+// Profession drives look (profession_color), dialogue (profession_greetings)
+// and where a settled villager actually lives (home is their building's own
+// position, not a shared village centre) — so a Farmer stays near the farm,
+// a Priest near the church, and so on, instead of every villager in a
+// village being an interchangeable copy.
+Profession :: enum {
+	None, // nomads
+	Farmer,
+	Priest,
+	Blacksmith,
+	Merchant,
+}
+
 Villager :: struct {
-	pos, vel:  Vec3,
-	yaw:       f32,
-	on_ground: bool,
-	moving:    bool,
+	pos, vel:   Vec3,
+	yaw:        f32,
+	on_ground:  bool,
+	moving:     bool,
 	walk_phase: f32,
-	ai_timer:  f32,
-	health:    int,
-	name:      string,
-	home:      Ivec3, // village center; ignored (is_nomad) for nomads
-	is_nomad:  bool,
+	ai_timer:   f32,
+	health:     int,
+	name:       string,
+	home:       Ivec3, // own building's position; ignored (is_nomad) for nomads
+	is_nomad:   bool,
+	profession: Profession,
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -42,20 +56,56 @@ villager_pick_name :: proc(salt: u64) -> string {
 	return VILLAGER_NAMES[hash_u64(salt) % u64(len(VILLAGER_NAMES))]
 }
 
-VILLAGER_GREETINGS := []string {
+// Shared by nomads (Profession.None) and as a fallback.
+GENERIC_GREETINGS := []string {
 	"LOVELY DAY, ISN'T IT?",
 	"MIND THE WOLVES AT NIGHT.",
-	"WELCOME TO OUR VILLAGE.",
-	"THE FARM KEEPS US FED.",
 	"SAFE TRAVELS, STRANGER.",
 	"HAVEN'T SEEN YOU AROUND HERE.",
 }
 
+FARMER_GREETINGS := []string {
+	"THE FARM KEEPS US FED.",
+	"WHEAT'S COMING IN NICELY THIS SEASON.",
+	"MIND THE CROPS ON YOUR WAY THROUGH.",
+}
+
+PRIEST_GREETINGS := []string {
+	"WELCOME TO OUR CHURCH.",
+	"MAY YOUR TRAVELS BE BLESSED.",
+	"THE BEACON KEEPS THE DARK AT BAY.",
+}
+
+BLACKSMITH_GREETINGS := []string {
+	"NEED SOMETHING FORGED?",
+	"STONE AND WOOD - GOOD STURDY MATERIALS.",
+	"MIND THE SPARKS.",
+}
+
+MERCHANT_GREETINGS := []string {
+	"WELCOME TO OUR VILLAGE.",
+	"BUSINESS HAS BEEN SLOW LATELY.",
+	"ALWAYS LOOKING FOR NEW TRADE.",
+}
+
+profession_greetings :: proc(p: Profession) -> []string {
+	switch p {
+	case .Farmer:
+		return FARMER_GREETINGS
+	case .Priest:
+		return PRIEST_GREETINGS
+	case .Blacksmith:
+		return BLACKSMITH_GREETINGS
+	case .Merchant:
+		return MERCHANT_GREETINGS
+	case .None:
+		return GENERIC_GREETINGS
+	}
+	return GENERIC_GREETINGS
+}
+
 // Wander AI: settled villagers drift near home (heading back once past
-// VILLAGER_HOME_RADIUS), nomads pick a fully random heading. Deliberately
-// simpler than ai_wander's mob AI (no water-avoidance/step-hop) — villagers
-// stay inside/near generated villages on flat ground, so that polish isn't
-// needed here.
+// VILLAGER_HOME_RADIUS), nomads pick a fully random heading.
 @(private = "file")
 villager_wander :: proc(v: ^Villager, dt: f32) {
 	v.ai_timer -= dt
@@ -82,9 +132,23 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 	villager_wander(v, dt)
 	if v.moving {
 		fwd := Vec3{math.sin(v.yaw), 0, -math.cos(v.yaw)}
-		v.vel.x = fwd.x * VILLAGER_SPEED
-		v.vel.z = fwd.z * VILLAGER_SPEED
-		v.walk_phase += dt * 8.0
+
+		// Villagers never wade into water — same treatment land mobs get in
+		// mob_update (entity.odin): treat the water ahead like a wall and
+		// turn away instead of stepping in.
+		ax := int(math.floor(v.pos.x + fwd.x * (VILLAGER_HW + 0.4)))
+		az := int(math.floor(v.pos.z + fwd.z * (VILLAGER_HW + 0.4)))
+		ay := int(math.floor(v.pos.y))
+		if water_ahead(w, ax, az, ay) {
+			v.moving = false
+			v.ai_timer = 0 // pick a new direction next tick
+			v.vel.x = 0
+			v.vel.z = 0
+		} else {
+			v.vel.x = fwd.x * VILLAGER_SPEED
+			v.vel.z = fwd.z * VILLAGER_SPEED
+			v.walk_phase += dt * 8.0
+		}
 	} else {
 		v.vel.x = 0
 		v.vel.z = 0
@@ -92,9 +156,10 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 	v.on_ground = body_physics(w, &v.pos, &v.vel, VILLAGER_HW, VILLAGER_H, dt)
 }
 
-// Rare wandering nomad(s) with no home village — an order of magnitude
-// rarer than hostile_try_spawn's 0.05 roll (entity.odin), spawning 1-3
-// individuals together instead of building a whole settlement.
+// Rare wandering nomad(s) with no home village — meeting a named villager
+// should normally mean finding an actual village, so this is deliberately a
+// novelty encounter (~6x rarer than the first pass) rather than a common
+// way to run into people, spawning 1-2 individuals together at most.
 nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Vec3) {
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(24, 46)
@@ -107,7 +172,7 @@ nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Ve
 	if world_block(w, wx, sy + 1, wz) == .Water do return
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return
 
-	group := 1 + rng_int(3) // 1..3
+	group := 1 + rng_int(2) // 1..2
 	salt := hash_u64(u64(i64(wx)) ~ (u64(i64(wz)) << 32) ~ u64(len(villagers^)))
 	for k in 0 ..< group {
 		append(
@@ -124,7 +189,7 @@ nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Ve
 }
 
 villagers_update :: proc(w: ^World, p: ^Player, villagers: ^[dynamic]Villager, dt: f32) {
-	if w.dimension == .Overworld && rng_f32() < 0.003 do nomad_try_spawn(w, villagers, p.pos)
+	if w.dimension == .Overworld && rng_f32() < 0.0005 do nomad_try_spawn(w, villagers, p.pos)
 
 	i := 0
 	for i < len(villagers^) {
@@ -166,7 +231,8 @@ villager_pick :: proc(villagers: ^[dynamic]Villager, eye, dir: Vec3, reach: f32)
 // same scope as the existing feed/breed toasts — not a trading/dialogue
 // system, which would be its own feature.
 try_talk_to_villager :: proc(v: ^Villager) {
-	line := VILLAGER_GREETINGS[rng_int(len(VILLAGER_GREETINGS))]
+	lines := profession_greetings(v.profession)
+	line := lines[rng_int(len(lines))]
 	toast_show(fmt.tprintf("%s: %s", v.name, line))
 	audio_play(.Place, 0.3)
 }

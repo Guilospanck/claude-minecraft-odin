@@ -354,16 +354,23 @@ worldgen_nether :: proc(c: ^Chunk, seed: u64) {
 	}
 }
 
-// Build a tree (round oak or conical spruce). chunk_set clips any leaves that
-// spill past the chunk edge.
+TreeKind :: enum {
+	Oak,
+	Spruce,
+	Birch,
+}
+
+// Build a tree (round oak, conical spruce, or a smaller round-crowned
+// birch). chunk_set clips any leaves that spill past the chunk edge.
 @(private = "file")
-place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, spruce: bool) {
+place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
 	base := surf_y + 1
 	for i in 0 ..< trunk_h {
 		chunk_set(c, lx, base + i, lz, .Wood)
 	}
 	crown := base + trunk_h - 1
-	if spruce {
+	switch kind {
+	case .Spruce:
 		for dy := -3; dy <= 1; dy += 1 {
 			r := dy <= -2 ? 2 : (dy <= 0 ? 1 : 0)
 			for dz in -r ..= r {
@@ -375,7 +382,21 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, spruce: bool) {
 				}
 			}
 		}
-	} else {
+	case .Birch:
+		// a smaller, denser round crown (fixed r=1) than oak's — reads as a
+		// visibly slimmer tree instead of just a recolour.
+		for dy in -1 ..= 1 {
+			r := 1
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if dx == 0 && dz == 0 && dy < 1 do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
+	case .Oak:
 		for dy in -1 ..= 1 {
 			r := dy == 1 ? 1 : 2
 			for dz in -r ..= r {
@@ -389,6 +410,13 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, spruce: bool) {
 		}
 	}
 	chunk_set(c, lx, crown + 2, lz, .Leaves)
+}
+
+// ~1 in 4 trees in mixed-forest biomes come out as a birch instead of an
+// oak, for visual variety instead of every tree in a forest being identical.
+@(private = "file")
+oak_or_birch :: proc(hsh: u64) -> TreeKind {
+	return (hsh >> 20) % 4 == 0 ? TreeKind.Birch : TreeKind.Oak
 }
 
 // Per-biome surface decoration: trees (density/type varies) and desert cacti.
@@ -413,15 +441,15 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					for i in 0 ..< 1 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
 				}
 			case .Forest:
-				if surf == .Grass && r < 45 do place_tree(c, lx, surf_y, lz, 4 + th, false)
+				if surf == .Grass && r < 45 do place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
 			case .Swamp:
-				if surf == .Grass && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, false)
+				if surf == .Grass && r < 18 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Plains:
-				if surf == .Grass && r < 8 do place_tree(c, lx, surf_y, lz, 4 + th, false)
+				if surf == .Grass && r < 8 do place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
 			case .Savanna:
-				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, false)
+				if surf == .Grass && r < 4 do place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
 			case .Taiga:
-				if surf == .Snow && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, true)
+				if surf == .Snow && r < 30 do place_tree(c, lx, surf_y, lz, 6 + th, .Spruce)
 			case .Snow, .Mountains, .Ocean, .Beach, .Badlands:
 			// bare
 			}

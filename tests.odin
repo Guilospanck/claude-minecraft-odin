@@ -1228,10 +1228,11 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	defer free_test_world(&w)
 	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
 
-	generate_house(&w, c, 0, 0, 2, 2, 39)
+	generate_house(&w, c, 0, 0, 2, 2, 39, 0)
 
-	// a wall corner
-	testing.expect(t, chunk_get(c, 2, 40, 2) == .Wood, "wall corner is built from wood")
+	// a wall corner: stone foundation course, then wood above it
+	testing.expect(t, chunk_get(c, 2, 40, 2) == .Stone, "wall corner starts with a stone foundation")
+	testing.expect(t, chunk_get(c, 2, 41, 2) == .Wood, "wall corner continues in wood above the foundation")
 	// interior is hollowed out, not solid wood
 	testing.expect(t, chunk_get(c, 4, 40, 4) == .Air, "the interior is hollow")
 	// a door sits in the middle of the south wall, with headroom above it
@@ -1239,8 +1240,59 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	testing.expect(t, chunk_get(c, 4, 41, 2) == .Air, "there's headroom above the door")
 	_, ok := w.doors[Ivec3{4, 40, 2}]
 	testing.expect(t, ok, "the placed door is registered in w.doors")
-	// the roof caps the structure
-	testing.expect(t, chunk_get(c, 4, 43, 4) == .Wood, "a roof caps the house")
+	// the tapering roof starts right above the walls, centred on the house
+	testing.expect(t, chunk_get(c, 4, 43, 4) == .Stone, "a stone roof caps the house")
+	// a fenced yard surrounds the house, with a gap left open for the door
+	testing.expect(t, chunk_get(c, 1, 40, 1) == .Fence, "a fence yard surrounds the house")
+	testing.expect(t, chunk_get(c, 4, 40, 1) != .Fence, "the fence leaves a gap aligned with the door")
+}
+
+@(test)
+test_generate_church_has_spire_beacon_and_door :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
+
+	generate_church(&w, c, 0, 0, 10, 2, 39)
+
+	testing.expect(t, chunk_get(c, 10, 40, 2) == .Stone, "the church walls are stone, not wood")
+	testing.expect(t, chunk_get(c, 12, 40, 2) == .Door, "the church has a front door")
+	testing.expect(t, chunk_get(c, 12, 50, 4) == .Glowstone, "the spire is capped with a lit beacon")
+	testing.expect(t, chunk_get(c, 9, 40, 1) == .Fence, "the church has a churchyard fence")
+}
+
+@(test)
+test_generate_farm_has_farmland_wheat_and_fence :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
+
+	generate_farm(&w, c, 0, 0, 10, 10, 39)
+
+	testing.expect(t, chunk_get(c, 10, 39, 10) == .Farmland, "the farm plot is tilled")
+	testing.expect(t, block_is_crop(chunk_get(c, 10, 40, 10)), "wheat grows on the tilled farmland")
+	testing.expect(t, chunk_get(c, 9, 40, 9) == .Fence, "the farm plot is fenced")
+}
+
+@(test)
+test_villager_avoids_water :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a floor at y=10 that turns to water at x>=9 (a lake bordering the shore)
+	for x in 4 ..< 13 {
+		for z in 6 ..< 11 {
+			chunk_set(c, x, 10, z, x >= 9 ? .Water : .Stone)
+		}
+	}
+	v: Villager
+	v.pos = Vec3{6.5, 11, 8.5}
+	v.yaw = math.PI * 0.5 // fwd = (sin,0,-cos) = (+1,0,0): walks straight at the lake
+	v.moving = true
+	v.ai_timer = 999 // keep the forced heading; don't let villager_wander override it
+	for _ in 0 ..< 300 {
+		villager_update(&w, &v, 1.0 / 60.0)
+	}
+	testing.expect(t, v.pos.x < 9.0, "a villager never crosses into the water tile")
 }
 
 @(test)

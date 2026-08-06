@@ -39,3 +39,4 @@ BED        :: Tile{10, 1}
 CHEST      :: Tile{11, 1}
 RED_SAND   :: Tile{0, 2}
 DOOR       :: Tile{1, 2}
+FENCE      :: Tile{2, 2}

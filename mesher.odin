@@ -259,6 +259,11 @@ emit_door :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, d: Door, b
 	emit_box(arr, b, wx, wy, wz, x0, x1, 0, 0.95, z0, z1, bl)
 }
 
+@(private = "file")
+emit_fence :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
+	emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0, 1.0, 0.4, 0.6, bl) // a slender centred post
+}
+
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 	md: MeshData
 	md.opaque = make([dynamic]Vertex, 0, 4096)
@@ -288,6 +293,11 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				if b == .Door {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
 					emit_door(&md.opaque, b, wx, y, wz, w.doors[Ivec3{wx, y, wz}], bl)
+					continue
+				}
+				if b == .Fence {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_fence(&md.opaque, b, wx, y, wz, bl)
 					continue
 				}
 				if block_is_lowbox(b) {

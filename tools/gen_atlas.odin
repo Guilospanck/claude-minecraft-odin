@@ -111,6 +111,13 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				// horizontal mesa strata: alternating dark/light bands
 				band := (py / 3) % 2
 				c = shade(base, jitter(gx, gy, 10) + (band == 0 ? -14 : 10))
+			case "fence":
+				// vertical post grain with a horizontal rail band, like a
+				// picket fence post - the mesher renders this as a thin box
+				// (see emit_box in mesher.odin), so the texture just needs
+				// to read as wood, not carry the cutout shape itself
+				rail := (py >= 5 && py <= 6) || (py >= 10 && py <= 11)
+				c = shade(base, jitter(gx, gy, 10) + (rail ? -18 : 0))
 			case "door":
 				// two raised wooden panels with a knob
 				panel := (py >= 2 && py <= 6) || (py >= 9 && py <= 13)
@@ -224,6 +231,7 @@ main :: proc() {
 	paint(ad.CHEST, Color{150, 106, 54, 255}, "chest")
 	paint(ad.RED_SAND, Color{181, 99, 56, 255}, "red_sand")
 	paint(ad.DOOR, Color{96, 66, 34, 255}, "door")
+	paint(ad.FENCE, Color{110, 78, 42, 255}, "fence")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

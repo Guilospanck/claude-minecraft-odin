@@ -202,7 +202,7 @@ ai_ghast :: proc(w: ^World, p: ^Player, m: ^Mob, dt: f32) {
 // whether it's water. A land mob's resting feet sit one cell ABOVE its floor
 // block, and shorelines vary in depth, so a single fixed-height probe misses
 // most real water tiles — this walks down through a few cells instead.
-@(private = "file")
+// Not file-private: villager.odin's villager_update reuses it too.
 water_ahead :: proc(w: ^World, x, z, feet_y: int) -> bool {
 	for dy in 0 ..< 5 {
 		b := world_block(w, x, feet_y - dy, z)

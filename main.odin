@@ -411,15 +411,28 @@ main :: proc() {
 		world_set_block(&world, bx, by + 1, bz, .Bed)
 	}
 
-	// Debug: MC_NPC spawns a villager directly ahead at eye level, for
-	// screenshotting the humanoid model without depending on village RNG.
+	// Debug: MC_NPC spawns one villager of every profession in a row ahead,
+	// for screenshotting the humanoid model + robe colours without
+	// depending on village RNG.
 	if os.get_env("MC_NPC", context.temp_allocator) != "" {
 		fwd := camera_front(player.yaw, 0)
-		np := player.pos + fwd * 4
-		append(
-			&world.villagers,
-			Villager{pos = np, yaw = player.yaw + math.PI, health = 10, name = "MARA"},
-		)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 5
+		professions := [5]Profession{.None, .Farmer, .Priest, .Blacksmith, .Merchant}
+		names := [5]string{"NOMAD", "FARMER", "PRIEST", "SMITH", "MERCH"}
+		for i in 0 ..< 5 {
+			np := base + right * f32(i - 2) * 2.0
+			append(
+				&world.villagers,
+				Villager {
+					pos = np,
+					yaw = player.yaw + math.PI,
+					health = 10,
+					name = names[i],
+					profession = professions[i],
+				},
+			)
+		}
 	}
 
 	// Debug: MC_BED places a bed on the real ground directly ahead (and
@@ -461,11 +474,9 @@ main :: proc() {
 		}
 		if len(world.villages) > 0 {
 			t := world.villages[0].center
-			player.pos = Vec3{f32(t.x) - 16, f32(t.y) + 6, f32(t.z) - 16}
-			dx := f32(t.x) - player.pos.x
-			dz := f32(t.z) - player.pos.z
-			player.yaw = math.atan2(dx, -dz)
-			player.pitch = -0.15
+			player.pos = Vec3{f32(t.x) - 8, f32(t.y) + 18, f32(t.z) - 8}
+			player.yaw = 0.78
+			player.pitch = -0.95
 			player.fly = true
 			fmt.println(
 				"MC_VILLAGE: found village at",

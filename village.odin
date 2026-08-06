@@ -5,10 +5,13 @@ import "core:math"
 // Villages: small hamlets constrained to fit inside a single chunk (this
 // codebase's terrain generator only ever decorates the chunk it's currently
 // generating — see generate_trees — so staying single-chunk avoids building
-// a whole new cross-chunk structure-planning subsystem for what's meant to
-// be a handful of houses). Placement is a deterministic sparse hash roll
-// per chunk, gated on a calm biome and low height variance so houses don't
-// end up straddling a cliff.
+// a whole new cross-chunk structure-planning subsystem). A village lays out
+// a 2x2 grid of 7x7 plots (two house styles, a church, a fenced farm) and
+// gives each resident a role tied to their own building instead of being an
+// interchangeable wanderer — see Profession in villager.odin. Placement is
+// a deterministic sparse hash roll per chunk, gated on a calm biome and low
+// height variance across the whole layout so buildings don't straddle a
+// cliff.
 
 Village :: struct {
 	center: Ivec3,
@@ -28,27 +31,61 @@ village_biome_ok :: proc(b: Biome) -> bool {
 	return false
 }
 
-// Walls + roof + a door opening + a window, the same "direct chunk_set
-// calls against the chunk being generated" approach place_tree already uses
-// for trees — no new placement infrastructure needed.
-// Not file-private: tests exercise it directly.
-generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: int) {
+// A tapering square roof/spire: radii[i] is the half-width at layer
+// base_y+i, so e.g. {3,2,1,0} makes a 7x7 -> 5x5 -> 3x3 -> 1x1 pyramid.
+// Shared by house roofs and the church spire (a longer, thinner radii list)
+// instead of two copies of the same nested-loop shape.
+@(private = "file")
+place_tapering_roof :: proc(c: ^Chunk, cx, base_y, cz: int, radii: []int, material: BlockId) {
+	for i in 0 ..< len(radii) {
+		r := radii[i]
+		y := base_y + i
+		for dz in -r ..= r {
+			for dx in -r ..= r {
+				if r > 1 && abs(dx) == r && abs(dz) == r do continue // clip corners
+				chunk_set(c, cx + dx, y, cz + dz, material)
+			}
+		}
+	}
+}
+
+// A fenced square perimeter with a single-cell gap (the entrance), used for
+// house yards, the churchyard, and the farm plot boundary.
+@(private = "file")
+place_fence_ring :: proc(c: ^Chunk, lx0, lz0, size, y, gap_lx, gap_lz: int) {
+	for i in 0 ..< size {
+		at :: proc(c: ^Chunk, x, y, z, gap_x, gap_z: int) {
+			if x == gap_x && z == gap_z do return
+			chunk_set(c, x, y, z, .Fence)
+		}
+		at(c, lx0 + i, y, lz0, gap_lx, gap_lz)
+		at(c, lx0 + i, y, lz0 + size - 1, gap_lx, gap_lz)
+		at(c, lx0, y, lz0 + i, gap_lx, gap_lz)
+		at(c, lx0 + size - 1, y, lz0 + i, gap_lx, gap_lz)
+	}
+}
+
+// Two visibly different cottage styles sharing wall/interior/door code:
+// variant 0 is a wood-walled cottage on a stone foundation with a pointed
+// stone pyramid roof and a chimney stub; variant 1 is an all-stone cottage
+// with a flat roof and a raised parapet lip, plus a second window. Both get
+// a small fenced yard. Not file-private: tests exercise it directly.
+generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y, variant: int) {
 	SIZE :: 5
 	HEIGHT :: 3
 	base_y := surf_y + 1
+	cx := lx + SIZE / 2
+	cz := lz + SIZE / 2
 
+	upper_material := variant == 0 ? BlockId.Wood : BlockId.Stone
 	for dx in 0 ..< SIZE {
 		for dz in 0 ..< SIZE {
 			edge := dx == 0 || dx == SIZE - 1 || dz == 0 || dz == SIZE - 1
 			if !edge do continue
-			for dy in 0 ..< HEIGHT {
-				chunk_set(c, lx + dx, base_y + dy, lz + dz, .Wood)
+			chunk_set(c, lx + dx, base_y, lz + dz, .Stone) // foundation course
+			for dy in 1 ..< HEIGHT {
+				chunk_set(c, lx + dx, base_y + dy, lz + dz, upper_material)
 			}
-		}
-	}
-	for dx in 0 ..< SIZE {
-		for dz in 0 ..< SIZE {
-			chunk_set(c, lx + dx, base_y + HEIGHT, lz + dz, .Wood) // flat roof
 		}
 	}
 	for dx in 1 ..< SIZE - 1 {
@@ -59,23 +96,108 @@ generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: int
 		}
 	}
 
-	door_lx := lx + SIZE / 2
-	door_lz := lz // centred on the south wall
+	if variant == 0 {
+		place_tapering_roof(c, cx, base_y + HEIGHT, cz, []int{3, 2, 1, 0}, .Stone)
+		chunk_set(c, lx, base_y + HEIGHT, lz, .Stone) // chimney base
+		chunk_set(c, lx, base_y + HEIGHT + 1, lz, .Stone)
+	} else {
+		for dx in 0 ..< SIZE {
+			for dz in 0 ..< SIZE {
+				chunk_set(c, lx + dx, base_y + HEIGHT, lz + dz, .Wood) // flat cap
+			}
+		}
+		for dx in 0 ..< SIZE { 	// raised parapet lip around the edge
+			edge := dx == 0 || dx == SIZE - 1
+			chunk_set(c, lx + dx, base_y + HEIGHT + 1, lz, .Stone)
+			chunk_set(c, lx + dx, base_y + HEIGHT + 1, lz + SIZE - 1, .Stone)
+			if edge {
+				for dz in 1 ..< SIZE - 1 {
+					chunk_set(c, lx + dx, base_y + HEIGHT + 1, lz + dz, .Stone)
+				}
+			}
+		}
+	}
+
+	door_lx := cx
+	door_lz := lz
 	chunk_set(c, door_lx, base_y, door_lz, .Door)
-	chunk_set(c, door_lx, base_y + 1, door_lz, .Air) // headroom
+	chunk_set(c, door_lx, base_y + 1, door_lz, .Air)
 	w.doors[Ivec3{base_x + door_lx, base_y, base_z + door_lz}] = Door{facing = 0, open = false}
 
-	win_lx := lx + SIZE / 2
-	win_lz := lz + SIZE - 1 // opposite wall
-	chunk_set(c, win_lx, base_y + 1, win_lz, .Glass)
+	chunk_set(c, cx, base_y + 1, lz + SIZE - 1, .Glass) // window opposite the door
+	if variant == 1 {
+		chunk_set(c, lx, base_y + 1, cz, .Glass) // second window, side wall
+	}
+
+	place_fence_ring(c, lx - 1, lz - 1, SIZE + 2, base_y, door_lx, lz - 1)
+}
+
+// A taller, stone-built church with a tapering spire capped by a lit
+// Glowstone beacon — structurally distinct (material + height + spire) from
+// the wood cottages, not just a bigger box.
+// Not file-private: tests exercise it directly.
+generate_church :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: int) {
+	SIZE :: 5
+	HEIGHT :: 5
+	base_y := surf_y + 1
+	cx := lx + SIZE / 2
+	cz := lz + SIZE / 2
+
+	for dx in 0 ..< SIZE {
+		for dz in 0 ..< SIZE {
+			edge := dx == 0 || dx == SIZE - 1 || dz == 0 || dz == SIZE - 1
+			if !edge do continue
+			for dy in 0 ..< HEIGHT {
+				chunk_set(c, lx + dx, base_y + dy, lz + dz, .Stone)
+			}
+		}
+	}
+	for dx in 1 ..< SIZE - 1 {
+		for dz in 1 ..< SIZE - 1 {
+			for dy in 0 ..< HEIGHT {
+				chunk_set(c, lx + dx, base_y + dy, lz + dz, .Air)
+			}
+		}
+	}
+
+	spire_radii := []int{3, 2, 1, 0, 0, 0}
+	place_tapering_roof(c, cx, base_y + HEIGHT, cz, spire_radii, .Stone)
+	chunk_set(c, cx, base_y + HEIGHT + len(spire_radii) - 1, cz, .Glowstone) // lit beacon
+
+	door_lx := cx
+	door_lz := lz
+	chunk_set(c, door_lx, base_y, door_lz, .Door)
+	chunk_set(c, door_lx, base_y + 1, door_lz, .Air)
+	w.doors[Ivec3{base_x + door_lx, base_y, base_z + door_lz}] = Door{facing = 0, open = false}
+
+	chunk_set(c, lx + 1, base_y + 1, lz, .Glass) // twin front windows flanking the door
+	chunk_set(c, lx + SIZE - 2, base_y + 1, lz, .Glass)
+
+	place_fence_ring(c, lx - 1, lz - 1, SIZE + 2, base_y, door_lx, lz - 1)
+}
+
+// A fenced, tilled field — no roof, just Farmland + Wheat at mixed growth
+// stages inside a fence ring with a gap for entry. Mirrors the field-
+// building loop main.odin's MC_FARM debug hook already uses.
+// Not file-private: tests exercise it directly.
+generate_farm :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y: int) {
+	SIZE :: 5
+	base_y := surf_y + 1
+	stages := [4]BlockId{.Wheat1, .Wheat2, .Wheat3, .Wheat3}
+	for dx in 0 ..< SIZE {
+		for dz in 0 ..< SIZE {
+			chunk_set(c, lx + dx, base_y - 1, lz + dz, .Farmland)
+			chunk_set(c, lx + dx, base_y, lz + dz, stages[(dx + dz) % len(stages)])
+		}
+	}
+	place_fence_ring(c, lx - 1, lz - 1, SIZE + 2, base_y, lx + SIZE / 2, lz - 1)
 }
 
 // Called once per generated chunk (from worldgen_fill, after everything
-// else so a house always wins over a tree that happened to land on the
-// same columns). Places up to 2 houses, a couple of villagers who live
-// there, and a couple of farm animals — the animals bypass the biome/
-// resource spawn gate in entity.odin's mob_try_spawn, since the village
-// itself is their food and water source.
+// else so a building always wins over a tree that happened to land on the
+// same columns). Lays out a 2x2 grid of 7x7 plots inside the chunk — two
+// house plots, a church plot, a farm plot — and gives each named villager a
+// profession tied to the building they actually live/work at.
 generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
 	hsh :=
 		hash_u64(
@@ -89,50 +211,72 @@ generate_village :: proc(w: ^World, c: ^Chunk, seed: u64, base_x, base_z: int, h
 	if !village_biome_ok(biomes[8 + 8 * CHUNK_W]) do return
 
 	lo, hi := heights[0], heights[0]
-	for lz in 2 ..< 14 {
-		for lx in 2 ..< 14 {
+	for lz in 1 ..< CHUNK_D - 1 {
+		for lx in 1 ..< CHUNK_W - 1 {
 			hh := heights[lx + lz * CHUNK_W]
 			lo = min(lo, hh)
 			hi = max(hi, hh)
 		}
 	}
-	if hi - lo > 5 do return // too hilly for a tidy village
+	if hi - lo > 6 do return // too hilly for a tidy village
 
-	house_pos := [2][2]int{{2, 2}, {9, 9}}
-	for hp in house_pos {
-		lx, lz := hp[0], hp[1]
-		surf_y := heights[(lx + 2) + (lz + 2) * CHUNK_W] // sample near the house's centre
-		generate_house(w, c, base_x, base_z, lx, lz, surf_y)
+	h_at :: proc(heights: []int, lx, lz: int) -> int {
+		return heights[lx + lz * CHUNK_W]
 	}
 
-	center_y := heights[8 + 8 * CHUNK_W]
-	center := Ivec3{base_x + 8, center_y + 1, base_z + 8}
-	append(&w.villages, Village{center = center, houses = len(house_pos)})
+	// 2x2 grid of 7x7 plots: house/house on the west side, church/farm on
+	// the east side, a 1-block gap between columns and rows.
+	house_a_surf := h_at(heights, 1 + 3, 1 + 3)
+	house_b_surf := h_at(heights, 1 + 3, 9 + 3)
+	church_surf := h_at(heights, 9 + 3, 1 + 3)
+	farm_surf := h_at(heights, 9 + 3, 9 + 3)
 
-	n_villagers := 2 + rng_int(3) // 2..4
-	for i in 0 ..< n_villagers {
-		sy := heights[5 + 5 * CHUNK_W]
+	generate_house(w, c, base_x, base_z, 2, 2, house_a_surf, 0)
+	generate_house(w, c, base_x, base_z, 2, 10, house_b_surf, 1)
+	generate_church(w, c, base_x, base_z, 10, 2, church_surf)
+	generate_farm(w, c, base_x, base_z, 10, 10, farm_surf)
+
+	center := Ivec3{base_x + 8, h_at(heights, 8, 8) + 1, base_z + 8}
+	append(&w.villages, Village{center = center, houses = 2})
+
+	spawn_villager :: proc(
+		w: ^World,
+		base_x, base_z, lx, lz, surf_y: int,
+		salt: u64,
+		profession: Profession,
+	) {
+		home := Ivec3{base_x + lx, surf_y + 1, base_z + lz}
 		append(
 			&w.villagers,
 			Villager {
-				pos = Vec3{f32(base_x + 5) + f32(i) * 0.6, f32(sy + 1), f32(base_z + 5)},
+				pos = Vec3{f32(home.x) + 0.5, f32(home.y), f32(home.z) + 0.5},
 				yaw = rng_range(0, 2 * math.PI),
 				health = 10,
-				name = villager_pick_name(hsh + u64(i) + 1),
-				home = center,
+				name = villager_pick_name(salt),
+				home = home,
+				profession = profession,
 			},
 		)
 	}
 
+	spawn_villager(w, base_x, base_z, 4, 4, house_a_surf, hsh + 1, .Blacksmith)
+	spawn_villager(w, base_x, base_z, 4, 12, house_b_surf, hsh + 2, .Merchant)
+	spawn_villager(w, base_x, base_z, 12, 4, church_surf, hsh + 3, .Priest)
+	spawn_villager(w, base_x, base_z, 11, 11, farm_surf, hsh + 4, .Farmer)
+	if hsh % (VILLAGE_CHANCE * 2) == 0 { 	// half of villages get a second farmer
+		spawn_villager(w, base_x, base_z, 13, 13, farm_surf, hsh + 5, .Farmer)
+	}
+
+	// Farm animals now live inside the fenced farm plot, not at an
+	// arbitrary nearby point.
 	animal_kinds := [3]MobKind{.Cow, .Sheep, .Chicken}
 	n_animals := 2 + rng_int(2) // 2..3
 	for i in 0 ..< n_animals {
-		sy := heights[12 + 3 * CHUNK_W]
 		append(
 			&w.mobs,
 			Mob {
 				kind = animal_kinds[rng_int(3)],
-				pos = Vec3{f32(base_x + 12) + f32(i) * 0.7, f32(sy + 1), f32(base_z + 3)},
+				pos = Vec3{f32(base_x + 10 + i) + 0.5, f32(farm_surf + 1), f32(base_z + 9) + 0.5},
 				yaw = rng_range(0, 2 * math.PI),
 				ai_timer = rng_range(0, 2),
 				health = 6,
