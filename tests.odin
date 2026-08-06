@@ -1318,6 +1318,21 @@ test_place_foundation_grounds_sloped_columns :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_biome_specialist_animals :: proc(t: ^testing.T) {
+	k, ok := biome_specialist(.Snow)
+	testing.expect(t, ok && k == .SnowLeopard, "snow biomes get snow leopards")
+	k, ok = biome_specialist(.Desert)
+	testing.expect(t, ok && k == .Camel, "deserts get camels")
+	k, ok = biome_specialist(.Savanna)
+	testing.expect(t, ok && k == .Llama, "savanna gets llamas")
+	_, ok = biome_specialist(.Plains)
+	testing.expect(t, !ok, "ordinary biomes have no specialist (grazers spawn there)")
+	// specialists must be passive land animals, not hostile or aquatic
+	testing.expect(t, !mob_is_hostile(.SnowLeopard) && !mob_is_aquatic(.SnowLeopard), "leopard is a passive land animal")
+	testing.expect(t, !mob_is_hostile(.Camel) && !mob_is_aquatic(.Camel), "camel is a passive land animal")
+}
+
+@(test)
 test_plant_blocks_are_nonsolid_sprites :: proc(t: ^testing.T) {
 	// New ground-cover plants must behave like the existing sprites: rendered
 	// as cross-sprites, walkable, and not occluding neighbours.

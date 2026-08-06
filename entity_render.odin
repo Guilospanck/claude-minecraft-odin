@@ -114,6 +114,57 @@ chicken_parts := [6]MobPart {
 }
 
 @(private = "file")
+LEOPARD :: Vec3{0.84, 0.82, 0.76}
+@(private = "file")
+LEOPARDDK :: Vec3{0.52, 0.50, 0.46}
+@(private = "file")
+CAMELC :: Vec3{0.78, 0.63, 0.39}
+@(private = "file")
+LLAMAC :: Vec3{0.80, 0.72, 0.56}
+
+// Snow leopard: a low, long-bodied cat with a long tail — pale coat for the
+// snow it lives in.
+@(private = "file")
+snowleopard_parts := [8]MobPart {
+	{{0, 0.5, 0}, {0.42, 0.4, 1.1}, LEOPARD, 0}, // body
+	{{0, 0.6, -0.62}, {0.34, 0.32, 0.34}, LEOPARD, 0}, // head
+	{{0, 0.52, 0.66}, {0.1, 0.1, 0.42}, LEOPARDDK, 0}, // long tail
+	{{-0.16, 0.22, -0.4}, {0.13, 0.44, 0.13}, LEOPARD, 1}, // front-left leg
+	{{0.16, 0.22, -0.4}, {0.13, 0.44, 0.13}, LEOPARD, -1}, // front-right leg
+	{{-0.16, 0.22, 0.4}, {0.13, 0.44, 0.13}, LEOPARD, -1}, // back-left leg
+	{{0.16, 0.22, 0.4}, {0.13, 0.44, 0.13}, LEOPARD, 1}, // back-right leg
+	{{0, 0.8, -0.58}, {0.32, 0.08, 0.04}, LEOPARDDK, 0}, // ear ridge
+}
+
+// Camel: tall, humped, long-legged and slow.
+@(private = "file")
+camel_parts := [9]MobPart {
+	{{0, 1.1, 0}, {0.55, 0.6, 1.2}, CAMELC, 0}, // body
+	{{0, 1.56, 0}, {0.4, 0.42, 0.5}, CAMELC, 0}, // hump
+	{{0, 1.4, -0.68}, {0.28, 0.72, 0.3}, CAMELC, 0}, // neck (tall, forward-up)
+	{{0, 1.78, -0.86}, {0.26, 0.28, 0.42}, CAMELC, 0}, // head
+	{{0, 1.0, 0.66}, {0.08, 0.5, 0.08}, CAMELC, 0}, // tail
+	{{-0.22, 0.5, -0.4}, {0.16, 1.0, 0.16}, CAMELC, 1}, // front-left leg
+	{{0.22, 0.5, -0.4}, {0.16, 1.0, 0.16}, CAMELC, -1}, // front-right leg
+	{{-0.22, 0.5, 0.4}, {0.16, 1.0, 0.16}, CAMELC, -1}, // back-left leg
+	{{0.22, 0.5, 0.4}, {0.16, 1.0, 0.16}, CAMELC, 1}, // back-right leg
+}
+
+// Llama: upright long neck, tall ears, woolly build.
+@(private = "file")
+llama_parts := [9]MobPart {
+	{{0, 0.9, 0}, {0.44, 0.55, 0.9}, LLAMAC, 0}, // body
+	{{0, 1.35, -0.36}, {0.24, 0.62, 0.26}, LLAMAC, 0}, // upright neck
+	{{0, 1.72, -0.44}, {0.26, 0.26, 0.34}, LLAMAC, 0}, // head
+	{{-0.09, 1.94, -0.42}, {0.06, 0.16, 0.06}, LLAMAC, 0}, // left ear
+	{{0.09, 1.94, -0.42}, {0.06, 0.16, 0.06}, LLAMAC, 0}, // right ear
+	{{-0.18, 0.42, -0.32}, {0.15, 0.85, 0.15}, LLAMAC, 1}, // front-left leg
+	{{0.18, 0.42, -0.32}, {0.15, 0.85, 0.15}, LLAMAC, -1}, // front-right leg
+	{{-0.18, 0.42, 0.32}, {0.15, 0.85, 0.15}, LLAMAC, -1}, // back-left leg
+	{{0.18, 0.42, 0.32}, {0.15, 0.85, 0.15}, LLAMAC, 1}, // back-right leg
+}
+
+@(private = "file")
 zombie_parts := [6]MobPart {
 	{{-0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PANTS, 1}, // left leg
 	{{0.13, 0.45, 0}, {0.22, 0.9, 0.22}, PANTS, -1}, // right leg
@@ -414,6 +465,12 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return fish_parts[:]
 	case .Squid:
 		return squid_parts[:]
+	case .SnowLeopard:
+		return snowleopard_parts[:]
+	case .Camel:
+		return camel_parts[:]
+	case .Llama:
+		return llama_parts[:]
 	}
 	return pig_parts[:]
 }
@@ -585,6 +642,12 @@ face_def_for_mob :: proc(k: MobKind) -> MobFace {
 		return {{0, 0.95, 0}, {1.3, 1.3, 1.3}, .Animal, {}, {}, GHASTFACE}
 	case .Fish, .Squid:
 		return {style = .None}
+	case .SnowLeopard:
+		return {{0, 0.6, -0.62}, {0.34, 0.32, 0.34}, .Animal, {}, {}, EYE_DARK}
+	case .Camel:
+		return {{0, 1.78, -0.86}, {0.26, 0.28, 0.42}, .Animal, {}, {}, EYE_DARK}
+	case .Llama:
+		return {{0, 1.72, -0.44}, {0.26, 0.26, 0.34}, .Animal, {}, {}, EYE_DARK}
 	}
 	return {style = .None}
 }

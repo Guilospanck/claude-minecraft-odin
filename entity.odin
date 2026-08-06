@@ -16,6 +16,9 @@ MobKind :: enum {
 	Ghast, // nether floating ranged hostile
 	Fish, // aquatic: never leaves water
 	Squid, // aquatic: never leaves water
+	SnowLeopard, // biome specialist: snow/taiga
+	Camel, // biome specialist: desert/badlands
+	Llama, // biome specialist: savanna/mountains
 }
 
 MOB_KIND_COUNT :: len(MobKind)
@@ -120,6 +123,9 @@ MOB_DIMS := [MobKind]MobDims {
 	.Ghast    = {0.7, 1.4, 2.0},
 	.Fish     = {0.18, 0.22, 1.8},
 	.Squid    = {0.28, 0.55, 1.3},
+	.SnowLeopard = {0.4, 0.85, 2.9}, // lithe and quick
+	.Camel       = {0.55, 2.1, 1.7}, // tall and slow
+	.Llama       = {0.45, 1.6, 2.2},
 }
 
 MOB_DESPAWN_DIST :: f32(60)
@@ -561,6 +567,23 @@ passive_kind_for_biome :: proc(b: Biome) -> MobKind {
 	return MobKind(rng_int(PASSIVE_COUNT))
 }
 
+// The animal that belongs to an otherwise-barren extreme biome (where nothing
+// grazes): snow leopards in the cold, camels in the deserts, llamas out on the
+// savanna and high ground. These spawn without the grass requirement the
+// grazers have, so the harsh biomes aren't lifeless. Returns (kind, true) when
+// the biome has a specialist.
+biome_specialist :: proc(b: Biome) -> (MobKind, bool) {
+	#partial switch b {
+	case .Snow, .Taiga:
+		return .SnowLeopard, true
+	case .Desert, .Badlands:
+		return .Camel, true
+	case .Savanna, .Mountains:
+		return .Llama, true
+	}
+	return .Pig, false
+}
+
 // Resource gate: needs grass to graze or water to drink somewhere nearby,
 // not just under the exact spawn point - samples random columns in a
 // radius (with a little vertical slop for mild slopes) instead of an
@@ -592,10 +615,21 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
 	_, biome, _ := world_height_and_biome(w.seed, wx, wz)
-	if !biome_supports_grazing(biome) do return
-	if !food_or_water_nearby(w, wx, wz, sy) do return
 
-	kind := passive_kind_for_biome(biome)
+	// A biome's specialist (snow leopard/camel/llama) can spawn on its harsh,
+	// grass-free ground; otherwise fall back to a grazer, which does need grass
+	// or water nearby. This is what puts life in the deserts and snowfields.
+	kind: MobKind
+	hp := 6
+	if spec, ok := biome_specialist(biome); ok && rng_f32() < 0.45 {
+		kind = spec
+		if kind == .Camel do hp = 10 // camels are tough
+	} else {
+		if !biome_supports_grazing(biome) do return
+		if !food_or_water_nearby(w, wx, wz, sy) do return
+		kind = passive_kind_for_biome(biome)
+	}
+
 	append(
 		mobs,
 		Mob {
@@ -603,7 +637,7 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 			pos = Vec3{f32(wx) + 0.5, f32(sy + 1), f32(wz) + 0.5},
 			yaw = rng_range(0, 2 * math.PI),
 			ai_timer = rng_range(0, 2),
-			health = 6,
+			health = hp,
 		},
 	)
 }
@@ -780,6 +814,12 @@ mob_kind_label :: proc(k: MobKind) -> string {
 		return "FISH"
 	case .Squid:
 		return "SQUID"
+	case .SnowLeopard:
+		return "SNOW LEOPARD"
+	case .Camel:
+		return "CAMEL"
+	case .Llama:
+		return "LLAMA"
 	}
 	return ""
 }
