@@ -1308,3 +1308,64 @@ test_villager_pick_finds_nearest_under_the_ray :: proc(t: ^testing.T) {
 	idx, _ := villager_pick(&villagers, Vec3{5, 40.5, 0}, Vec3{0, 0, 1}, 20)
 	testing.expect(t, idx == 0, "the ray finds the nearby villager, not the distant one")
 }
+
+@(test)
+test_mobs_crowded_caps_local_density_only :: proc(t: ^testing.T) {
+	mobs := make([dynamic]Mob, 0, MOB_LOCAL_CAP + 1)
+	defer delete(mobs)
+	for i in 0 ..< MOB_LOCAL_CAP {
+		append(&mobs, Mob{kind = .Chicken, pos = Vec3{f32(i), 40, 0}, health = 4})
+	}
+	testing.expect(
+		t,
+		mobs_crowded(&mobs, 0, 0),
+		"a spot with MOB_LOCAL_CAP mobs already nearby counts as crowded",
+	)
+	testing.expect(
+		t,
+		!mobs_crowded(&mobs, 5000, 5000),
+		"a spot far from every existing mob is never crowded",
+	)
+}
+
+@(test)
+test_spawn_rolls_gated_by_density_but_breeding_is_not :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	player_pos := Vec3{8, 40, 8}
+
+	// hostile_try_spawn's candidate is a random point 24-46 blocks from
+	// player_pos, at any angle - a small mob cluster wouldn't reliably be
+	// "nearby" the actual roll every run. A dense grid spanning the whole
+	// possible candidate square (half-extent 46, well past the max roll
+	// distance) with MOB_LOCAL_RADIUS-overlapping spacing guarantees at
+	// least MOB_LOCAL_CAP mobs are within range of *any* candidate the roll
+	// could produce, so the gate blocking is deterministic, not a fluke of
+	// this run's RNG draw.
+	for gx := -48; gx <= 48; gx += 12 {
+		for gz := -48; gz <= 48; gz += 12 {
+			append(
+				&w.mobs,
+				Mob{kind = .Chicken, pos = Vec3{8 + f32(gx), 40, 8 + f32(gz)}, health = 4},
+			)
+		}
+	}
+	before := len(w.mobs)
+
+	for _ in 0 ..< 20 do hostile_try_spawn(&w, &w.mobs, player_pos)
+	testing.expect(t, len(w.mobs) == before, "random spawn rolls are blocked anywhere in an already-crowded area")
+
+	// breeding is a completely different code path and must ignore the cap
+	append(
+		&w.mobs,
+		Mob{kind = .Cow, pos = Vec3{8, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6},
+	)
+	append(
+		&w.mobs,
+		Mob{kind = .Cow, pos = Vec3{9, 40, 8}, love_timer = BREED_LOVE_DURATION, health = 6},
+	)
+	breed_pass(&w, &w.mobs, 0.016)
+	found_baby := false
+	for m in w.mobs do if m.is_baby do found_baby = true
+	testing.expect(t, found_baby, "breeding still produces a baby even while the area is at the spawn cap")
+}

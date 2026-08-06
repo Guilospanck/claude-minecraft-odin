@@ -452,12 +452,39 @@ nether_surface :: proc(w: ^World, wx, wz: int) -> int {
 	return -1
 }
 
+// Random spawn rolls (the 4 *_try_spawn functions below) fire every frame
+// independently, each with no idea what else has already spawned nearby —
+// left unchecked, that stacks up a crowd well before old age/starvation/
+// predation or simply wandering off can thin it back out. This local
+// density cap throttles the ROLLS specifically; breed_pass (feeding +
+// babies) is deliberately not gated by it, so a well-fed pair can still
+// grow a herd past the cap — this only stops random passersby from also
+// piling into an already-busy spot.
+MOB_LOCAL_RADIUS :: f32(28)
+MOB_LOCAL_CAP :: 10
+
+// Not file-private: tests exercise it directly.
+mobs_crowded :: proc(mobs: ^[dynamic]Mob, wx, wz: int) -> bool {
+	fx, fz := f32(wx), f32(wz)
+	count := 0
+	for m in mobs^ {
+		dx := m.pos.x - fx
+		dz := m.pos.z - fz
+		if dx * dx + dz * dz < MOB_LOCAL_RADIUS * MOB_LOCAL_RADIUS {
+			count += 1
+			if count >= MOB_LOCAL_CAP do return true
+		}
+	}
+	return false
+}
+
 // Nether spawn: piglins on netherrack, ghasts drifting in the caverns.
 nether_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	ang := rng_range(0, 2 * math.PI)
 	dist := rng_range(16, 40)
 	wx := int(player_pos.x + math.cos(ang) * dist)
 	wz := int(player_pos.z + math.sin(ang) * dist)
+	if mobs_crowded(mobs, wx, wz) do return
 	fy := nether_surface(w, wx, wz)
 	if fy < 0 do return
 
@@ -550,6 +577,7 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	dist := rng_range(20, 44)
 	wx := int(player_pos.x + math.cos(ang) * dist)
 	wz := int(player_pos.z + math.sin(ang) * dist)
+	if mobs_crowded(mobs, wx, wz) do return
 
 	sy, surf := surface_y(w, wx, wz)
 	if sy < 0 do return
@@ -581,6 +609,7 @@ water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	dist := rng_range(14, 36)
 	wx := int(player_pos.x + math.cos(ang) * dist)
 	wz := int(player_pos.z + math.sin(ang) * dist)
+	if mobs_crowded(mobs, wx, wz) do return
 	if world_block(w, wx, SEA_LEVEL, wz) != .Water do return
 	if world_block(w, wx, SEA_LEVEL - 1, wz) != .Water do return
 
@@ -603,6 +632,7 @@ hostile_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	dist := rng_range(24, 46)
 	wx := int(player_pos.x + math.cos(ang) * dist)
 	wz := int(player_pos.z + math.sin(ang) * dist)
+	if mobs_crowded(mobs, wx, wz) do return
 
 	sy, surf := surface_y(w, wx, wz)
 	if sy < 0 do return
