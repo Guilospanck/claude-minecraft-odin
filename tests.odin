@@ -27,6 +27,8 @@ free_test_world :: proc(w: ^World) {
 	delete(w.crops)
 	delete(w.chests)
 	delete(w.doors)
+	delete(w.villagers)
+	delete(w.villages)
 }
 
 @(test)
@@ -722,6 +724,7 @@ test_spawn_builds_platform_when_no_land_nearby :: proc(t: ^testing.T) {
 		delete(w.chunks)
 		delete(w.mobs);delete(w.items);delete(w.arrows);delete(w.particles)
 		delete(w.crops);delete(w.chests);delete(w.doors)
+		delete(w.villagers);delete(w.villages)
 	}
 	// Flood every chunk within the spawn search radius with deep water (an
 	// all-ocean seed near the origin) — no natural dry land exists anywhere
@@ -1208,4 +1211,45 @@ test_door_toggle_flips_open_state :: proc(t: ^testing.T) {
 	testing.expect(t, w.doors[pos].open, "toggling an unregistered door opens it")
 	door_toggle(&w, pos)
 	testing.expect(t, !w.doors[pos].open, "toggling again closes it")
+}
+
+@(test)
+test_village_biome_ok_only_calm_biomes :: proc(t: ^testing.T) {
+	testing.expect(t, village_biome_ok(.Plains), "plains is a fine village site")
+	testing.expect(t, village_biome_ok(.Forest), "forest is a fine village site")
+	testing.expect(t, !village_biome_ok(.Ocean), "no villages in the ocean")
+	testing.expect(t, !village_biome_ok(.Mountains), "no villages on mountains")
+	testing.expect(t, !village_biome_ok(.Badlands), "no villages in badlands")
+}
+
+@(test)
+test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
+
+	generate_house(&w, c, 0, 0, 2, 2, 39)
+
+	// a wall corner
+	testing.expect(t, chunk_get(c, 2, 40, 2) == .Wood, "wall corner is built from wood")
+	// interior is hollowed out, not solid wood
+	testing.expect(t, chunk_get(c, 4, 40, 4) == .Air, "the interior is hollow")
+	// a door sits in the middle of the south wall, with headroom above it
+	testing.expect(t, chunk_get(c, 4, 40, 2) == .Door, "a door opening exists in the south wall")
+	testing.expect(t, chunk_get(c, 4, 41, 2) == .Air, "there's headroom above the door")
+	_, ok := w.doors[Ivec3{4, 40, 2}]
+	testing.expect(t, ok, "the placed door is registered in w.doors")
+	// the roof caps the structure
+	testing.expect(t, chunk_get(c, 4, 43, 4) == .Wood, "a roof caps the house")
+}
+
+@(test)
+test_villager_pick_finds_nearest_under_the_ray :: proc(t: ^testing.T) {
+	villagers := make([dynamic]Villager, 0, 2)
+	defer delete(villagers)
+	append(&villagers, Villager{pos = Vec3{5, 40, 5}, name = "MARA"})
+	append(&villagers, Villager{pos = Vec3{50, 40, 50}, name = "OTIS"})
+
+	idx, _ := villager_pick(&villagers, Vec3{5, 40.5, 0}, Vec3{0, 0, 1}, 20)
+	testing.expect(t, idx == 0, "the ray finds the nearby villager, not the distant one")
 }

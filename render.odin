@@ -291,6 +291,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	gl.Disable(gl.BLEND)
 
 	entity_render_frame(&w.mobs, vp, ambient)
+	villagers_render_frame(&w.villagers, vp, ambient)
 	items_render_frame(&w.items, vp, ambient)
 	arrows_render_frame(&w.arrows, vp, ambient)
 	particles_render_frame(&w.particles, vp, ambient)

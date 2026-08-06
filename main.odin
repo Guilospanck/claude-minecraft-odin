@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:strconv"
 import "core:strings"
@@ -410,6 +411,17 @@ main :: proc() {
 		world_set_block(&world, bx, by + 1, bz, .Bed)
 	}
 
+	// Debug: MC_NPC spawns a villager directly ahead at eye level, for
+	// screenshotting the humanoid model without depending on village RNG.
+	if os.get_env("MC_NPC", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		np := player.pos + fwd * 4
+		append(
+			&world.villagers,
+			Villager{pos = np, yaw = player.yaw + math.PI, health = 10, name = "MARA"},
+		)
+	}
+
 	// Debug: MC_BED places a bed on the real ground directly ahead (and
 	// drops the camera to eye level there) for screenshotting the low-box
 	// furniture shape without having to guess terrain height up front.
@@ -427,6 +439,46 @@ main :: proc() {
 		}
 		world_set_block(&world, bx, by + 1, bz, .Bed)
 		player.pos = Vec3{f32(bx) - fwd.x * 3, f32(by) + 1, f32(bz) - fwd.z * 3}
+	}
+
+	// Debug: MC_VILLAGE generates chunks outward from spawn until a village
+	// rolls in (VILLAGE_CHANCE makes it rare - not every world has one
+	// nearby) and teleports the camera there, for screenshotting.
+	if os.get_env("MC_VILLAGE", context.temp_allocator) != "" {
+		found := false
+		SR :: 24
+		for r in 0 ..= SR {
+			for cz in -r ..= r {
+				for cx in -r ..= r {
+					if max(abs(cx), abs(cz)) != r do continue // ring order: nearest first
+					world_ensure_chunk(&world, Ivec2{cx, cz})
+					if len(world.villages) > 0 {
+						found = true
+					}
+				}
+			}
+			if found do break
+		}
+		if len(world.villages) > 0 {
+			t := world.villages[0].center
+			player.pos = Vec3{f32(t.x) - 16, f32(t.y) + 6, f32(t.z) - 16}
+			dx := f32(t.x) - player.pos.x
+			dz := f32(t.z) - player.pos.z
+			player.yaw = math.atan2(dx, -dz)
+			player.pitch = -0.15
+			player.fly = true
+			fmt.println(
+				"MC_VILLAGE: found village at",
+				world.villages[0].center,
+				"with",
+				world.villages[0].houses,
+				"houses and",
+				len(world.villagers),
+				"villagers",
+			)
+		} else {
+			fmt.println("MC_VILLAGE: no village found within", SR, "chunks")
+		}
 	}
 
 	// Debug: MC_DOOR places a door on the real ground directly ahead (open
@@ -868,6 +920,7 @@ main :: proc() {
 
 			world_stream(cur, player.pos)
 			mobs_update(cur, &player, &cur.mobs, dt)
+			villagers_update(cur, &player, &cur.villagers, dt)
 			items_update(cur, &player, &cur.items, dt)
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)

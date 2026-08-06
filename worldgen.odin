@@ -172,7 +172,7 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome)
 	return
 }
 
-worldgen_fill :: proc(c: ^Chunk, seed: u64) {
+worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 	base_x := c.coord.x * CHUNK_W
 	base_z := c.coord.y * CHUNK_D
 
@@ -250,6 +250,10 @@ worldgen_fill :: proc(c: ^Chunk, seed: u64) {
 	settle_water(c)
 	generate_waterfalls(c, seed, base_x, base_z, heights[:])
 	generate_trees(c, seed, base_x, base_z, heights[:], biomes[:])
+	// Runs last so a house's walls/roof/door always win over whatever a
+	// tree placed on the same columns, instead of depending on call order
+	// luck for a clean building.
+	generate_village(w, c, seed, base_x, base_z, heights[:], biomes[:])
 }
 
 // Make unsupported water fall. Rivers/oceans that were carved through by a

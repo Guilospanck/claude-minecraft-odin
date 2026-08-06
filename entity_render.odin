@@ -188,6 +188,47 @@ player_parts := [6]MobPart {
 }
 
 @(private = "file")
+VSKIN :: Vec3{0.82, 0.64, 0.52}
+@(private = "file")
+VROBE :: Vec3{0.42, 0.34, 0.58}
+@(private = "file")
+VROBE_NOMAD :: Vec3{0.50, 0.46, 0.36}
+
+@(private = "file")
+villager_parts := [6]MobPart {
+	{{-0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, 0}, // left leg
+	{{0.11, 0.45, 0}, {0.14, 0.9, 0.14}, VSKIN, 0}, // right leg
+	{{0, 1.2, 0}, {0.42, 0.62, 0.24}, VROBE, 0}, // body/robe
+	{{0, 1.66, 0}, {0.4, 0.42, 0.4}, VSKIN, 0}, // head
+	{{-0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE, 0}, // left arm
+	{{0.29, 1.2, 0}, {0.14, 0.6, 0.14}, VROBE, 0}, // right arm
+}
+
+// Draw villagers as robed humanoids — nomads get an earthier robe colour so
+// they read as distinct from settled villagers at a glance.
+villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient: f32) {
+	if len(villagers^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, ambient)
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(villagers^) {
+		v := &villagers^[i]
+		base := linalg.matrix4_translate_f32(v.pos) * linalg.matrix4_rotate_f32(-v.yaw, Vec3{0, 1, 0})
+		sw := math.sin(v.walk_phase)
+		for pt in villager_parts {
+			off := pt.offset
+			off.z += pt.swing * sw * 0.16
+			model := base * linalg.matrix4_translate_f32(off) * linalg.matrix4_scale_f32(pt.size)
+			ent_set_mat4(e_mvp, vp * model)
+			col := (pt.color == VROBE && v.is_nomad) ? VROBE_NOMAD : pt.color
+			gl.Uniform3f(e_color, col.r, col.g, col.b)
+			gl.DrawArrays(gl.TRIANGLES, 0, 36)
+		}
+	}
+	gl.BindVertexArray(0)
+}
+
+@(private = "file")
 remotes_buf: [dynamic]RemotePlayer
 
 // Draw other networked players as blue humanoids.

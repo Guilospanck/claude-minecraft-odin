@@ -74,6 +74,12 @@ try_interact :: proc(w: ^World, p: ^Player) {
 	mob_idx, _ := mob_pick(&w.mobs, eye, dir, REACH)
 	if mob_idx >= 0 && try_feed(w, p, &w.mobs[mob_idx]) do return
 
+	v_idx, _ := villager_pick(&w.villagers, eye, dir, REACH)
+	if v_idx >= 0 {
+		try_talk_to_villager(&w.villagers[v_idx])
+		return
+	}
+
 	hit := raycast(w, eye, dir, REACH)
 	if !hit.hit do return
 	tb := world_block(w, hit.bx, hit.by, hit.bz)

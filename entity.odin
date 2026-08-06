@@ -428,7 +428,7 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 }
 
 // --- spawning ---
-@(private = "file")
+// Not file-private: villager.odin's nomad_try_spawn reuses it too.
 surface_y :: proc(w: ^World, wx, wz: int) -> (int, BlockId) {
 	for y := CHUNK_H - 2; y >= 1; y -= 1 {
 		b := world_block(w, wx, y, wz)
