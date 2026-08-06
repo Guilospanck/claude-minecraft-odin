@@ -120,7 +120,7 @@ PV_SPLINE := []SplinePoint{{-1.0, -0.3}, {-0.3, -0.15}, {0.0, 0.0}, {0.3, 0.3}, 
 // out of worldgen_fill so entity.odin's spawn logic can ask "what biome is
 // this column" without recomputing (and risking drifting out of sync with)
 // the five-noise formula that actually generated the terrain there.
-world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome) {
+world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome, river_carve: f32) {
 	fx := f32(wx)
 	fz := f32(wz)
 
@@ -172,6 +172,7 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome)
 			h = int(f32(h) * (1 - carve) + f32(target) * carve)
 		}
 	}
+	river_carve = carve
 
 	if h < 4 do h = 4
 	if h > CHUNK_H - 8 do h = CHUNK_H - 8
@@ -179,6 +180,11 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome)
 	biome = classify_biome(continentalness, erosion_amp, pv, temp, moist, h)
 	return
 }
+
+// A ravine never carves deeper than this below the surface — see the
+// comment at its use site in worldgen_fill for why an unbounded depth was a
+// bug, not a feature.
+RAVINE_MAX_DEPTH :: 22
 
 worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 	base_x := c.coord.x * CHUNK_W
@@ -194,7 +200,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			fx := f32(wx)
 			fz := f32(wz)
 
-			h, biome := world_height_and_biome(seed, wx, wz)
+			h, biome, river_carve := world_height_and_biome(seed, wx, wz)
 
 			heights[lx + lz * CHUNK_W] = h
 			biomes[lx + lz * CHUNK_W] = biome
@@ -226,7 +232,20 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 				// Caves, ravines, and rare surface cave mouths.
 				if b != .Air && b != .Bedrock && b != .Water && y > 1 && y < h {
 					deep := y < h - 5
-					if rav_a < 0.016 && y > 8 {
+					// Ravines are a bounded gorge below the surface, not a
+					// shaft to bedrock: uncapped, `y > 8` let a ravine carve
+					// every block from y=9 up to h-1, so wherever a river
+					// had already pulled h down near sea level, the two
+					// combined into a deep rectangular pit plunging out of
+					// the riverbed — the ravine noise has nothing to do
+					// with the river noise, so this is pure coincidence
+					// waiting to happen anywhere the two overlap. Capping
+					// the depth and skipping ravines where the river has
+					// meaningfully carved (river_carve >= 0.2) stops both:
+					// a bounded gorge on dry land, no gorge at all in a
+					// riverbed the water carve already shaped.
+					ravine_floor := max(9, h - RAVINE_MAX_DEPTH)
+					if rav_a < 0.016 && y > ravine_floor && river_carve < 0.2 {
 						b = .Air // ravine: narrow gorge open to the surface
 					} else if deep || cave_mouth {
 						cave := fbm3(seed + 555, fx * 0.045, f32(y) * 0.055, fz * 0.045, 3)

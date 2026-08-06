@@ -433,6 +433,16 @@ main :: proc() {
 				},
 			)
 		}
+		// a second row of nomads (Profession.None, different names) to show
+		// the per-individual palette that keeps them from all looking alike
+		nomad_names := [6]string{"OTIS", "PIP", "RUNA", "GUS", "NELL", "BRAM"}
+		for i in 0 ..< 6 {
+			np := base + fwd * 3 + right * f32(i - 2) * 2.0
+			append(
+				&world.villagers,
+				Villager{pos = np, yaw = player.yaw + math.PI, health = 10, name = nomad_names[i]},
+			)
+		}
 	}
 
 	// Debug: MC_BED places a bed on the real ground directly ahead (and

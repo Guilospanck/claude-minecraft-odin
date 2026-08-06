@@ -207,8 +207,7 @@ villager_parts := [6]MobPart {
 }
 
 // Distinct robe colour per profession, so villagers read as different
-// people at a glance instead of palette-identical copies. Nomads
-// (Profession.None) get an earthy, unaffiliated tone.
+// people at a glance instead of palette-identical copies.
 profession_color :: proc(p: Profession) -> Vec3 {
 	switch p {
 	case .Farmer:
@@ -220,14 +219,75 @@ profession_color :: proc(p: Profession) -> Vec3 {
 	case .Merchant:
 		return Vec3{0.55, 0.16, 0.18} // deep red
 	case .None:
-		return Vec3{0.50, 0.46, 0.36} // nomad, unaffiliated earth tone
+		return Vec3{0.50, 0.46, 0.36} // fallback; nomads use NOMAD_PALETTE instead
 	}
 	return Vec3{0.42, 0.34, 0.58}
 }
 
+// Nomads (Profession.None) have no building to anchor a role colour, and
+// they're the villager a player is statistically most likely to actually
+// run into — villages are rare, so if every nomad shared one flat earth
+// tone, "most villagers a player ever sees" would in practice all look
+// identical regardless of how distinct the profession colours are. Each
+// nomad instead picks from a small palette by a hash of their own name.
+@(private = "file")
+NOMAD_PALETTE := []Vec3 {
+	{0.50, 0.46, 0.36}, // sand
+	{0.34, 0.42, 0.30}, // moss
+	{0.55, 0.30, 0.22}, // rust leather
+	{0.30, 0.32, 0.44}, // dusk blue
+	{0.46, 0.40, 0.55}, // faded violet
+	{0.42, 0.42, 0.42}, // ash grey
+	{0.58, 0.48, 0.20}, // ochre
+	{0.26, 0.46, 0.42}, // teal
+}
+
+// FNV-1a: a small, dependency-free string hash for deriving per-villager
+// visual variation from their name (stable for a given villager, distinct
+// villager to villager).
+@(private = "file")
+hash_string :: proc(s: string) -> u64 {
+	h := u64(0xcbf29ce484222325)
+	for c in s {
+		h ~= u64(c)
+		h *= 0x100000001b3
+	}
+	return h
+}
+
+// A small per-individual colour jitter on top of the profession colour, so
+// even two villagers with the same profession (e.g. two farmers in
+// different villages) don't render pixel-identical.
+@(private = "file")
+individual_color_jitter :: proc(h: u64) -> Vec3 {
+	r := f32(h % 100) / 100.0 - 0.5
+	g := f32((h >> 8) % 100) / 100.0 - 0.5
+	b := f32((h >> 16) % 100) / 100.0 - 0.5
+	return Vec3{r, g, b} * 0.12
+}
+
+@(private = "file")
+villager_robe_color :: proc(v: ^Villager) -> Vec3 {
+	h := hash_string(v.name)
+	if v.profession == .None {
+		return NOMAD_PALETTE[h % u64(len(NOMAD_PALETTE))]
+	}
+	col := profession_color(v.profession) + individual_color_jitter(h)
+	return Vec3{clamp(col.r, 0, 1), clamp(col.g, 0, 1), clamp(col.b, 0, 1)}
+}
+
+// A little build variation (0.92x-1.08x) from the same name hash, so
+// villagers don't all share one identical silhouette either.
+@(private = "file")
+villager_build_scale :: proc(v: ^Villager) -> f32 {
+	h := hash_string(v.name) >> 24
+	return 0.92 + f32(h % 100) / 100.0 * 0.16
+}
+
 // Draw villagers as robed humanoids — the robe colour comes from their
-// profession (see profession_color) so different roles read as visibly
-// different people, not interchangeable copies.
+// profession, jittered per-individual (or, for nomads with no profession
+// to anchor a colour, picked from a dedicated palette) so different
+// villagers read as visibly different people, not interchangeable copies.
 villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient: f32) {
 	if len(villagers^) == 0 do return
 	gl.UseProgram(e_prog)
@@ -235,9 +295,13 @@ villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient:
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(villagers^) {
 		v := &villagers^[i]
-		base := linalg.matrix4_translate_f32(v.pos) * linalg.matrix4_rotate_f32(-v.yaw, Vec3{0, 1, 0})
+		build := villager_build_scale(v)
+		base :=
+			linalg.matrix4_translate_f32(v.pos) *
+			linalg.matrix4_rotate_f32(-v.yaw, Vec3{0, 1, 0}) *
+			linalg.matrix4_scale_f32(Vec3{build, build, build})
 		sw := math.sin(v.walk_phase)
-		robe := profession_color(v.profession)
+		robe := villager_robe_color(v)
 		for pt in villager_parts {
 			off := pt.offset
 			off.z += pt.swing * sw * 0.16

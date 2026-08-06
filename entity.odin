@@ -554,7 +554,7 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 	if world_block(w, wx, sy + 1, wz) == .Water do return // don't spawn on seabed
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
-	_, biome := world_height_and_biome(w.seed, wx, wz)
+	_, biome, _ := world_height_and_biome(w.seed, wx, wz)
 	if !biome_supports_grazing(biome) do return
 	if !food_or_water_nearby(w, wx, wz, sy) do return
 
