@@ -34,6 +34,7 @@ InputState :: struct {
 g_input: InputState
 g_win: glfw.WindowHandle
 g_cursor_free: bool // true while a menu has released the OS cursor for clicking
+g_prev_left_ui: bool // left-button state last frame, for menu press/release edges
 
 cursor_cb :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 	if !g_input.have_last {

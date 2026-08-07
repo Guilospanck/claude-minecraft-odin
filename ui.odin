@@ -269,7 +269,7 @@ ui_slot :: proc(
 	}
 	hud_quad(x0, y0, x0 + w, y0 + sz, selected ? Vec4{0.30, 0.28, 0.20, 1} : Vec4{0.17, 0.17, 0.21, 1})
 	if use_tex {
-		ui_block_icon(x0 + w * 0.10, y0 + sz * 0.10, x0 + w * 0.90, y0 + sz * 0.90, blk)
+		if blk != .Air do ui_block_icon(x0 + w * 0.10, y0 + sz * 0.10, x0 + w * 0.90, y0 + sz * 0.90, blk)
 	} else if count > 0 {
 		hud_quad(x0 + w * 0.20, y0 + sz * 0.20, x0 + w * 0.80, y0 + sz * 0.80, Vec4{flat.r, flat.g, flat.b, 1})
 	}
@@ -404,6 +404,13 @@ inventory_entries :: proc(p: ^Player) -> [dynamic]InvEntry {
 // slot. It is the "selected" item, drawn with a strong highlight.
 g_inv_cursor: int
 
+// Drag-and-drop state for the Items tab. While active, g_drag_block rides the
+// cursor; g_drag_from is the hotbar slot it was lifted from, or -1 if it was
+// picked out of the inventory grid.
+g_drag_active: bool
+g_drag_block: BlockId
+g_drag_from: int
+
 INV_COLS :: 9
 
 // The Items-tab grid geometry, shared by the renderer and the mouse hit-tests
@@ -440,6 +447,23 @@ inv_hit_hotbar :: proc(aspect, nx, ny: f32) -> int {
 		if nx >= x0 && nx <= x0 + sw && ny >= hy && ny <= hy + sz do return i
 	}
 	return -1
+}
+
+// Resolve a drag-drop onto the hotbar. `from` is the source hotbar slot, or -1
+// if the item was picked out of the inventory grid; `target` is the hotbar slot
+// dropped onto, or -1 for empty space. Grid->slot binds, slot->slot swaps, and
+// a hotbar item dropped into empty space is cleared.
+inv_apply_drop :: proc(p: ^Player, from, target: int, block: BlockId) {
+	if target >= 0 {
+		if from < 0 {
+			p.hotbar[target] = block // grid item -> slot
+		} else {
+			p.hotbar[target], p.hotbar[from] = p.hotbar[from], p.hotbar[target] // swap
+		}
+		p.selected = p.hotbar[target]
+	} else if from >= 0 {
+		p.hotbar[from] = .Air // dropped off a hotbar slot: clear it
+	}
 }
 
 // Which Craft-tab recipe row the NDC point is over, or -1. Mirrors the row
@@ -510,8 +534,8 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	for i in 0 ..< 9 {
 		x0 := gx0 + f32(i) * (sw + gap)
 		b := p.hotbar[i]
-		// A cyan hover ring shows which slot a click would assign the selected
-		// item to.
+		if g_drag_active && g_drag_from == i do b = .Air // lifted out, drawn on the cursor
+		// A cyan hover ring shows which slot a drag/click would drop onto.
 		if i == hov_hb && g_inv_tab == .Items {
 			hud_quad(x0 - 0.011, hy0 - 0.011, x0 + sw + 0.011, hy0 + sz + 0.011, Vec4{0.3, 0.85, 0.95, 1})
 		}
@@ -521,7 +545,7 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	action_hint: string
 	switch g_inv_tab {
 	case .Items:
-		action_hint = "HOVER/CLICK OR ARROWS TO SELECT   CLICK A HOTBAR SLOT OR 1-9 TO ASSIGN"
+		action_hint = "DRAG AN ITEM ONTO A HOTBAR SLOT   (ARROWS + 1-9 ALSO WORK)"
 	case .Craft:
 		action_hint = "CLICK OR 1-9 TO CRAFT"
 	case .Tools:
@@ -535,4 +559,11 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		ch_h * 0.6,
 		Vec4{0.65, 0.7, 0.76, 1},
 	)
+
+	// The dragged item rides the cursor, drawn last so it's on top of everything.
+	if g_drag_active && g_inv_tab == .Items {
+		half := sw * 0.62
+		hud_quad(mnx - half, mny - half, mnx + half, mny + half, Vec4{0.10, 0.10, 0.13, 0.7})
+		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_drag_block)
+	}
 }

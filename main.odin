@@ -285,6 +285,14 @@ main :: proc() {
 			player.inventory[b] = 16
 		}
 		g_inv_cursor = 6
+		// MC_DRAG shows a drag in progress (item on the cursor, source slot
+		// hollowed) for a screenshot, since headless has no live mouse.
+		if s := os.get_env("MC_DRAG", context.temp_allocator); s != "" {
+			g_drag_active = true;g_drag_from = 2;g_drag_block = .Glass
+			ww, wh := glfw.GetWindowSize(g_win)
+			g_input.mx = f64(ww) * 0.5
+			g_input.my = f64(wh) * 0.42
+		}
 	}
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
 	if os.get_env("MC_CRAFT", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Craft}
@@ -1027,13 +1035,18 @@ main :: proc() {
 				if g_input.nav_left do settings_adjust(-1)
 				if g_input.nav_right do settings_adjust(1)
 			}
+			// Drag state only lives on the Items tab; drop it otherwise.
+			if !(g_show_inventory && g_inv_tab == .Items) do g_drag_active = false
 			if g_show_inventory {
 				switch g_inv_tab {
 				case .Items:
-					// Select an item with the mouse (hover to highlight, click
-					// to lock it in) or the arrow keys, then assign it to a
-					// hotbar slot by clicking that slot or pressing 1-9.
+					// Drag an item onto a hotbar slot to bind it; drag one
+					// hotbar slot onto another to swap; drag a hotbar item off
+					// into space to clear it. Arrows + 1-9 still work.
 					entries := inventory_entries(&player)
+					aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
+					mnx, mny := cursor_ndc()
+
 					if len(entries) > 0 {
 						cols := INV_COLS
 						if g_input.nav_left do g_inv_cursor -= 1
@@ -1041,29 +1054,40 @@ main :: proc() {
 						if g_input.nav_up do g_inv_cursor -= cols
 						if g_input.nav_down do g_inv_cursor += cols
 						g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
-
-						aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
-						mnx, mny := cursor_ndc()
 						if hov := inv_hit_grid(aspect, mnx, mny, len(entries)); hov >= 0 {
 							g_inv_cursor = hov // hovering highlights
 						}
-						assign_to := -1
-						if ui_click {
-							if inv_hit_grid(aspect, mnx, mny, len(entries)) < 0 {
-								if hb := inv_hit_hotbar(aspect, mnx, mny); hb >= 0 do assign_to = hb
-							}
-						}
-						if g_input.select > 0 do assign_to = g_input.select - 1
-						if assign_to >= 0 {
+						if g_input.select > 0 { 	// keyboard: assign highlighted item
 							e := entries[g_inv_cursor]
 							if e.use_tex {
-								player.hotbar[assign_to] = e.blk
-								player.selected = e.blk // equip it, ready to place
-								toast_show(fmt.tprintf("HOTBAR %d: %s", assign_to + 1, block_name(e.blk)))
+								player.hotbar[g_input.select - 1] = e.blk
+								player.selected = e.blk
+								toast_show(fmt.tprintf("HOTBAR %d: %s", g_input.select, block_name(e.blk)))
 							} else {
 								toast_show("CANT PUT THAT ON THE HOTBAR")
 							}
 						}
+					}
+
+					// Mouse drag: pick up on press, drop on release.
+					left_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+					just_pressed := left_down && !g_prev_left_ui
+					just_released := !left_down && g_prev_left_ui
+					g_prev_left_ui = left_down
+
+					if just_pressed && !g_drag_active {
+						if gi := inv_hit_grid(aspect, mnx, mny, len(entries)); gi >= 0 {
+							if entries[gi].use_tex {
+								g_drag_active = true;g_drag_block = entries[gi].blk;g_drag_from = -1
+							}
+						} else if hb := inv_hit_hotbar(aspect, mnx, mny); hb >= 0 && player.hotbar[hb] != .Air {
+							g_drag_active = true;g_drag_block = player.hotbar[hb];g_drag_from = hb
+						}
+					}
+					if just_released && g_drag_active {
+						hb := inv_hit_hotbar(aspect, mnx, mny)
+						inv_apply_drop(&player, g_drag_from, hb, g_drag_block)
+						g_drag_active = false
 					}
 				case .Craft:
 					if g_input.select > 0 {

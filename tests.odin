@@ -1392,6 +1392,33 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_inventory_drag_drop :: proc(t: ^testing.T) {
+	p: Player
+	player_init(&p, Vec3{0, 0, 0})
+	p.hotbar = {}
+	p.hotbar[0] = .Stone
+	p.hotbar[1] = .Wood
+
+	// grid item -> empty slot binds it (and equips)
+	inv_apply_drop(&p, -1, 3, .Glass)
+	testing.expect(t, p.hotbar[3] == .Glass, "grid item drops onto the hotbar slot")
+	testing.expect(t, p.selected == .Glass, "dropping also equips the item")
+
+	// slot -> slot swaps
+	inv_apply_drop(&p, 0, 1, .Stone)
+	testing.expect(t, p.hotbar[0] == .Wood && p.hotbar[1] == .Stone, "two hotbar slots swap")
+
+	// hotbar item dropped into empty space clears the slot
+	inv_apply_drop(&p, 1, -1, .Stone)
+	testing.expect(t, p.hotbar[1] == .Air, "dragging a hotbar item off clears the slot")
+
+	// a grid item dropped into empty space does nothing
+	before := p.hotbar
+	inv_apply_drop(&p, -1, -1, .Dirt)
+	testing.expect(t, p.hotbar == before, "dropping a grid item into empty space is a no-op")
+}
+
+@(test)
 test_inventory_slot_hit_tests :: proc(t: ^testing.T) {
 	aspect := f32(16.0) / 9.0
 	sw, sz, gap, gx0, top, hy := inv_grid_geom(aspect)
