@@ -316,20 +316,20 @@ main :: proc() {
 		fwd := camera_front(player.yaw, 0)
 		right := Vec3{-fwd.z, 0, fwd.x}
 		base := player.pos + fwd * 7
-		newmobs := [6]MobKind{.Wolf, .Cat, .Fox, .Goat, .Deer, .Bee}
+		newmobs := [9]MobKind{.Wolf, .Cat, .Fox, .Goat, .Deer, .Bee, .Pig, .Sheep, .Cow}
 		py := int(base.y)
 		// flatten a grass platform so the lineup isn't broken up by terrain
-		for i in -2 ..= 14 {
+		for i in -2 ..= 22 {
 			for j in -2 ..= 3 {
-				p := base + right * f32(i - 6) * 1.0 + fwd * f32(j) * 1.0
+				p := base + right * f32(i - 9) * 1.0 + fwd * f32(j) * 1.0
 				bx, bz := int(p.x), int(p.z)
 				world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
 				world_set_block(&world, bx, py - 1, bz, .Grass)
 				for h in 0 ..< 3 do world_set_block(&world, bx, py + h, bz, .Air)
 			}
 		}
-		for i in 0 ..< 6 {
-			p := base + right * (f32(i) - 2.5) * 2.0
+		for i in 0 ..< 9 {
+			p := base + right * (f32(i) - 4.0) * 2.0
 			wx, wz := int(p.x), int(p.z)
 			sy := py - 1
 			append(
