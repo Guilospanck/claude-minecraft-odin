@@ -280,15 +280,13 @@ main :: proc() {
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
 	if os.get_env("MC_INV", context.temp_allocator) != "" {
 		g_show_inventory = true;g_inv_tab = .Items
-		// sample stock so the Items grid is populated for the screenshot
-		for b in ([?]BlockId{.Grass, .Dirt, .Stone, .Wood, .Sand, .Glass, .Stair, .CoalOre, .Iron, .Leaves, .Snow, .FlowerRed, .Cactus}) {
-			player.inventory[b] = 16
-		}
-		g_inv_cursor = 6
-		// MC_DRAG shows a drag in progress (item on the cursor, source slot
-		// hollowed) for a screenshot, since headless has no live mouse.
-		if s := os.get_env("MC_DRAG", context.temp_allocator); s != "" {
-			g_drag_active = true;g_drag_from = 2;g_drag_block = .Glass
+		// sample stock across storage slots so the Items grid is populated
+		sample := [?]BlockId{.Grass, .Dirt, .Stone, .Wood, .Sand, .Glass, .Stair, .CoalOre, .Iron, .Leaves, .Snow, .FlowerRed, .Cactus}
+		for b, i in sample do player.slots[HOTBAR_SLOTS + i] = {b, 16 + i}
+		// MC_DRAG shows a stack held on the cursor for a screenshot, since
+		// headless has no live mouse.
+		if os.get_env("MC_DRAG", context.temp_allocator) != "" {
+			g_cursor_stack = {.Glass, 12}
 			ww, wh := glfw.GetWindowSize(g_win)
 			g_input.mx = f64(ww) * 0.5
 			g_input.my = f64(wh) * 0.42
@@ -808,16 +806,16 @@ main :: proc() {
 
 	// Debug UI screenshots.
 	if os.get_env("MC_TOOLS", context.temp_allocator) != "" {
-		player.inventory[.Stone] = 20
-		player.inventory[.Iron] = 6
+		inv_add(&player, .Stone, 20)
+		inv_add(&player, .Iron, 6)
 		g_show_inventory = true
 		g_inv_tab = .Tools
 	}
 	// Debug: MC_ARMOR equips a mixed-tier set for a screenshot of the tab.
 	if os.get_env("MC_ARMOR", context.temp_allocator) != "" {
-		player.inventory[.Wood] = 20
-		player.inventory[.Stone] = 20
-		player.inventory[.Iron] = 20
+		inv_add(&player, .Wood, 20)
+		inv_add(&player, .Stone, 20)
+		inv_add(&player, .Iron, 20)
 		armor_craft(&player, .Helmet)
 		armor_craft(&player, .Helmet)
 		armor_craft(&player, .Helmet) // iron helmet
@@ -982,7 +980,6 @@ main :: proc() {
 					g_inv_tab = tab
 					g_show_settings = false
 					g_show_chest = false
-					if tab == .Items do g_inv_cursor = 0
 				}
 			}
 			if g_input.inv_toggle do open_tab(.Items)
@@ -1009,13 +1006,19 @@ main :: proc() {
 			g_input.have_last = false
 			g_cursor_free = paused
 		}
+		// If the inventory closes with a stack on the cursor, put it back so
+		// nothing is lost.
+		if !g_show_inventory && g_cursor_stack.id != .Air {
+			inv_add(&player, g_cursor_stack.id, g_cursor_stack.count)
+			g_cursor_stack = {}
+		}
 		if paused {
 			ui_click := g_input.break_req // left-click, captured before it's discarded below
 			// chest transfers: R takes everything, a hotbar number deposits it
 			if g_show_chest {
 				if g_input.interact do chest_withdraw_all(cur, &player)
 				if g_input.select >= 1 && g_input.select <= 9 {
-					chest_deposit(cur, &player, player.hotbar[g_input.select - 1])
+					chest_deposit(cur, &player, player.slots[g_input.select - 1].id)
 				}
 			}
 			// discard buffered gameplay one-shots so they don't fire on close
@@ -1035,59 +1038,30 @@ main :: proc() {
 				if g_input.nav_left do settings_adjust(-1)
 				if g_input.nav_right do settings_adjust(1)
 			}
-			// Drag state only lives on the Items tab; drop it otherwise.
-			if !(g_show_inventory && g_inv_tab == .Items) do g_drag_active = false
 			if g_show_inventory {
 				switch g_inv_tab {
 				case .Items:
-					// Drag an item onto a hotbar slot to bind it; drag one
-					// hotbar slot onto another to swap; drag a hotbar item off
-					// into space to clear it. Arrows + 1-9 still work.
-					entries := inventory_entries(&player)
+					// Fixed-slot inventory: left-click a slot to pick up / drop
+					// / swap a whole stack, right-click to split off half or
+					// place a single item. 1-9 equips that hotbar slot.
 					aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
 					mnx, mny := cursor_ndc()
 
-					if len(entries) > 0 {
-						cols := INV_COLS
-						if g_input.nav_left do g_inv_cursor -= 1
-						if g_input.nav_right do g_inv_cursor += 1
-						if g_input.nav_up do g_inv_cursor -= cols
-						if g_input.nav_down do g_inv_cursor += cols
-						g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
-						if hov := inv_hit_grid(aspect, mnx, mny, len(entries)); hov >= 0 {
-							g_inv_cursor = hov // hovering highlights
-						}
-						if g_input.select > 0 { 	// keyboard: assign highlighted item
-							e := entries[g_inv_cursor]
-							if e.use_tex {
-								player.hotbar[g_input.select - 1] = e.blk
-								player.selected = e.blk
-								toast_show(fmt.tprintf("HOTBAR %d: %s", g_input.select, block_name(e.blk)))
-							} else {
-								toast_show("CANT PUT THAT ON THE HOTBAR")
-							}
-						}
+					if g_input.select >= 1 && g_input.select <= HOTBAR_SLOTS {
+						player.selected_slot = g_input.select - 1
 					}
 
-					// Mouse drag: pick up on press, drop on release.
+					// Edge-detect both mouse buttons for click handling.
 					left_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
-					just_pressed := left_down && !g_prev_left_ui
-					just_released := !left_down && g_prev_left_ui
+					right_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+					left_press := left_down && !g_prev_left_ui
+					right_press := right_down && !g_prev_right_ui
 					g_prev_left_ui = left_down
+					g_prev_right_ui = right_down
 
-					if just_pressed && !g_drag_active {
-						if gi := inv_hit_grid(aspect, mnx, mny, len(entries)); gi >= 0 {
-							if entries[gi].use_tex {
-								g_drag_active = true;g_drag_block = entries[gi].blk;g_drag_from = -1
-							}
-						} else if hb := inv_hit_hotbar(aspect, mnx, mny); hb >= 0 && player.hotbar[hb] != .Air {
-							g_drag_active = true;g_drag_block = player.hotbar[hb];g_drag_from = hb
-						}
-					}
-					if just_released && g_drag_active {
-						hb := inv_hit_hotbar(aspect, mnx, mny)
-						inv_apply_drop(&player, g_drag_from, hb, g_drag_block)
-						g_drag_active = false
+					if slot := inv_hit_slot(aspect, mnx, mny); slot >= 0 {
+						if left_press do inv_click_slot(&player, slot)
+						if right_press do inv_rclick_slot(&player, slot)
 					}
 				case .Craft:
 					if g_input.select > 0 {
@@ -1124,13 +1098,13 @@ main :: proc() {
 
 			// build a portal in front of the player (P)
 			if g_input.portal {
-				if player.inventory[.Obsidian] >= PORTAL_COST {
+				if inv_has(&player, .Obsidian, PORTAL_COST) {
 					fwd := camera_front(player.yaw, 0)
 					ox := int(player.pos.x + fwd.x * 2) - 1
 					oz := int(player.pos.z + fwd.z * 2)
 					oy := int(player.pos.y)
 					build_portal(cur, ox, oy, oz)
-					player.inventory[.Obsidian] -= PORTAL_COST
+					inv_take(&player, .Obsidian, PORTAL_COST)
 					toast_show("PORTAL LIT - STEP IN TO TRAVEL")
 				} else {
 					toast_show(fmt.tprintf("NEED %d OBSIDIAN FOR A PORTAL", PORTAL_COST))

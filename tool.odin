@@ -149,11 +149,11 @@ tool_craft :: proc(p: ^Player, k: ToolKind) {
 		toast_show(fmt.tprintf("%s IS ALREADY DIAMOND (MAX)", tool_name(k)))
 		return
 	}
-	if p.inventory[block] < count {
+	if !inv_has(p, block, count) {
 		toast_show(fmt.tprintf("NEED %d %s FOR %s %s", count, block_name(block), TIER_NAMES[next], tool_name(k)))
 		return
 	}
-	p.inventory[block] -= count
+	inv_take(p, block, count)
 	p.tool_tier[k] = next
 	p.tool_dur[k] = TOOL_DUR[next]
 	toast_show(fmt.tprintf("CRAFTED %s %s", TIER_NAMES[next], tool_name(k)))

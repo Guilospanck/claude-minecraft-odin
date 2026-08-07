@@ -104,7 +104,7 @@ load_meta :: proc() -> (u64, bool) {
 @(private = "file")
 PLAYER_PATH :: "saves/player.dat"
 @(private = "file")
-PLAYER_SAVE_VERSION :: u8(1)
+PLAYER_SAVE_VERSION :: u8(2)
 
 // Persist the player's own state (position, look, vitals, respawn, the full
 // inventory + food counters, the hotbar layout, and tool/armor tiers +
@@ -123,21 +123,15 @@ save_player :: proc(p: ^Player) {
 	put_i32(&buf, i32(p.health))
 	put_f32(&buf, p.hunger);put_f32(&buf, p.oxygen)
 	put_f32(&buf, p.respawn.x);put_f32(&buf, p.respawn.y);put_f32(&buf, p.respawn.z)
-	append(&buf, u8(p.selected))
+	put_i32(&buf, i32(p.selected_slot))
 	put_i32(&buf, i32(p.raw_food));put_i32(&buf, i32(p.cooked_food))
 	put_i32(&buf, i32(p.seeds));put_i32(&buf, i32(p.wheat));put_i32(&buf, i32(p.bread))
-	for i in 0 ..< 9 do append(&buf, u8(p.hotbar[i]))
 	for k in ToolKind {put_i32(&buf, i32(p.tool_tier[k]));put_i32(&buf, i32(p.tool_dur[k]))}
 	for s in ArmorSlot {put_i32(&buf, i32(p.armor_tier[s]));put_i32(&buf, i32(p.armor_dur[s]))}
 
-	// inventory as (id, count) pairs for every non-empty block type
-	n := 0
-	for b in BlockId do if p.inventory[b] > 0 do n += 1
-	put_i32(&buf, i32(n))
-	for b in BlockId {
-		if p.inventory[b] <= 0 do continue
-		append(&buf, u8(b));put_i32(&buf, i32(p.inventory[b]))
-	}
+	// the fixed-slot inventory: one (id, count) pair per slot, positions kept
+	put_i32(&buf, i32(INV_SLOTS))
+	for s in p.slots {append(&buf, u8(s.id));put_i32(&buf, i32(s.count))}
 
 	if err := os.write_entire_file(PLAYER_PATH, buf[:]); err != nil {
 		fmt.eprintln("save_player failed:", err)
@@ -172,15 +166,13 @@ load_player :: proc(p: ^Player) -> bool {
 	p.respawn.x = get_f32(data, off);off += 4
 	p.respawn.y = get_f32(data, off);off += 4
 	p.respawn.z = get_f32(data, off);off += 4
-	p.selected = BlockId(data[off]);off += 1
-	if !need(off, 5 * 4, len(data)) do return false
+	if !need(off, 6 * 4, len(data)) do return false
+	p.selected_slot = int(get_i32(data, off));off += 4
 	p.raw_food = int(get_i32(data, off));off += 4
 	p.cooked_food = int(get_i32(data, off));off += 4
 	p.seeds = int(get_i32(data, off));off += 4
 	p.wheat = int(get_i32(data, off));off += 4
 	p.bread = int(get_i32(data, off));off += 4
-	if !need(off, 9, len(data)) do return false
-	for i in 0 ..< 9 {p.hotbar[i] = BlockId(data[off]);off += 1}
 	for k in ToolKind {
 		if !need(off, 8, len(data)) do return false
 		p.tool_tier[k] = int(get_i32(data, off));off += 4
@@ -193,12 +185,14 @@ load_player :: proc(p: ^Player) -> bool {
 	}
 	if !need(off, 4, len(data)) do return false
 	count := int(get_i32(data, off));off += 4
-	p.inventory = {}
-	for _ in 0 ..< count {
+	p.slots = {}
+	for i in 0 ..< count {
 		if !need(off, 5, len(data)) do return false
-		b := BlockId(data[off]);off += 1
-		p.inventory[b] = int(get_i32(data, off));off += 4
+		id := BlockId(data[off]);off += 1
+		cnt := int(get_i32(data, off));off += 4
+		if i < INV_SLOTS do p.slots[i] = {id, cnt}
 	}
+	p.selected_slot = clamp(p.selected_slot, 0, HOTBAR_SLOTS - 1)
 	return true
 }
 

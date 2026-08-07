@@ -13,7 +13,7 @@ Player :: struct {
 	on_ground:  bool,
 	in_water:   bool,
 	fly:        bool,
-	selected:   BlockId,
+	selected_slot: int, // which hotbar slot (0..8) is equipped
 	step_accum: f32, // distance walked since the last footstep sound
 	health:      int,
 	hurt_timer:  f32, // brief invulnerability after taking damage
@@ -21,7 +21,6 @@ Player :: struct {
 	regen_timer: f32, // accumulates toward the next regen tick
 	fall_speed:  f32, // tracked while airborne for fall damage
 	respawn:     Vec3,
-	inventory:   [BlockId]int,
 	hunger:      f32, // 0..HUNGER_MAX
 	raw_food:     int, // raw meat dropped by mobs (weak)
 	cooked_food:  int, // cooked in a furnace (restores more hunger)
@@ -43,22 +42,27 @@ Player :: struct {
 	mine_frac:   f32, // 0..1 progress, for the HUD bar
 	place_cd:    f32, // throttle for held-right-button drag-placing
 	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
-	hotbar:      [9]BlockId, // customizable: assign items from the inventory grid (E)
+	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
 }
 
-// Default hotbar loadout; each player gets their own mutable copy (see
-// Player.hotbar) so assigning an item from the inventory grid (E) can
-// actually change what a slot holds.
-DEFAULT_HOTBAR := [9]BlockId {
-	.Grass,
-	.Dirt,
-	.Stone,
-	.Wood,
-	.Sand,
-	.Torch,
-	.Bed,
-	.Chest,
-	.Furnace,
+// The starting loadout, laid out into fixed slots: a ready-to-build hotbar row
+// (slots 0..8) plus some materials in storage (slots 9..).
+STARTER_KIT := [?]ItemStack {
+	{.Grass, 32},
+	{.Dirt, 32},
+	{.Stone, 32},
+	{.Wood, 16},
+	{.Sand, 16},
+	{.Torch, 16},
+	{.Glass, 8},
+	{.Bed, 1},
+	{.Chest, 2},
+	// storage row
+	{.Glowstone, 8},
+	{.Furnace, 2},
+	{.Ore, 6},
+	{.Iron, 8},
+	{.Obsidian, 30}, // enough to build a nether portal (press P)
 }
 
 player_init :: proc(p: ^Player, pos: Vec3) {
@@ -68,28 +72,15 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	p.pitch = -0.15
 	p.on_ground = false
 	p.fly = false
-	p.selected = .Grass
-	p.hotbar = DEFAULT_HOTBAR
+	p.selected_slot = 0
 	p.health = MAX_HEALTH
 	p.hunger = HUNGER_MAX
 	p.oxygen = OXYGEN_MAX
 	p.respawn = pos
 
 	// starting kit so you can build right away; gather more by mining
-	p.inventory[.Grass] = 32
-	p.inventory[.Dirt] = 32
-	p.inventory[.Stone] = 32
-	p.inventory[.Wood] = 16
-	p.inventory[.Sand] = 16
-	p.inventory[.Glowstone] = 8
-	p.inventory[.Furnace] = 2
-	p.inventory[.Ore] = 6
-	p.inventory[.Glass] = 8 // so every hotbar slot starts placeable
-	p.inventory[.Iron] = 8
-	p.inventory[.Obsidian] = 30 // enough to build a nether portal (press P)
-	p.inventory[.Torch] = 16
-	p.inventory[.Bed] = 1
-	p.inventory[.Chest] = 2
+	p.slots = {}
+	for s, i in STARTER_KIT do p.slots[i] = s
 	p.seeds = 8 // enough to start a small farm (R to till/plant)
 
 	// starting tools: a wooden pickaxe and sword (upgrade in the tools menu, X)
@@ -204,8 +195,7 @@ process_input :: proc(p: ^Player, dt: f32) {
 		g_input.fly_toggle = false
 	}
 	if g_input.select > 0 {
-		p.selected = p.hotbar[g_input.select - 1]
-		fmt.println("selected:", block_name(p.selected), "x", p.inventory[p.selected])
+		p.selected_slot = g_input.select - 1 // 1-9 equips that hotbar slot
 		g_input.select = 0
 	}
 
@@ -432,18 +422,20 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		tx := hit.bx + hit.nx
 		ty := hit.by + hit.ny
 		tz := hit.bz + hit.nz
+		sel := inv_selected(p)
 		if ty >= 0 &&
 		   ty < CHUNK_H &&
 		   world_block(w, tx, ty, tz) == .Air &&
 		   !block_hits_player(p, tx, ty, tz) &&
-		   p.inventory[p.selected] > 0 {
-			world_set_block(w, tx, ty, tz, p.selected)
+		   sel != .Air &&
+		   inv_has(p, sel, 1) {
+			world_set_block(w, tx, ty, tz, sel)
 			// Stairs are oriented by the direction the player is looking.
-			if p.selected == .Stair {
+			if sel == .Stair {
 				w.stairs[Ivec3{tx, ty, tz}] = stair_facing_from_dir(dir)
 			}
-			net_send_edit(tx, ty, tz, p.selected, w.dimension)
-			p.inventory[p.selected] -= 1
+			net_send_edit(tx, ty, tz, sel, w.dimension)
+			inv_take(p, sel, 1)
 			audio_play(.Place)
 			p.place_cd = 0.22
 		}
@@ -486,36 +478,36 @@ try_smelt :: proc(w: ^World, p: ^Player) {
 		return
 	}
 	fuel: BlockId
-	if p.inventory[.Wood] >= 1 {
+	if inv_has(p, .Wood, 1) {
 		fuel = .Wood
-	} else if p.inventory[.CoalOre] >= 1 {
+	} else if inv_has(p, .CoalOre, 1) {
 		fuel = .CoalOre
 	} else {
 		toast_show("SMELT: NEED WOOD OR COAL AS FUEL")
 		return
 	}
 	if p.raw_food >= 1 {
-		p.inventory[fuel] -= 1
+		inv_take(p, fuel, 1)
 		p.raw_food -= 1
 		p.cooked_food += 1
 		toast_show(fmt.tprintf("COOKED FOOD (HAVE %d)", p.cooked_food))
 		return
 	}
-	if p.inventory[.Ore] >= 1 {
-		p.inventory[fuel] -= 1
-		p.inventory[.Ore] -= 1
-		p.inventory[.Iron] += 1
-		toast_show(fmt.tprintf("SMELTED IRON (HAVE %d)", p.inventory[.Iron]))
-	} else if p.inventory[.GoldOre] >= 1 {
-		p.inventory[fuel] -= 1
-		p.inventory[.GoldOre] -= 1
-		p.inventory[.Gold] += 1
-		toast_show(fmt.tprintf("SMELTED GOLD (HAVE %d)", p.inventory[.Gold]))
-	} else if p.inventory[.Sand] >= 1 {
-		p.inventory[fuel] -= 1
-		p.inventory[.Sand] -= 1
-		p.inventory[.Glass] += 1
-		toast_show(fmt.tprintf("SMELTED GLASS (HAVE %d)", p.inventory[.Glass]))
+	if inv_has(p, .Ore, 1) {
+		inv_take(p, fuel, 1)
+		inv_take(p, .Ore, 1)
+		inv_add(p, .Iron, 1)
+		toast_show(fmt.tprintf("SMELTED IRON (HAVE %d)", inv_count(p, .Iron)))
+	} else if inv_has(p, .GoldOre, 1) {
+		inv_take(p, fuel, 1)
+		inv_take(p, .GoldOre, 1)
+		inv_add(p, .Gold, 1)
+		toast_show(fmt.tprintf("SMELTED GOLD (HAVE %d)", inv_count(p, .Gold)))
+	} else if inv_has(p, .Sand, 1) {
+		inv_take(p, fuel, 1)
+		inv_take(p, .Sand, 1)
+		inv_add(p, .Glass, 1)
+		toast_show(fmt.tprintf("SMELTED GLASS (HAVE %d)", inv_count(p, .Glass)))
 	} else {
 		toast_show("SMELT: NEED ORE, GOLD ORE, OR SAND")
 	}
@@ -525,17 +517,17 @@ try_smelt :: proc(w: ^World, p: ^Player) {
 //   8 Stone            -> 1 Furnace
 //   4 Sand + 1 Ore     -> 1 Glowstone
 try_craft :: proc(p: ^Player) {
-	if p.inventory[.Stone] >= 8 {
-		p.inventory[.Stone] -= 8
-		p.inventory[.Furnace] += 1
-		toast_show(fmt.tprintf("CRAFTED FURNACE (HAVE %d)", p.inventory[.Furnace]))
+	if inv_has(p, .Stone, 8) {
+		inv_take(p, .Stone, 8)
+		inv_add(p, .Furnace, 1)
+		toast_show(fmt.tprintf("CRAFTED FURNACE (HAVE %d)", inv_count(p, .Furnace)))
 		return
 	}
-	if p.inventory[.Sand] >= 4 && p.inventory[.Ore] >= 1 {
-		p.inventory[.Sand] -= 4
-		p.inventory[.Ore] -= 1
-		p.inventory[.Glowstone] += 1
-		toast_show(fmt.tprintf("CRAFTED GLOWSTONE (HAVE %d)", p.inventory[.Glowstone]))
+	if inv_has(p, .Sand, 4) && inv_has(p, .Ore, 1) {
+		inv_take(p, .Sand, 4)
+		inv_take(p, .Ore, 1)
+		inv_add(p, .Glowstone, 1)
+		toast_show(fmt.tprintf("CRAFTED GLOWSTONE (HAVE %d)", inv_count(p, .Glowstone)))
 		return
 	}
 	if p.wheat >= 3 {

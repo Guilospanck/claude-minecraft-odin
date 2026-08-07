@@ -172,28 +172,28 @@ test_item_pickup :: proc(t: ^testing.T) {
 	}
 	p: Player
 	player_init(&p, Vec3{8.5, 11.0, 8.5})
-	before := p.inventory[.Stone]
+	before := inv_count(&p, .Stone)
 	item_spawn(&w.items, .Stone, Vec3{8.5, 11.2, 8.5})
 	for _ in 0 ..< 90 {
 		items_update(&w, &p, &w.items, 1.0 / 60.0)
 	}
-	testing.expect(t, p.inventory[.Stone] == before + 1, "item picked up into inventory")
+	testing.expect(t, inv_count(&p, .Stone) == before + 1, "item picked up into inventory")
 	testing.expect(t, len(w.items) == 0, "item removed after pickup")
 }
 
 @(test)
 test_craft_glowstone :: proc(t: ^testing.T) {
 	p: Player
-	p.inventory[.Sand] = 5
-	p.inventory[.Ore] = 2
+	inv_add(&p, .Sand, 5)
+	inv_add(&p, .Ore, 2)
 	try_craft(&p)
-	testing.expect(t, p.inventory[.Glowstone] == 1, "crafted one glowstone")
-	testing.expect(t, p.inventory[.Sand] == 1, "consumed 4 sand")
-	testing.expect(t, p.inventory[.Ore] == 1, "consumed 1 ore")
+	testing.expect(t, inv_count(&p, .Glowstone) == 1, "crafted one glowstone")
+	testing.expect(t, inv_count(&p, .Sand) == 1, "consumed 4 sand")
+	testing.expect(t, inv_count(&p, .Ore) == 1, "consumed 1 ore")
 
 	// not enough materials: no change
 	try_craft(&p)
-	testing.expect(t, p.inventory[.Glowstone] == 1, "no craft without materials")
+	testing.expect(t, inv_count(&p, .Glowstone) == 1, "no craft without materials")
 }
 
 @(test)
@@ -203,20 +203,20 @@ test_smelt_iron :: proc(t: ^testing.T) {
 	chunk_set(c, 8, 40, 8, .Furnace)
 	p: Player
 	player_init(&p, Vec3{8.5, 40.0, 8.5}) // standing on the furnace cell
-	p.inventory = {}
-	p.inventory[.Wood] = 2
-	p.inventory[.Ore] = 1
+	p.slots = {}
+	inv_add(&p, .Wood, 2)
+	inv_add(&p, .Ore, 1)
 	try_smelt(&w, &p)
-	testing.expect(t, p.inventory[.Iron] == 1, "ore + wood smelts to iron")
-	testing.expect(t, p.inventory[.Wood] == 1, "one wood fuel consumed")
-	testing.expect(t, p.inventory[.Ore] == 0, "ore consumed")
+	testing.expect(t, inv_count(&p, .Iron) == 1, "ore + wood smelts to iron")
+	testing.expect(t, inv_count(&p, .Wood) == 1, "one wood fuel consumed")
+	testing.expect(t, inv_count(&p, .Ore) == 0, "ore consumed")
 
 	// no furnace nearby -> no smelt
 	w2, _ := make_test_world()
 	defer free_test_world(&w2)
-	p.inventory[.Sand] = 3
+	inv_add(&p, .Sand, 3)
 	try_smelt(&w2, &p)
-	testing.expect(t, p.inventory[.Glass] == 0, "no smelt without a furnace")
+	testing.expect(t, inv_count(&p, .Glass) == 0, "no smelt without a furnace")
 }
 
 @(test)
@@ -244,9 +244,9 @@ test_place_block :: proc(t: ^testing.T) {
 	player_init(&p, Vec3{8.5, 11.0, 8.5})
 	p.yaw = 0 // look toward -z
 	p.pitch = 0
-	p.selected = .Stone
-	p.inventory = {}
-	p.inventory[.Stone] = 5
+	p.slots = {}
+	p.selected_slot = 0
+	p.slots[0] = {.Stone, 5}
 
 	g_input = {}
 	g_input.place_req = true
@@ -254,11 +254,10 @@ test_place_block :: proc(t: ^testing.T) {
 	g_input = {}
 
 	testing.expect(t, world_block(&w, 8, 12, 4) == .Stone, "block placed against the wall")
-	testing.expect(t, p.inventory[.Stone] == 4, "inventory decremented on place")
+	testing.expect(t, inv_count(&p, .Stone) == 4, "inventory decremented on place")
 
 	// empty slot: nothing happens
-	p.selected = .Iron
-	p.inventory[.Iron] = 0
+	p.selected_slot = 1 // an empty hotbar slot
 	g_input = {}
 	g_input.place_req = true
 	handle_break_place(&w, &p, 0.016)
@@ -275,9 +274,9 @@ test_place_stair_records_facing :: proc(t: ^testing.T) {
 	player_init(&p, Vec3{8.5, 11.0, 8.5})
 	p.yaw = 0 // look toward -Z
 	p.pitch = 0
-	p.selected = .Stair
-	p.inventory = {}
-	p.inventory[.Stair] = 3
+	p.slots = {}
+	p.selected_slot = 0
+	p.slots[0] = {.Stair, 3}
 
 	g_input = {}
 	g_input.place_req = true
@@ -301,13 +300,13 @@ test_cooking :: proc(t: ^testing.T) {
 	chunk_set(c, 8, 40, 8, .Furnace)
 	p: Player
 	player_init(&p, Vec3{8.5, 40.0, 8.5})
-	p.inventory = {}
-	p.inventory[.Wood] = 2
+	p.slots = {}
+	inv_add(&p, .Wood, 2)
 	p.raw_food = 3
 	try_smelt(&w, &p) // cook near the furnace
 	testing.expect(t, p.cooked_food == 1, "raw food cooks to cooked")
 	testing.expect(t, p.raw_food == 2, "one raw consumed")
-	testing.expect(t, p.inventory[.Wood] == 1, "one wood fuel consumed")
+	testing.expect(t, inv_count(&p, .Wood) == 1, "one wood fuel consumed")
 }
 
 @(test)
@@ -519,18 +518,18 @@ test_tool_mining_and_wear :: proc(t: ^testing.T) {
 @(test)
 test_tool_craft_upgrades :: proc(t: ^testing.T) {
 	p: Player
-	p.inventory[.Wood] = 2
+	inv_add(&p, .Wood, 2)
 	tool_craft(&p, .Axe)
 	testing.expect(t, p.tool_tier[.Axe] == 1, "wood axe crafted")
 	testing.expect(t, p.tool_dur[.Axe] == TOOL_DUR[1], "full durability")
-	testing.expect(t, p.inventory[.Wood] == 0, "wood consumed")
+	testing.expect(t, inv_count(&p, .Wood) == 0, "wood consumed")
 	// can't afford stone tier
 	tool_craft(&p, .Axe)
 	testing.expect(t, p.tool_tier[.Axe] == 1, "no upgrade without stone")
-	p.inventory[.Stone] = 3
+	inv_add(&p, .Stone, 3)
 	tool_craft(&p, .Axe)
 	testing.expect(t, p.tool_tier[.Axe] == 2, "upgraded to stone axe")
-	testing.expect(t, p.inventory[.Stone] == 0, "stone consumed")
+	testing.expect(t, inv_count(&p, .Stone) == 0, "stone consumed")
 }
 
 @(test)
@@ -538,13 +537,13 @@ test_chest_store_and_take :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)
 	p: Player
-	p.inventory[.Stone] = 30
+	inv_add(&p, .Stone, 30)
 	chest_open(&w, Ivec3{1, 2, 3})
 	chest_deposit(&w, &p, .Stone)
-	testing.expect(t, p.inventory[.Stone] == 0, "stone left the player")
+	testing.expect(t, inv_count(&p, .Stone) == 0, "stone left the player")
 	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 30, "stone is in the chest")
 	chest_withdraw_all(&w, &p)
-	testing.expect(t, p.inventory[.Stone] == 30, "stone returned")
+	testing.expect(t, inv_count(&p, .Stone) == 30, "stone returned")
 	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 0, "chest emptied")
 }
 
@@ -559,7 +558,7 @@ test_chest_break_recovers_contents :: proc(t: ^testing.T) {
 	ch.items[.Iron] = 7
 	w.chests[pos] = ch
 	chest_break(&w, &p, pos)
-	testing.expect(t, p.inventory[.Iron] == 7, "broken chest returns its contents")
+	testing.expect(t, inv_count(&p, .Iron) == 7, "broken chest returns its contents")
 	_, ok := w.chests[pos]
 	testing.expect(t, !ok, "chest entry removed")
 }
@@ -801,7 +800,7 @@ test_armor_reduces_damage_and_wears :: proc(t: ^testing.T) {
 	p2: Player
 	player_init(&p2, Vec3{8.5, 40, 8.5})
 	p2.hurt_timer = 0
-	p2.inventory[.Iron] = 20
+	inv_add(&p2, .Iron, 20)
 	for s in ArmorSlot {
 		armor_craft(&p2, s) // wood
 		armor_craft(&p2, s) // stone
@@ -986,30 +985,34 @@ test_mobs_seek_mate_across_distance_and_breed :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_hotbar_is_per_player_and_assignable :: proc(t: ^testing.T) {
+test_slots_are_per_player_and_assignable :: proc(t: ^testing.T) {
 	p1: Player
 	player_init(&p1, Vec3{8.5, 40, 8.5})
 	p2: Player
 	player_init(&p2, Vec3{8.5, 40, 8.5})
-	testing.expect(t, p1.hotbar == DEFAULT_HOTBAR, "a fresh player starts with the default hotbar")
+	testing.expect(t, p1.slots[0].id == STARTER_KIT[0].id, "a fresh player starts with the starter loadout")
 
-	p1.hotbar[0] = .Iron
-	testing.expect(t, p1.hotbar[0] == .Iron, "a hotbar slot can be reassigned")
-	testing.expect(t, p2.hotbar[0] == DEFAULT_HOTBAR[0], "reassigning one player's hotbar does not affect another's")
+	p1.slots[0] = {.Iron, 1}
+	testing.expect(t, p1.slots[0].id == .Iron, "a slot can be reassigned")
+	testing.expect(t, p2.slots[0].id == STARTER_KIT[0].id, "reassigning one player's slots doesn't affect another's")
 }
 
 @(test)
-test_inventory_grid_cursor_navigation :: proc(t: ^testing.T) {
+test_inventory_add_take_count :: proc(t: ^testing.T) {
 	p: Player
-	p.inventory[.Stone] = 5
-	p.inventory[.Wood] = 3
-	entries := inventory_entries(&p)
-	testing.expect(t, len(entries) == 2, "one grid entry per owned block type")
-	g_inv_cursor = 0
-	g_inv_cursor = clamp(g_inv_cursor + 1, 0, len(entries) - 1)
-	testing.expect(t, g_inv_cursor == 1, "cursor moves to the next entry")
-	g_inv_cursor = clamp(g_inv_cursor + 5, 0, len(entries) - 1)
-	testing.expect(t, g_inv_cursor == len(entries) - 1, "cursor clamps at the last entry")
+	p.slots = {}
+	inv_add(&p, .Stone, 5)
+	inv_add(&p, .Stone, 3)
+	testing.expect(t, inv_count(&p, .Stone) == 8, "adds accumulate")
+	testing.expect(t, p.slots[0].id == .Stone && p.slots[0].count == 8, "same type stacks into one slot")
+	testing.expect(t, inv_take(&p, .Stone, 6) && inv_count(&p, .Stone) == 2, "take removes items")
+	testing.expect(t, !inv_take(&p, .Stone, 100), "over-take fails")
+	testing.expect(t, inv_count(&p, .Stone) == 2, "a failed take leaves the stack intact")
+
+	// overflow past STACK_MAX spills into a second slot
+	p.slots = {}
+	inv_add(&p, .Dirt, STACK_MAX + 10)
+	testing.expect(t, inv_count(&p, .Dirt) == STACK_MAX + 10, "a big add spans multiple slots")
 }
 
 @(test)
@@ -1363,13 +1366,12 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	p: Player
 	player_init(&p, Vec3{10, 20, 30})
 	p.health = 7
-	p.selected = .Wood
+	p.selected_slot = 3
 	p.raw_food = 4
 	p.wheat = 9
-	p.inventory[.Stone] = 42
-	p.inventory[.Gold] = 3
-	p.hotbar[2] = .Stone
-	p.hotbar[5] = .Wood
+	p.slots = {}
+	p.slots[0] = {.Stone, 42}
+	p.slots[10] = {.Gold, 3}
 	p.tool_tier[.Pickaxe] = 3
 	p.tool_dur[.Pickaxe] = 120
 	p.armor_tier[.Helmet] = 2
@@ -1382,58 +1384,54 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	ok := load_player(&q)
 	testing.expect(t, ok, "the saved player loads back")
 	testing.expect(t, q.health == 7, "health restored")
-	testing.expect(t, q.selected == .Wood, "equipped block restored")
+	testing.expect(t, q.selected_slot == 3, "equipped hotbar slot restored")
 	testing.expect(t, q.raw_food == 4 && q.wheat == 9, "food counters restored")
-	testing.expect(t, q.inventory[.Stone] == 42 && q.inventory[.Gold] == 3, "inventory counts restored")
-	testing.expect(t, q.hotbar[2] == .Stone && q.hotbar[5] == .Wood, "hotbar layout restored")
+	testing.expect(t, q.slots[0] == ItemStack{.Stone, 42} && q.slots[10] == ItemStack{.Gold, 3}, "slot stacks restored in place")
 	testing.expect(t, q.tool_tier[.Pickaxe] == 3 && q.tool_dur[.Pickaxe] == 120, "tools restored")
 	testing.expect(t, q.armor_tier[.Helmet] == 2, "armor restored")
 	testing.expect(t, math.abs(q.pos.x - 10) < 0.01 && math.abs(q.pos.z - 30) < 0.01, "position restored")
 }
 
 @(test)
-test_inventory_drag_drop :: proc(t: ^testing.T) {
+test_inventory_slot_clicks :: proc(t: ^testing.T) {
 	p: Player
-	player_init(&p, Vec3{0, 0, 0})
-	p.hotbar = {}
-	p.hotbar[0] = .Stone
-	p.hotbar[1] = .Wood
+	p.slots = {}
+	g_cursor_stack = {}
+	p.slots[9] = {.Stone, 20}
 
-	// grid item -> empty slot binds it (and equips)
-	inv_apply_drop(&p, -1, 3, .Glass)
-	testing.expect(t, p.hotbar[3] == .Glass, "grid item drops onto the hotbar slot")
-	testing.expect(t, p.selected == .Glass, "dropping also equips the item")
+	// left-click a full slot with an empty cursor: pick up the whole stack
+	inv_click_slot(&p, 9)
+	testing.expect(t, g_cursor_stack == ItemStack{.Stone, 20} && p.slots[9].id == .Air, "left-click picks up the stack")
 
-	// slot -> slot swaps
-	inv_apply_drop(&p, 0, 1, .Stone)
-	testing.expect(t, p.hotbar[0] == .Wood && p.hotbar[1] == .Stone, "two hotbar slots swap")
+	// left-click an empty slot: drop the whole cursor stack
+	inv_click_slot(&p, 0)
+	testing.expect(t, p.slots[0] == ItemStack{.Stone, 20} && g_cursor_stack.id == .Air, "left-click drops onto an empty slot")
 
-	// hotbar item dropped into empty space clears the slot
-	inv_apply_drop(&p, 1, -1, .Stone)
-	testing.expect(t, p.hotbar[1] == .Air, "dragging a hotbar item off clears the slot")
+	// right-click a slot with an empty cursor: split off half (ceil)
+	inv_rclick_slot(&p, 0)
+	testing.expect(t, g_cursor_stack == ItemStack{.Stone, 10} && p.slots[0].count == 10, "right-click splits half")
 
-	// a grid item dropped into empty space does nothing
-	before := p.hotbar
-	inv_apply_drop(&p, -1, -1, .Dirt)
-	testing.expect(t, p.hotbar == before, "dropping a grid item into empty space is a no-op")
+	// right-click a same-type slot with a held stack: drop one
+	inv_rclick_slot(&p, 0)
+	testing.expect(t, p.slots[0].count == 11 && g_cursor_stack.count == 9, "right-click drops one onto the same type")
+
+	// left-click a different-type slot: swap
+	p.slots[1] = {.Wood, 5}
+	inv_click_slot(&p, 1) // cursor has Stone x9
+	testing.expect(t, p.slots[1] == ItemStack{.Stone, 9} && g_cursor_stack == ItemStack{.Wood, 5}, "left-click swaps different types")
+	g_cursor_stack = {}
 }
 
 @(test)
 test_inventory_slot_hit_tests :: proc(t: ^testing.T) {
 	aspect := f32(16.0) / 9.0
-	sw, sz, gap, gx0, top, hy := inv_grid_geom(aspect)
-
-	// The centre of grid slot i must hit-test back to i.
-	for i in ([?]int{0, 5, 10, 17}) {
-		cx := gx0 + f32(i % INV_COLS) * (sw + gap) + sw * 0.5
-		cy := top - f32(i / INV_COLS) * (sz + gap) - sz * 0.5
-		testing.expect(t, inv_hit_grid(aspect, cx, cy, 20) == i, "a slot's centre hits that slot")
+	// The centre of each slot must hit-test back to that slot.
+	for slot in ([?]int{0, 4, 8, 9, 20, INV_SLOTS - 1}) {
+		x0, y0, sw, sz := inv_slot_rect(aspect, slot)
+		testing.expect(t, inv_hit_slot(aspect, x0 + sw * 0.5, y0 + sz * 0.5) == slot, "a slot's centre hits that slot")
 	}
 	// A point out in empty space hits nothing.
-	testing.expect(t, inv_hit_grid(aspect, 0.95, 0.95, 20) == -1, "empty space hits no grid slot")
-	// The centre of hotbar slot 3 hits slot 3.
-	hx := gx0 + 3 * (sw + gap) + sw * 0.5
-	testing.expect(t, inv_hit_hotbar(aspect, hx, hy + sz * 0.5) == 3, "a hotbar slot's centre hits that slot")
+	testing.expect(t, inv_hit_slot(aspect, 0.95, 0.95) == -1, "empty space hits no slot")
 }
 
 @(test)

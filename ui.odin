@@ -70,7 +70,7 @@ ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
 		msg: string
 		col := Vec4{0.6, 0.7, 0.8, 1}
 		if ok {
-			afford := p.inventory[block] >= count
+			afford := inv_has(p, block, count)
 			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
 			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
 		} else {
@@ -102,7 +102,7 @@ ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
 		msg: string
 		col := Vec4{0.6, 0.7, 0.8, 1}
 		if ok {
-			afford := p.inventory[block] >= count
+			afford := inv_has(p, block, count)
 			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
 			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
 		} else {
@@ -299,8 +299,8 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 
 	for i in 0 ..< 9 {
 		bx := x0 + f32(i) * (w + gap)
-		b := p.hotbar[i]
-		ui_slot(bx, y0, w, sz, true, b, Vec3{}, p.inventory[b], cw, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
+		s := p.slots[i]
+		ui_slot(bx, y0, w, sz, true, s.id, Vec3{}, s.count, cw, ch_h, i == p.selected_slot, fmt.tprintf("%d", i + 1))
 	}
 }
 
@@ -347,11 +347,11 @@ ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	text_draw("YOUR BLOCKS", rx, ry, ch_w * 1.1, ch_h * 1.1, Vec4{0.9, 0.82, 0.6, 1})
 	ry -= ch_h * 2.0
 	for b in BlockId {
-		if b == .Air || p.inventory[b] <= 0 do continue
+		if b == .Air || inv_count(p, b) <= 0 do continue
 		col := block_color(b)
 		hud_quad(rx, ry - ch_h, rx + ch_w * 1.1, ry, Vec4{col.r, col.g, col.b, 1})
 		text_draw(
-			fmt.tprintf("%s X%d", block_name(b), p.inventory[b]),
+			fmt.tprintf("%s X%d", block_name(b), inv_count(p, b)),
 			rx + ch_w * 2.0,
 			ry,
 			ch_w,
@@ -371,98 +371,83 @@ ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	)
 }
 
-// One entry in the inventory grid: either a real block (textured icon) or one
-// of the handful of non-block counters (food/seeds/wheat) shown as a flat
-// colour swatch since they have no world block/texture of their own.
-InvEntry :: struct {
-	use_tex: bool,
-	blk:     BlockId,
-	flat:    Vec3,
-	count:   int,
-}
-
-// Gather owned entries for the Items-tab grid: every held block, then the
-// non-block counters. Shared between the renderer and main.odin's input
-// handling (which needs the same list to resolve what the cursor is on).
-inventory_entries :: proc(p: ^Player) -> [dynamic]InvEntry {
-	entries := make([dynamic]InvEntry, 0, 40, context.temp_allocator)
-	for b in BlockId {
-		if b == .Air do continue
-		if p.inventory[b] <= 0 do continue
-		append(&entries, InvEntry{use_tex = true, blk = b, count = p.inventory[b]})
-	}
-	if p.raw_food > 0 do append(&entries, InvEntry{flat = {0.72, 0.28, 0.22}, count = p.raw_food})
-	if p.cooked_food > 0 do append(&entries, InvEntry{flat = {0.55, 0.35, 0.2}, count = p.cooked_food})
-	if p.bread > 0 do append(&entries, InvEntry{flat = {0.78, 0.58, 0.30}, count = p.bread})
-	if p.wheat > 0 do append(&entries, InvEntry{flat = {0.82, 0.70, 0.28}, count = p.wheat})
-	if p.seeds > 0 do append(&entries, InvEntry{flat = {0.55, 0.62, 0.30}, count = p.seeds})
-	return entries
-}
-
-// Cursor into the Items-tab grid (an index into inventory_entries' result),
-// navigated with the arrow keys / mouse and used to assign an item to a hotbar
-// slot. It is the "selected" item, drawn with a strong highlight.
-g_inv_cursor: int
-
-// Drag-and-drop state for the Items tab. While active, g_drag_block rides the
-// cursor; g_drag_from is the hotbar slot it was lifted from, or -1 if it was
-// picked out of the inventory grid.
-g_drag_active: bool
-g_drag_block: BlockId
-g_drag_from: int
-
 INV_COLS :: 9
 
-// The Items-tab grid geometry, shared by the renderer and the mouse hit-tests
-// so a click always lands on the slot it looks like it should. Returns the slot
-// width/height, the gap, the grid's left edge, the grid's top edge, and the y
-// of the mirrored hotbar row.
-inv_grid_geom :: proc(aspect: f32) -> (sw, sz, gap, gx0, content_top, hotbar_y: f32) {
+// The stack currently held on the cursor while rearranging the inventory (empty
+// when id == .Air). Left/right clicks move items between this and the slots.
+g_cursor_stack: ItemStack
+
+// Screen rectangle (NDC) of inventory slot `slot`: 0..8 are the hotbar row
+// along the bottom, 9..35 are the 3x9 storage grid above it. Shared by the
+// renderer and the mouse hit-test so a click always lands where it looks.
+inv_slot_rect :: proc(aspect: f32, slot: int) -> (x0, y0, sw, sz: f32) {
 	sz = 0.095
 	sw = sz / aspect
-	gap = 0.010
-	grid_w := f32(INV_COLS) * (sw + gap) - gap
-	gx0 = -grid_w * 0.5
-	content_top = 0.66
-	hotbar_y = -0.60
+	gap := f32(0.010)
+	row_pitch := sz + 0.05 // extra vertical room so count badges don't collide
+	gx0 := -(f32(INV_COLS) * (sw + gap) - gap) * 0.5
+	storage_top := f32(0.62)
+	if slot >= HOTBAR_SLOTS {
+		s := slot - HOTBAR_SLOTS // 0..26
+		x0 = gx0 + f32(s % 9) * (sw + gap)
+		y0 = storage_top - f32(s / 9) * row_pitch - sz
+	} else {
+		x0 = gx0 + f32(slot) * (sw + gap)
+		y0 = storage_top - 3 * row_pitch - 0.05 - sz // hotbar row, below the 3 storage rows
+	}
 	return
 }
 
-// Which grid slot (0..n-1) the NDC point is over, or -1.
-inv_hit_grid :: proc(aspect, nx, ny: f32, n: int) -> int {
-	sw, sz, gap, gx0, top, _ := inv_grid_geom(aspect)
-	for i in 0 ..< n {
-		x0 := gx0 + f32(i % INV_COLS) * (sw + gap)
-		y0 := top - f32(i / INV_COLS) * (sz + gap) - sz
-		if nx >= x0 && nx <= x0 + sw && ny >= y0 && ny <= y0 + sz do return i
+// Which inventory slot (0..INV_SLOTS-1) the NDC point is over, or -1.
+inv_hit_slot :: proc(aspect, nx, ny: f32) -> int {
+	for slot in 0 ..< INV_SLOTS {
+		x0, y0, sw, sz := inv_slot_rect(aspect, slot)
+		if nx >= x0 && nx <= x0 + sw && ny >= y0 && ny <= y0 + sz do return slot
 	}
 	return -1
 }
 
-// Which mirrored-hotbar slot (0..8) the NDC point is over, or -1.
-inv_hit_hotbar :: proc(aspect, nx, ny: f32) -> int {
-	sw, sz, gap, gx0, _, hy := inv_grid_geom(aspect)
-	for i in 0 ..< 9 {
-		x0 := gx0 + f32(i) * (sw + gap)
-		if nx >= x0 && nx <= x0 + sw && ny >= hy && ny <= hy + sz do return i
+// Left-click on a slot with the cursor stack: pick up a whole stack, drop it,
+// merge onto a same-type stack (remainder stays on the cursor), or swap.
+inv_click_slot :: proc(p: ^Player, slot: int) {
+	held := &g_cursor_stack
+	dst := &p.slots[slot]
+	if held.id == .Air {
+		g_cursor_stack = dst^ // pick up whole stack
+		dst^ = {}
+	} else if dst.id == .Air {
+		dst^ = held^ // drop into empty slot
+		held^ = {}
+	} else if dst.id == held.id {
+		space := STACK_MAX - dst.count // merge same type
+		move := min(space, held.count)
+		dst.count += move
+		held.count -= move
+		if held.count == 0 do held^ = {}
+	} else {
+		dst^, held^ = held^, dst^ // swap different types
 	}
-	return -1
 }
 
-// Resolve a drag-drop onto the hotbar. `from` is the source hotbar slot, or -1
-// if the item was picked out of the inventory grid; `target` is the hotbar slot
-// dropped onto, or -1 for empty space. Grid->slot binds, slot->slot swaps, and
-// a hotbar item dropped into empty space is cleared.
-inv_apply_drop :: proc(p: ^Player, from, target: int, block: BlockId) {
-	if target >= 0 {
-		if from < 0 {
-			p.hotbar[target] = block // grid item -> slot
-		} else {
-			p.hotbar[target], p.hotbar[from] = p.hotbar[from], p.hotbar[target] // swap
-		}
-		p.selected = p.hotbar[target]
-	} else if from >= 0 {
-		p.hotbar[from] = .Air // dropped off a hotbar slot: clear it
+// Right-click on a slot: with nothing held, pick up half a stack; with a stack
+// held, drop a single item onto an empty or same-type slot.
+inv_rclick_slot :: proc(p: ^Player, slot: int) {
+	held := &g_cursor_stack
+	dst := &p.slots[slot]
+	if held.id == .Air {
+		if dst.id == .Air do return
+		half := (dst.count + 1) / 2 // ceil half onto the cursor
+		g_cursor_stack = {dst.id, half}
+		dst.count -= half
+		if dst.count == 0 do dst^ = {}
+	} else if dst.id == .Air {
+		dst^ = {held.id, 1} // place one
+		held.count -= 1
+		if held.count == 0 do held^ = {}
+	} else if dst.id == held.id && dst.count < STACK_MAX {
+		dst.count += 1 // add one to the same type
+		held.count -= 1
+		if held.count == 0 do held^ = {}
 	}
 }
 
@@ -498,72 +483,84 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
 	ui_draw_tabs(fbw, fbh, ch_w * 1.05, ch_h * 1.05, 0.82)
 
-	sw, sz, gap, gx0, content_top, hy0 := inv_grid_geom(aspect)
 	mnx, mny := cursor_ndc() // OS cursor released while a menu is open
+	_, hotbar_y, sw, sz := inv_slot_rect(aspect, 0)
 
 	switch g_inv_tab {
 	case .Items:
-		entries := inventory_entries(p)
-		if len(entries) > 0 {
-			g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
+		hov := inv_hit_slot(aspect, mnx, mny)
+		// Storage grid (slots 9..35) then the hotbar row (0..8), all real slots.
+		for slot in 0 ..< INV_SLOTS {
+			x0, y0, _, _ := inv_slot_rect(aspect, slot)
+			s := p.slots[slot]
+			// highlight the equipped hotbar slot; ring the hovered slot in cyan
+			if slot == hov {
+				hud_quad(x0 - 0.011, y0 - 0.011, x0 + sw + 0.011, y0 + sz + 0.011, Vec4{0.3, 0.85, 0.95, 1})
+			}
+			num := slot < HOTBAR_SLOTS ? fmt.tprintf("%d", slot + 1) : ""
+			ui_slot(x0, y0, sw, sz, true, s.id, Vec3{}, s.count, ch_w, ch_h, slot == p.selected_slot, num)
 		}
-		for e, i in entries {
-			x0 := gx0 + f32(i % INV_COLS) * (sw + gap)
-			y0 := content_top - f32(i / INV_COLS) * (sz + gap) - sz
-			ui_slot(x0, y0, sw, sz, e.use_tex, e.blk, e.flat, e.count, ch_w, ch_h, i == g_inv_cursor, "")
-		}
-		if len(entries) == 0 {
-			text_center("(EMPTY)", content_top - sz * 0.5, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
-		}
+		text_draw("STORAGE", gx0inv(aspect), 0.66, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.75, 0.82, 1})
+		text_draw(
+			"HOTBAR",
+			gx0inv(aspect),
+			hotbar_y + sz + 0.02,
+			ch_w * 0.8,
+			ch_h * 0.8,
+			Vec4{0.7, 0.75, 0.82, 1},
+		)
+		// Food/seeds are non-block consumables: shown as a small read-out.
 		text_center(
-			"RAW=RED  COOKED=BROWN  BREAD=TAN  WHEAT=GOLD  SEEDS=GREEN",
-			0.10,
-			ch_w * 0.62,
-			ch_h * 0.62,
+			fmt.tprintf(
+				"RAW %d   COOKED %d   BREAD %d   WHEAT %d   SEEDS %d",
+				p.raw_food,
+				p.cooked_food,
+				p.bread,
+				p.wheat,
+				p.seeds,
+			),
+			hotbar_y - sz - 0.02,
+			ch_w * 0.6,
+			ch_h * 0.6,
 			Vec4{0.65, 0.7, 0.76, 1},
 		)
 	case .Craft:
-		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, content_top)
+		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.66)
 	case .Tools:
-		ui_draw_tools_tab(p, ch_w, ch_h, content_top)
-	}
-
-	// Hotbar mirrored at a fixed position on every tab, same as Minecraft.
-	text_draw("HOTBAR", gx0, hy0 + sz + 0.03, ch_w * 0.85, ch_h * 0.85, Vec4{0.7, 0.75, 0.82, 1})
-	hov_hb := inv_hit_hotbar(aspect, mnx, mny)
-	for i in 0 ..< 9 {
-		x0 := gx0 + f32(i) * (sw + gap)
-		b := p.hotbar[i]
-		if g_drag_active && g_drag_from == i do b = .Air // lifted out, drawn on the cursor
-		// A cyan hover ring shows which slot a drag/click would drop onto.
-		if i == hov_hb && g_inv_tab == .Items {
-			hud_quad(x0 - 0.011, hy0 - 0.011, x0 + sw + 0.011, hy0 + sz + 0.011, Vec4{0.3, 0.85, 0.95, 1})
-		}
-		ui_slot(x0, hy0, sw, sz, true, b, Vec3{}, p.inventory[b], ch_w, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
+		ui_draw_tools_tab(p, ch_w, ch_h, 0.66)
 	}
 
 	action_hint: string
 	switch g_inv_tab {
 	case .Items:
-		action_hint = "DRAG AN ITEM ONTO A HOTBAR SLOT   (ARROWS + 1-9 ALSO WORK)"
+		action_hint = "LEFT-CLICK PICK UP/DROP/SWAP   RIGHT-CLICK SPLIT/DROP ONE   1-9 EQUIP"
 	case .Craft:
 		action_hint = "CLICK OR 1-9 TO CRAFT"
 	case .Tools:
 		action_hint = "1-4 TOOLS   5-8 ARMOR"
 	}
-	text_center(action_hint, hy0 - sz - 0.06, ch_w * 0.68, ch_h * 0.68, Vec4{0.75, 0.82, 0.92, 1})
+	text_center(action_hint, hotbar_y - sz - 0.10, ch_w * 0.62, ch_h * 0.62, Vec4{0.75, 0.82, 0.92, 1})
 	text_center(
 		"E ITEMS   T CRAFT   X TOOLS   R USE/FARM/SLEEP/CHEST   G EAT",
-		hy0 - sz - 0.14,
-		ch_w * 0.6,
-		ch_h * 0.6,
+		hotbar_y - sz - 0.16,
+		ch_w * 0.55,
+		ch_h * 0.55,
 		Vec4{0.65, 0.7, 0.76, 1},
 	)
 
-	// The dragged item rides the cursor, drawn last so it's on top of everything.
-	if g_drag_active && g_inv_tab == .Items {
-		half := sw * 0.62
-		hud_quad(mnx - half, mny - half, mnx + half, mny + half, Vec4{0.10, 0.10, 0.13, 0.7})
-		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_drag_block)
+	// The held stack rides the cursor, drawn last so it's on top of everything.
+	if g_cursor_stack.id != .Air && g_inv_tab == .Items {
+		hud_quad(mnx - sw * 0.55, mny - sz * 0.55, mnx + sw * 0.55, mny + sz * 0.55, Vec4{0.10, 0.10, 0.13, 0.7})
+		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_cursor_stack.id)
+		if g_cursor_stack.count > 1 {
+			s := fmt.tprintf("%d", g_cursor_stack.count)
+			text_draw(s, mnx + sw * 0.5 - text_width(s, ch_w * 0.8), mny - sz * 0.5, ch_w * 0.8, ch_h * 0.8, Vec4{1, 1, 1, 1})
+		}
 	}
+}
+
+// Left edge of the 9-wide inventory grid (for row labels).
+gx0inv :: proc(aspect: f32) -> f32 {
+	x0, _, _, _ := inv_slot_rect(aspect, HOTBAR_SLOTS) // first storage slot
+	return x0
 }

@@ -29,7 +29,7 @@ RECIPES := [?]Recipe {
 
 recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {
 	for i in 0 ..< r.n_in {
-		if p.inventory[r.inputs[i].block] < r.inputs[i].count do return false
+		if !inv_has(p, r.inputs[i].block, r.inputs[i].count) do return false
 	}
 	if r.needs_furnace && !near_furnace(w, p) do return false
 	return true
@@ -47,9 +47,9 @@ recipe_try :: proc(p: ^Player, w: ^World, idx: int) {
 		return
 	}
 	for i in 0 ..< r.n_in {
-		p.inventory[r.inputs[i].block] -= r.inputs[i].count
+		inv_take(p, r.inputs[i].block, r.inputs[i].count)
 	}
-	p.inventory[r.out] += r.out_count
+	inv_add(p, r.out, r.out_count)
 	toast_show(fmt.tprintf("MADE %d %s", r.out_count, block_name(r.out)))
 	audio_play(.Place, 0.5)
 }

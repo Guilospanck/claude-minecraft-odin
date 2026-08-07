@@ -63,9 +63,9 @@ items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 				col = Vec3{0.72, 0.28, 0.22}
 				toast_show(fmt.tprintf("+1 RAW FOOD (%d)", p.raw_food))
 			} else {
-				p.inventory[it.block] += 1
+				inv_add(p, it.block, 1)
 				col = block_color(it.block)
-				toast_show(fmt.tprintf("+1 %s (%d)", block_name(it.block), p.inventory[it.block]), 1.2)
+				toast_show(fmt.tprintf("+1 %s (%d)", block_name(it.block), inv_count(p, it.block)), 1.2)
 			}
 			audio_play(.Pickup, 0.5)
 			particle_spawn_eat(&w.particles, it.pos + Vec3{0, 0.2, 0}, col)

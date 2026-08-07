@@ -59,11 +59,11 @@ armor_craft :: proc(p: ^Player, s: ArmorSlot) {
 		toast_show(fmt.tprintf("%s IS ALREADY DIAMOND (MAX)", armor_name(s)))
 		return
 	}
-	if p.inventory[block] < count {
+	if !inv_has(p, block, count) {
 		toast_show(fmt.tprintf("NEED %d %s FOR %s %s", count, block_name(block), TIER_NAMES[next], armor_name(s)))
 		return
 	}
-	p.inventory[block] -= count
+	inv_take(p, block, count)
 	p.armor_tier[s] = next
 	p.armor_dur[s] = ARMOR_DUR[next]
 	toast_show(fmt.tprintf("EQUIPPED %s %s", TIER_NAMES[next], armor_name(s)))

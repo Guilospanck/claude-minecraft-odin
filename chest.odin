@@ -37,13 +37,13 @@ chest_open :: proc(w: ^World, pos: Ivec3) {
 chest_deposit :: proc(w: ^World, p: ^Player, b: BlockId) {
 	if net_is_client() do return
 	if b == .Air do return
-	n := p.inventory[b]
+	n := inv_count(p, b)
 	if n <= 0 do return
 	ch, ok := w.chests[g_chest_pos]
 	if !ok do return
 	ch.items[b] += n
 	w.chests[g_chest_pos] = ch
-	p.inventory[b] = 0
+	inv_remove_all(p, b)
 	toast_show(fmt.tprintf("STORED %d %s", n, block_name(b)))
 	audio_play(.Place, 0.4)
 }
@@ -56,7 +56,7 @@ chest_withdraw_all :: proc(w: ^World, p: ^Player) {
 	moved := 0
 	for b in BlockId {
 		moved += ch.items[b]
-		p.inventory[b] += ch.items[b]
+		inv_add(p, b, ch.items[b])
 		ch.items[b] = 0
 	}
 	w.chests[g_chest_pos] = ch
@@ -69,7 +69,7 @@ chest_withdraw_all :: proc(w: ^World, p: ^Player) {
 // Empty a broken chest straight into the player's inventory, then forget it.
 chest_break :: proc(w: ^World, p: ^Player, pos: Ivec3) {
 	if ch, ok := w.chests[pos]; ok {
-		for b in BlockId do p.inventory[b] += ch.items[b]
+		for b in BlockId do inv_add(p, b, ch.items[b])
 		delete_key(&w.chests, pos)
 	}
 	if g_show_chest && g_chest_pos == pos do g_show_chest = false
