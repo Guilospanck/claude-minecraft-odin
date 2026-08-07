@@ -346,6 +346,38 @@ test_portal_collapses_when_frame_broken :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_step_or_block_hops_steps_but_not_fences :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// ground plane; the walker's feet sit at y=40, heading +x toward x=3
+	for lx in 0 ..< CHUNK_W do for lz in 0 ..< CHUNK_D do chunk_set(c, lx, 39, lz, .Stone)
+	pos := Vec3{2.5, 40, 2.5}
+	fwd := Vec3{1, 0, 0}
+	hw := f32(0.3)
+	h := f32(1.8)
+
+	// nothing ahead -> keep walking
+	hop, blocked := step_or_block(&w, pos, fwd, hw, h)
+	testing.expect(t, !blocked && hop == 0, "clear path: no hop, not blocked")
+
+	// a one-block step (solid at feet level, air above) -> hop it
+	chunk_set(c, 3, 40, 2, .Stone)
+	hop, blocked = step_or_block(&w, pos, fwd, hw, h)
+	testing.expect(t, !blocked && hop > 0, "a one-block step is hopped")
+
+	// a fence in the way -> blocked, never hopped (even though it's 1 tall)
+	chunk_set(c, 3, 40, 2, .Fence)
+	hop, blocked = step_or_block(&w, pos, fwd, hw, h)
+	testing.expect(t, blocked && hop == 0, "a fence is impassable, not hopped")
+
+	// a two-block wall -> blocked
+	chunk_set(c, 3, 40, 2, .Stone)
+	chunk_set(c, 3, 41, 2, .Stone)
+	hop, blocked = step_or_block(&w, pos, fwd, hw, h)
+	testing.expect(t, blocked && hop == 0, "a two-block wall is blocked")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }

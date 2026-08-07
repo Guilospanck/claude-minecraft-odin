@@ -62,6 +62,12 @@ mob_is_aquatic :: proc(k: MobKind) -> bool {
 	)
 }
 
+// Passive fliers (bees, and any future flying animal) drift freely in 3D and
+// are never bound to the ground, so they cross any terrain and obstacle.
+mob_flies :: proc(k: MobKind) -> bool {
+	return k == .Bee
+}
+
 // Why a mob's health last reached zero — tags the generic despawn-on-death
 // path so the right particle colour / toast can be shown (see
 // mob_death_feedback). Player-attack kills go through mob_hit instead, which
@@ -380,6 +386,29 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 		return
 	}
 
+	// Passive fliers (bees) hover and wander in 3D: they seek a comfortable
+	// height above the ground, bob gently, and lift over anything solid in the
+	// way, so they can go anywhere rather than being stuck against a step.
+	if mob_flies(m.kind) {
+		ai_wander(m, dt, 0.85)
+		m.walk_phase += dt * 6.0
+		fwd := Vec3{math.sin(m.yaw), 0, -math.cos(m.yaw)}
+		gy, _ := surface_y(w, int(math.floor(m.pos.x)), int(math.floor(m.pos.z)))
+		target := f32(gy) + 3.0
+		vy := clamp((target - m.pos.y) * 0.6, -1.5, 1.5) + math.sin(m.walk_phase) * 0.5
+		step := m.moving ? dims.speed : 0
+		new_pos := m.pos + Vec3{fwd.x * step, vy, fwd.z * step} * dt
+		if !body_collides(w, new_pos, dims.hw, dims.h) {
+			m.pos = new_pos
+		} else {
+			m.ai_timer = 0 // bumped something: pick a new heading, but still bob up
+			vpos := m.pos + Vec3{0, abs(vy), 0} * dt
+			if !body_collides(w, vpos, dims.hw, dims.h) do m.pos = vpos
+		}
+		m.on_ground = false
+		return
+	}
+
 	// Aquatic mobs swim under their own free-flight-style movement, but every
 	// step is validated: it only commits if the destination (feet AND head)
 	// is still water, so they can never surface onto land or into open air.
@@ -433,24 +462,18 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 			// frame forever — bouncing in place instead of giving up and
 			// picking a new direction.
 			if m.on_ground {
-				ahead := m.pos + Vec3{fwd.x * (dims.hw + 0.25), 0, fwd.z * (dims.hw + 0.25)}
-				if body_collides(w, ahead, dims.hw, 0.5) {
-					if !body_collides(w, ahead + Vec3{0, 1, 0}, dims.hw, dims.h) {
-						m.vel.y = 7.5 // a real 1-block step: hop it
-					} else {
-						// Too tall to climb: stop before it turns into an
-						// endless bounce, and turn away. Mate-seeking has no
-						// obstacle avoidance of its own (it always recomputes
-						// the same heading toward its target), so without this
-						// deflection it would walk into the same wall forever;
-						// wandering already re-randomizes on its own via
-						// ai_timer, so the turn is harmless there too.
-						m.moving = false
-						m.ai_timer = 0
-						m.vel.x = 0
-						m.vel.z = 0
-						m.yaw += rng_range(1.5, 3.0) * (rng_f32() < 0.5 ? 1 : -1)
-					}
+				hop, blocked := step_or_block(w, m.pos, fwd, dims.hw, dims.h)
+				if blocked {
+					// a fence/wall or a 2+ tall obstruction: stop and turn away
+					// instead of bouncing at it forever (mate-seeking has no
+					// avoidance of its own; wandering re-randomizes anyway).
+					m.moving = false
+					m.ai_timer = 0
+					m.vel.x = 0
+					m.vel.z = 0
+					m.yaw += rng_range(1.5, 3.0) * (rng_f32() < 0.5 ? 1 : -1)
+				} else if hop > 0 {
+					m.vel.y = hop // a real 1-block step: hop it
 				}
 			}
 		}

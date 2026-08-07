@@ -158,6 +158,19 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 			v.vel.x = fwd.x * VILLAGER_SPEED
 			v.vel.z = fwd.z * VILLAGER_SPEED
 			v.walk_phase += dt * 8.0
+			// hop a one-block step (but not fences/walls); turn away if blocked
+			if v.on_ground {
+				hop, blocked := step_or_block(w, v.pos, fwd, VILLAGER_HW, VILLAGER_H)
+				if blocked {
+					v.moving = false
+					v.ai_timer = 0
+					v.vel.x = 0
+					v.vel.z = 0
+					v.yaw += rng_range(1.5, 3.0) * (rng_f32() < 0.5 ? 1 : -1)
+				} else if hop > 0 {
+					v.vel.y = hop
+				}
+			}
 		}
 	} else {
 		v.vel.x = 0

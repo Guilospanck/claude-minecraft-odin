@@ -80,6 +80,22 @@ body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32, gravity:
 	return grounded
 }
 
+// Walking-critter step logic, shared by mobs and villagers. Given feet `pos`,
+// heading `fwd` and body dims, look at the block directly ahead:
+//   - clear         -> (0, false): keep walking.
+//   - a 1-block step with clear space above -> (hop_vy, false): hop it.
+//   - a fence/gate/wall, or anything 2+ tall -> (0, true): blocked, turn away.
+// Fences/walls/gates are deliberately un-hoppable (real fences are taller than
+// a mob can jump) even though their collision box is only one block here.
+step_or_block :: proc(w: ^World, pos, fwd: Vec3, hw, h: f32) -> (hop_vy: f32, blocked: bool) {
+	ahead := pos + Vec3{fwd.x * (hw + 0.25), 0, fwd.z * (hw + 0.25)}
+	if !body_collides(w, ahead, hw, 0.5) do return 0, false // nothing in the way
+	fcell := world_block(w, int(math.floor(ahead.x)), int(math.floor(pos.y)), int(math.floor(ahead.z)))
+	if fcell == .Fence || fcell == .FenceGate || fcell == .Wall do return 0, true // can't vault a fence
+	if !body_collides(w, ahead + Vec3{0, 1, 0}, hw, h) do return 8.0, false // one-block step: hop
+	return 0, true // too tall to climb
+}
+
 // Is the player's feet or chest in a water block?
 player_in_water :: proc(w: ^World, pos: Vec3) -> bool {
 	x := int(math.floor(pos.x))
