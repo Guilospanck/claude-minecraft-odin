@@ -5,24 +5,33 @@ import "core:math"
 PORTAL_COST :: 14 // obsidian to build one
 PORTAL_TRIGGER :: f32(1.0) // seconds standing in a portal before travel
 
-// Build a 4x5 portal (obsidian frame + 2x3 portal interior) in the X-Y plane
-// with its lower-left frame block at (ox, oy, oz).
+// Build a 4x4 portal (obsidian posts + top, 2x3 portal interior) in the X-Y
+// plane with its lower-left frame block at (ox, oy, oz). The portal interior
+// reaches the ground (there is NO obsidian sill) so you walk straight through
+// it at feet level — the old sill was a full block, which the half-block
+// auto-step (MAX_STEP) couldn't climb, so you had to jump to enter. A hidden
+// obsidian floor under the interior keeps you from falling through.
 build_portal :: proc(w: ^World, ox, oy, oz: int) {
-	for dy in 0 ..< 5 {
+	for dy in 0 ..< 4 {
 		for dx in 0 ..< 4 {
-			edge := dx == 0 || dx == 3 || dy == 0 || dy == 4
+			edge := dx == 0 || dx == 3 || dy == 3
 			world_set_block(w, ox + dx, oy + dy, oz, edge ? .Obsidian : .Portal)
 		}
 	}
+	world_set_block(w, ox + 1, oy - 1, oz, .Obsidian) // floor under the interior
+	world_set_block(w, ox + 2, oy - 1, oz, .Obsidian)
 }
 
+// True when any part of the player's body (feet to head) is inside a portal
+// block, so simply walking into the purple triggers travel — no need to line up
+// on one exact cell.
 player_in_portal :: proc(w: ^World, pos: Vec3) -> bool {
 	x := int(math.floor(pos.x))
 	z := int(math.floor(pos.z))
-	return(
-		world_block(w, x, int(math.floor(pos.y + 0.9)), z) == .Portal ||
-		world_block(w, x, int(math.floor(pos.y + 0.2)), z) == .Portal \
-	)
+	for dy in ([?]f32{0.2, 0.9, 1.6}) {
+		if world_block(w, x, int(math.floor(pos.y + dy)), z) == .Portal do return true
+	}
+	return false
 }
 
 player_in_lava :: proc(w: ^World, pos: Vec3) -> bool {

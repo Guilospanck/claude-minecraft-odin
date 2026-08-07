@@ -289,6 +289,26 @@ test_place_stair_records_facing :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_portal_is_walk_through :: proc(t: ^testing.T) {
+	nw: World
+	world_init(&nw, 777, .Nether)
+	dest := portal_destination(&nw, 8, 8) // builds a return portal + landing
+	oy := int(dest.y)
+
+	// The interior reaches feet level (no full-block sill to jump onto), with a
+	// solid floor under it, so you walk straight through.
+	testing.expect(t, world_block(&nw, 9, oy, 8) == .Portal, "portal interior reaches ground level")
+	testing.expect(t, block_is_solid(world_block(&nw, 9, oy - 1, 8)), "solid floor under the portal interior")
+
+	// Standing in the portal at feet level is detected...
+	p: Player
+	p.pos = Vec3{9.5, f32(oy), 8.5}
+	testing.expect(t, player_in_portal(&nw, p.pos), "walking in at feet level triggers travel")
+	// ...but the arrival landing is clear of it (so you don't instantly bounce).
+	testing.expect(t, !player_in_portal(&nw, dest), "the arrival spot is not inside the portal")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }

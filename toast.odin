@@ -54,12 +54,18 @@ toast_draw :: proc(fbw, fbh: int) {
 	elapsed := g_toast_max - g_toast_life
 	a := min(clamp(elapsed / 0.22, 0, 1), clamp(g_toast_life / 0.4, 0, 1))
 	w := text_width(text, ch_w)
-	padx := 0.022 / aspect
-	pady: f32 = 0.018
+	padx: f32 = 0.028
+	pady: f32 = 0.02
 	rise := (1 - clamp(elapsed / 0.22, 0, 1)) * 0.03 // small upward slide-in
 	y := TOAST_Y - rise
-	// a soft rounded-looking plate: an outer border quad under an inner fill
-	hud_quad(-w * 0.5 - padx - 0.004, y - pady - 0.004, w * 0.5 + padx + 0.004, y + ch_h + pady + 0.004, Vec4{0.9, 0.78, 0.4, 0.5 * a})
-	hud_quad(-w * 0.5 - padx, y - pady, w * 0.5 + padx, y + ch_h + pady, Vec4{0.06, 0.06, 0.09, 0.82 * a})
+	cy := y + ch_h * 0.5 // vertical centre of the text
+	hw := w * 0.5 + padx
+	hh := ch_h * 0.5 + pady
+	bx := 0.006 / aspect // border thickness, aspect-corrected so it's even all round
+	by: f32 = 0.006
+	// A framed plate: a solid gold border under a near-opaque dark fill, so the
+	// message reads clearly against any background.
+	hud_quad(-hw - bx, cy - hh - by, hw + bx, cy + hh + by, Vec4{0.85, 0.70, 0.30, 0.9 * a})
+	hud_quad(-hw, cy - hh, hw, cy + hh, Vec4{0.07, 0.07, 0.10, 0.92 * a})
 	text_center(text, y, ch_w, ch_h, Vec4{1, 1, 1, a})
 }

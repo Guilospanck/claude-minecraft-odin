@@ -396,6 +396,10 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 			if !can_mine(p, broken) {
 				p.mine_progress = 0 // e.g. obsidian needs an iron pickaxe
 				p.mine_frac = 0
+				// Tell the player why nothing's happening (the toast dedupes, so
+				// holding the button doesn't spam it).
+				kind, tier := block_min_tier(broken)
+				toast_show(fmt.tprintf("NEED %s %s TO MINE %s", TIER_NAMES[tier], tool_name(kind), block_name(broken)))
 			} else {
 				p.mine_progress += dt
 				need := mining_time(p, broken)
