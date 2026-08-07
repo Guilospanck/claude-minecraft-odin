@@ -844,6 +844,59 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(0)
 }
 
+@(private = "file")
+held_box :: proc(proj, base: Mat4, off, size, col: Vec3) {
+	m := base * linalg.matrix4_translate_f32(off) * linalg.matrix4_scale_f32(size)
+	ent_set_mat4(e_mvp, proj * m)
+	gl.Uniform3f(e_color, col.r, col.g, col.b)
+	gl.DrawArrays(gl.TRIANGLES, 0, 36)
+}
+
+// First-person view model in the bottom-right: the block you're holding (a
+// small cube) or, when mining or empty-handed, your pickaxe. It swings when you
+// use it (driven by p.swing_timer). Rendered in camera-local space (proj with
+// no view) over a freshly-cleared depth buffer so it always sits on top of the
+// world and self-occludes correctly.
+held_item_render :: proc(p: ^Player, proj: Mat4, ambient: f32) {
+	sel := inv_selected(p)
+	show_tool := p.mine_active || sel == .Air
+
+	sw := f32(0)
+	if p.swing_timer > 0 do sw = math.sin((1 - p.swing_timer / SWING_DURATION) * math.PI)
+
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_ambient, clamp(ambient + 0.4, 0, 1))
+	gl.BindVertexArray(e_vao)
+	gl.Clear(gl.DEPTH_BUFFER_BIT)
+
+	base :=
+		linalg.matrix4_translate_f32(Vec3{0.52, -0.52 - sw * 0.14, -1.0}) *
+		linalg.matrix4_rotate_f32(-0.35 + sw * 1.1, Vec3{1, 0, 0}) * // swing pitches it down
+		linalg.matrix4_rotate_f32(0.5, Vec3{0, 1, 0})
+
+	if show_tool {
+		tier := p.tool_tier[ToolKind.Pickaxe]
+		head: Vec3
+		switch tier {
+		case 1:
+			head = {0.52, 0.38, 0.22}
+		case 2:
+			head = {0.55, 0.55, 0.58}
+		case 3:
+			head = {0.82, 0.82, 0.86}
+		case 4:
+			head = {0.45, 0.86, 0.86}
+		case:
+			head = {0.72, 0.58, 0.46}
+		}
+		held_box(proj, base, Vec3{0, -0.05, 0}, Vec3{0.07, 0.5, 0.07}, Vec3{0.42, 0.28, 0.16}) // handle
+		if tier > 0 do held_box(proj, base, Vec3{0, 0.24, 0}, Vec3{0.3, 0.1, 0.09}, head) // head
+	} else {
+		held_box(proj, base, Vec3{0, 0, 0}, Vec3{0.34, 0.34, 0.34}, block_color(sel))
+	}
+	gl.BindVertexArray(0)
+}
+
 // Rotation whose local +Z points along `fwd`.
 @(private = "file")
 mat_from_forward :: proc(fwd: Vec3) -> Mat4 {

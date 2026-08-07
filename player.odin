@@ -37,6 +37,7 @@ Player :: struct {
 	mine_frac:   f32, // 0..1 progress, for the HUD bar
 	place_cd:    f32, // throttle for held-right-button drag-placing
 	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
+	swing_timer: f32, // counts down from SWING_DURATION; drives the held-item swing
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
 }
 
@@ -241,6 +242,7 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 		p.eat_timer -= dt
 		if p.eat_timer < 0 do p.eat_timer = 0
 	}
+	if p.swing_timer > 0 do p.swing_timer -= dt
 
 	// Hunger drains slowly over a play session (~20min idle, ~7min walking
 	// nonstop), faster while walking. Previously drained fully in under a
@@ -375,6 +377,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 			mob_hit(w, mob_idx, dir, 3 + sword_bonus(p))
 			tool_wear(p, .Sword)
 			mine_reset(p)
+			p.swing_timer = SWING_DURATION
 		}
 	}
 
@@ -404,6 +407,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 				p.mine_progress += dt
 				need := mining_time(p, broken)
 				p.mine_frac = clamp(p.mine_progress / max(need, 0.0001), 0, 1)
+				if p.swing_timer <= 0 do p.swing_timer = SWING_DURATION // keep swinging while mining
 				if p.mine_progress >= need {
 					break_block(w, p, hit.bx, hit.by, hit.bz, broken)
 					mine_reset(p)
@@ -440,6 +444,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 			}
 			net_send_edit(tx, ty, tz, sel, w.dimension)
 			inv_take(p, sel, 1)
+			p.swing_timer = SWING_DURATION
 			audio_play(.Place)
 			p.place_cd = 0.22
 		}

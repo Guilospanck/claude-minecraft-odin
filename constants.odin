@@ -44,6 +44,7 @@ MAX_HEALTH :: 20
 HUNGER_MAX :: 20
 OXYGEN_MAX :: f32(12.0) // seconds of air before drowning starts
 EAT_ANIM_DURATION :: f32(0.5) // seconds the eat camera-bob / crumbs animation lasts
+SWING_DURATION :: f32(0.28) // seconds the first-person held-item swing lasts
 FALL_SAFE :: f32(14.0) // fall speed below this does no damage
 
 // ---- render ----

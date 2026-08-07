@@ -1130,18 +1130,20 @@ main :: proc() {
 				g_input.portal = false
 			}
 
-			// dimension travel
-			if player_in_portal(cur, player.pos) {
+			// dimension travel. Cooldown is checked first so the just-arrived
+			// player never accumulates travel time (and bounces straight back)
+			// even if their landing overlaps the destination portal.
+			if player.portal_timer < 0 {
+				player.portal_timer += dt // grace period after arriving
+			} else if player_in_portal(cur, player.pos) {
 				player.portal_timer += dt
 				if player.portal_timer > PORTAL_TRIGGER {
-					player.portal_timer = -1.5 // cooldown before it can trigger again
+					player.portal_timer = -PORTAL_COOLDOWN
 					cur = cur == &world ? &nether : &world
 					player.pos = portal_destination(cur, int(player.pos.x), int(player.pos.z))
 					player.vel = Vec3{0, 0, 0}
 					toast_show(fmt.tprintf("ENTERED THE %v", cur.dimension))
 				}
-			} else if player.portal_timer < 0 {
-				player.portal_timer += dt
 			} else {
 				player.portal_timer = 0
 			}

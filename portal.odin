@@ -3,7 +3,8 @@ package main
 import "core:math"
 
 PORTAL_COST :: 14 // obsidian to build one
-PORTAL_TRIGGER :: f32(1.0) // seconds standing in a portal before travel
+PORTAL_TRIGGER :: f32(0.25) // seconds in a portal before travel (snappy)
+PORTAL_COOLDOWN :: f32(1.2) // grace after arriving so you don't bounce straight back
 
 // Build a 4x4 portal (obsidian posts + top, 2x3 portal interior) in the X-Y
 // plane with its lower-left frame block at (ox, oy, oz). The portal interior

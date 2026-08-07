@@ -299,6 +299,8 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 
 	draw_outline(w, p, vp)
 
+	held_item_render(p, proj, ambient) // first-person view model, over the world
+
 	if underwater {
 		hud_quad(-1, -1, 1, 1, Vec4{0.12, 0.30, 0.55, 0.38}) // submerged tint
 	}
