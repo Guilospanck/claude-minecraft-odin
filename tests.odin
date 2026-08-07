@@ -903,14 +903,20 @@ test_weather_toggles_overworld_only :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_biome_precip_follows_biome :: proc(t: ^testing.T) {
-	testing.expect(t, biome_precip(.Snow) == .Snow, "cold biomes get snow")
-	testing.expect(t, biome_precip(.Taiga) == .Snow, "taiga gets snow")
-	testing.expect(t, biome_precip(.Mountains) == .Snow, "peaks get snow")
-	testing.expect(t, biome_precip(.Desert) == .None, "deserts stay dry")
-	testing.expect(t, biome_precip(.Badlands) == .None, "badlands stay dry")
-	testing.expect(t, biome_precip(.Forest) == .Rain, "temperate biomes get rain")
-	testing.expect(t, biome_precip(.Jungle) == .Rain, "jungle gets rain")
+test_biome_precip_follows_biome_and_level :: proc(t: ^testing.T) {
+	// temperate country escalates drizzle -> rain -> thunder with the storm level
+	testing.expect(t, biome_precip(.Forest, 1) == .Drizzle, "a light spell drizzles")
+	testing.expect(t, biome_precip(.Forest, 2) == .Rain, "a normal spell rains")
+	testing.expect(t, biome_precip(.Forest, 3) == .Thunder, "a heavy spell thunders")
+	testing.expect(t, biome_precip(.Jungle, 2) == .Rain, "jungle gets rain")
+	// cold biomes snow, and hail in a heavy storm
+	testing.expect(t, biome_precip(.Snow, 2) == .Snow, "cold biomes get snow")
+	testing.expect(t, biome_precip(.Taiga, 1) == .Snow, "taiga gets snow")
+	testing.expect(t, biome_precip(.Mountains, 3) == .Hail, "a heavy cold storm hails")
+	// deserts stay calm in light spells but kick up sandstorms in strong ones
+	testing.expect(t, biome_precip(.Desert, 1) == .None, "deserts stay dry in a light spell")
+	testing.expect(t, biome_precip(.Desert, 3) == .Sandstorm, "a strong spell is a desert sandstorm")
+	testing.expect(t, biome_precip(.Badlands, 2) == .Sandstorm, "badlands get sandstorms too")
 }
 
 @(test)

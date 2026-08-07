@@ -931,10 +931,16 @@ main :: proc() {
 		g_show_inventory = true
 		g_inv_tab = .Tools
 	}
-	// Debug: MC_RAIN forces rain on immediately (skips the weather timer).
-	if os.get_env("MC_RAIN", context.temp_allocator) != "" {
+	// Debug: MC_RAIN forces a storm on immediately (skips the weather timer).
+	// MC_RAIN=1|2|3 sets the storm level (light/normal/heavy) so any weather
+	// type can be screenshotted; MC_RAIN=1 with no biome hint defaults to 2.
+	if s := os.get_env("MC_RAIN", context.temp_allocator); s != "" {
 		world.raining = true
+		world.storm_level = 2
+		if lvl, ok := strconv.parse_int(s); ok && lvl >= 1 && lvl <= 3 do world.storm_level = lvl
 		world.weather_timer = 1000
+		world.wind_x = 4 // a steady sideways drift so the sheeting is visible
+		if os.get_env("MC_FLASH", context.temp_allocator) != "" do world.flash = 1.0 // demo lightning
 	}
 	// Debug: MC_BABY spawns an adult + baby cow pair ahead for comparison.
 	if os.get_env("MC_BABY", context.temp_allocator) != "" {
@@ -1290,10 +1296,12 @@ main :: proc() {
 			precip := Precip.None
 			if cur.raining {
 				_, pbiome, _ := world_height_and_biome(cur.seed, int(player.pos.x), int(player.pos.z))
-				precip = biome_precip(pbiome)
+				precip = biome_precip(pbiome, cur.storm_level)
 				precip_particles_spawn(&cur.particles, player.pos, precip, cur.wind_x, cur.wind_z)
+					weather_maybe_lightning(cur, precip, dt)
 			}
-			audio_set_rain(precip == .Rain) // snow falls silently; deserts stay dry
+			cur.active_precip = precip // render reads this for fog tint + flashes
+			audio_set_rain(precip_is_wet(precip)) // snow/hail/sand fall quietly
 			particles_update(cur, &cur.particles, dt)
 
 			// background music by context: nether > combat > calm

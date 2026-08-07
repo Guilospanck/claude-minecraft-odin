@@ -23,7 +23,10 @@ World :: struct {
 	villagers:   [dynamic]Villager,
 	villages:    [dynamic]Village,
 	time_of_day: f32, // [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
-	raining:      bool, // overworld-only rain (see weather_tick)
+	raining:      bool, // overworld-only: a weather event is active (see weather_tick)
+	storm_level:  int, // 1=light, 2=normal, 3=heavy — set when a spell begins
+	active_precip: Precip, // what's actually falling on the player this frame (for render)
+	flash:        f32, // lightning flash intensity (thunderstorms), decays to 0
 	weather_timer: f32, // seconds until the current weather state re-rolls
 	wind_x, wind_z: f32, // slowly drifting wind vector; blows precipitation sideways
 }

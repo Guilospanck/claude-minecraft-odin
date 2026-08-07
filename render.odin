@@ -226,15 +226,33 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		fog_start = 1.5
 		fog_end = 22.0
 		ambient *= 0.72
-	} else if w.raining {
-		fog_col = fog_col * 0.55 + Vec3{0.5, 0.54, 0.58} * 0.45 // grey overcast haze
-		// Both ends must shrink together — scaling only fog_end left
-		// fog_start (still the full render-distance value) past the new
-		// fog_end, inverting the fog shader's (vDist-start)/(end-start)
-		// ratio so nearly everything on screen clamped to full fog colour.
-		fog_start *= 0.55
-		fog_end *= 0.55 // shorter visibility in the rain
-		ambient *= 0.8
+	} else if w.raining && w.active_precip != .None {
+		// Tint + thicken the fog to match the kind of storm. Both ends must
+		// shrink together — scaling only fog_end would leave fog_start past the
+		// new fog_end and invert the shader's (vDist-start)/(end-start) ratio.
+		#partial switch w.active_precip {
+		case .Sandstorm:
+			fog_col = fog_col * 0.3 + Vec3{0.80, 0.66, 0.40} * 0.7 // tan sand haze
+			fog_start *= 0.35
+			fog_end *= 0.35 // can barely see through it
+			ambient *= 0.85
+		case .Snow, .Hail:
+			fog_col = fog_col * 0.5 + Vec3{0.82, 0.85, 0.9} * 0.5 // bright whiteout
+			fog_start *= 0.6
+			fog_end *= 0.6
+			ambient *= 0.92
+		case:
+			// rain family (drizzle/rain/thunder): grey overcast haze
+			fog_col = fog_col * 0.55 + Vec3{0.5, 0.54, 0.58} * 0.45
+			fog_start *= 0.55
+			fog_end *= 0.55
+			ambient *= 0.8
+		}
+		// a lightning flash briefly floods the scene with bright light
+		if w.flash > 0 {
+			fog_col = fog_col + Vec3{0.5, 0.5, 0.55} * w.flash
+			ambient = min(1, ambient + w.flash * 0.6)
+		}
 	}
 
 	gl.ClearColor(fog_col.r, fog_col.g, fog_col.b, 1.0)
