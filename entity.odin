@@ -22,6 +22,13 @@ MobKind :: enum {
 	SnowLeopard, // biome specialist: snow/taiga
 	Camel, // biome specialist: desert/badlands
 	Llama, // biome specialist: savanna/mountains
+	Wolf, // forest/taiga pack animal
+	Cat, // plains/meadow (village companion)
+	Fox, // snow/forest, russet with a bushy tail
+	Goat, // mountains, horned climber
+	Deer, // forest browser, antlered
+	Bee, // meadow/plains flower-visitor
+	Turtle, // aquatic/coastal, hard-shelled
 }
 
 MOB_KIND_COUNT :: len(MobKind)
@@ -50,7 +57,8 @@ mob_is_aquatic :: proc(k: MobKind) -> bool {
 		k == .Squid ||
 		k == .Dolphin ||
 		k == .Pufferfish ||
-		k == .Jellyfish \
+		k == .Jellyfish ||
+		k == .Turtle \
 	)
 }
 
@@ -138,6 +146,13 @@ MOB_DIMS := [MobKind]MobDims {
 	.SnowLeopard = {0.4, 0.85, 2.9}, // lithe and quick
 	.Camel       = {0.55, 2.1, 1.7}, // tall and slow
 	.Llama       = {0.45, 1.6, 2.2},
+	.Wolf        = {0.35, 0.85, 3.0}, // quick pack animal
+	.Cat         = {0.22, 0.55, 3.2}, // small and nimble
+	.Fox         = {0.28, 0.6, 3.1},
+	.Goat        = {0.4, 1.1, 2.4}, // sturdy climber
+	.Deer        = {0.4, 1.5, 2.8}, // tall browser
+	.Bee         = {0.2, 0.4, 2.4}, // tiny, bobbing
+	.Turtle      = {0.35, 0.4, 1.4}, // slow, hard-shelled
 }
 
 MOB_DESPAWN_DIST :: f32(60)
@@ -552,23 +567,30 @@ passive_kind_for_biome :: proc(b: Biome) -> MobKind {
 	r := rng_int(100)
 	#partial switch b {
 	case .Plains, .Savanna:
-		if r < 25 do return .Cow
-		if r < 45 do return .Sheep
-		if r < 65 do return .Horse // open grassland grazer
-		if r < 85 do return .Chicken
-		if r < 95 do return .Pig
+		if r < 20 do return .Cow
+		if r < 38 do return .Sheep
+		if r < 55 do return .Horse // open grassland grazer
+		if r < 70 do return .Chicken
+		if r < 80 do return .Pig
+		if r < 88 do return .Cat // strays out on the plains
+		if r < 95 do return .Bee
 		return .Rabbit
 	case .Forest, .Taiga, .Jungle:
-		if r < 35 do return .Rabbit
-		if r < 60 do return .Pig
-		if r < 80 do return .Chicken
-		if r < 92 do return .Sheep
+		if r < 26 do return .Rabbit
+		if r < 44 do return .Pig
+		if r < 58 do return .Chicken
+		if r < 70 do return .Deer // forest browser
+		if r < 82 do return .Wolf // woodland pack animal
+		if r < 90 do return .Sheep
+		if r < 96 do return .Fox
 		return .Cow
 	case .Meadow:
-		if r < 35 do return .Sheep
-		if r < 60 do return .Horse
-		if r < 80 do return .Cow
-		if r < 92 do return .Rabbit
+		if r < 28 do return .Sheep
+		if r < 48 do return .Horse
+		if r < 64 do return .Cow
+		if r < 78 do return .Bee // meadow flower-visitor
+		if r < 88 do return .Deer
+		if r < 95 do return .Rabbit
 		return .Chicken
 	case .Swamp:
 		if r < 45 do return .Pig
@@ -586,12 +608,16 @@ passive_kind_for_biome :: proc(b: Biome) -> MobKind {
 // the biome has a specialist.
 biome_specialist :: proc(b: Biome) -> (MobKind, bool) {
 	#partial switch b {
-	case .Snow, .Taiga:
+	case .Snow:
+		return rng_f32() < 0.5 ? .Fox : .SnowLeopard, true // arctic fox or leopard
+	case .Taiga:
 		return .SnowLeopard, true
 	case .Desert, .Badlands:
 		return .Camel, true
-	case .Savanna, .Mountains:
+	case .Savanna:
 		return .Llama, true
+	case .Mountains:
+		return rng_f32() < 0.5 ? .Goat : .Llama, true // sure-footed climbers
 	}
 	return .Pig, false
 }
@@ -667,7 +693,7 @@ water_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 
 	// Weighted so the common little fish/squid still dominate, with the newer
 	// dolphin/pufferfish/jellyfish showing up as rarer finds.
-	kinds := [?]MobKind{.Fish, .Fish, .Squid, .Squid, .Dolphin, .Pufferfish, .Jellyfish}
+	kinds := [?]MobKind{.Fish, .Fish, .Squid, .Squid, .Dolphin, .Pufferfish, .Jellyfish, .Turtle}
 	kind := kinds[rng_int(len(kinds))]
 	append(
 		mobs,
@@ -840,6 +866,20 @@ mob_kind_label :: proc(k: MobKind) -> string {
 		return "CAMEL"
 	case .Llama:
 		return "LLAMA"
+	case .Wolf:
+		return "WOLF"
+	case .Cat:
+		return "CAT"
+	case .Fox:
+		return "FOX"
+	case .Goat:
+		return "GOAT"
+	case .Deer:
+		return "DEER"
+	case .Bee:
+		return "BEE"
+	case .Turtle:
+		return "TURTLE"
 	}
 	return ""
 }

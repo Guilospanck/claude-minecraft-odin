@@ -537,6 +537,124 @@ remotes_render_frame :: proc(vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(0)
 }
 
+@(private = "file")
+WOLFC :: Vec3{0.62, 0.62, 0.66}
+@(private = "file")
+WOLFDK :: Vec3{0.40, 0.40, 0.44}
+@(private = "file")
+CATC :: Vec3{0.85, 0.55, 0.25}
+@(private = "file")
+FOXC :: Vec3{0.82, 0.42, 0.16}
+@(private = "file")
+FOXDK :: Vec3{0.50, 0.28, 0.12}
+@(private = "file")
+GOATC :: Vec3{0.86, 0.84, 0.80}
+@(private = "file")
+GOATDK :: Vec3{0.40, 0.36, 0.30}
+@(private = "file")
+DEERC :: Vec3{0.60, 0.42, 0.24}
+@(private = "file")
+DEERDK :: Vec3{0.45, 0.32, 0.20}
+@(private = "file")
+BEEY :: Vec3{0.92, 0.78, 0.20}
+@(private = "file")
+BEEDK :: Vec3{0.20, 0.16, 0.10}
+@(private = "file")
+TURTLESH :: Vec3{0.32, 0.50, 0.28}
+@(private = "file")
+TURTLEBODY :: Vec3{0.50, 0.60, 0.35}
+@(private = "file")
+TURTLESK :: Vec3{0.55, 0.62, 0.40}
+
+@(private = "file")
+wolf_parts := [8]MobPart {
+	{{0, 0.62, 0}, {0.34, 0.42, 0.78}, WOLFC, 0}, // body
+	{{0, 0.72, -0.5}, {0.32, 0.34, 0.34}, WOLFC, 0}, // head
+	{{0, 0.66, -0.7}, {0.18, 0.18, 0.18}, WOLFDK, 0}, // snout
+	{{0, 0.74, 0.46}, {0.12, 0.12, 0.34}, WOLFC, 0}, // tail
+	{{-0.16, 0.24, -0.28}, {0.14, 0.48, 0.14}, WOLFC, 1},
+	{{0.16, 0.24, -0.28}, {0.14, 0.48, 0.14}, WOLFC, -1},
+	{{-0.16, 0.24, 0.28}, {0.14, 0.48, 0.14}, WOLFC, -1},
+	{{0.16, 0.24, 0.28}, {0.14, 0.48, 0.14}, WOLFC, 1},
+}
+
+@(private = "file")
+cat_parts := [9]MobPart {
+	{{0, 0.34, 0}, {0.2, 0.24, 0.5}, CATC, 0}, // body
+	{{0, 0.42, -0.32}, {0.22, 0.22, 0.22}, CATC, 0}, // head
+	{{-0.08, 0.56, -0.32}, {0.06, 0.1, 0.05}, CATC, 0}, // ear L
+	{{0.08, 0.56, -0.32}, {0.06, 0.1, 0.05}, CATC, 0}, // ear R
+	{{0, 0.5, 0.26}, {0.07, 0.3, 0.07}, CATC, 0}, // upright tail
+	{{-0.09, 0.12, -0.16}, {0.08, 0.26, 0.08}, CATC, 1},
+	{{0.09, 0.12, -0.16}, {0.08, 0.26, 0.08}, CATC, -1},
+	{{-0.09, 0.12, 0.16}, {0.08, 0.26, 0.08}, CATC, -1},
+	{{0.09, 0.12, 0.16}, {0.08, 0.26, 0.08}, CATC, 1},
+}
+
+@(private = "file")
+fox_parts := [10]MobPart {
+	{{0, 0.4, 0}, {0.24, 0.28, 0.62}, FOXC, 0}, // body
+	{{0, 0.5, -0.42}, {0.24, 0.24, 0.26}, FOXC, 0}, // head
+	{{0, 0.44, -0.58}, {0.12, 0.12, 0.14}, WHITE, 0}, // white snout
+	{{-0.09, 0.66, -0.42}, {0.07, 0.12, 0.05}, FOXDK, 0}, // ear L
+	{{0.09, 0.66, -0.42}, {0.07, 0.12, 0.05}, FOXDK, 0}, // ear R
+	{{0, 0.4, 0.46}, {0.16, 0.16, 0.36}, WHITE, 0}, // bushy white-tipped tail
+	{{-0.12, 0.14, -0.2}, {0.1, 0.3, 0.1}, FOXDK, 1},
+	{{0.12, 0.14, -0.2}, {0.1, 0.3, 0.1}, FOXDK, -1},
+	{{-0.12, 0.14, 0.2}, {0.1, 0.3, 0.1}, FOXDK, -1},
+	{{0.12, 0.14, 0.2}, {0.1, 0.3, 0.1}, FOXDK, 1},
+}
+
+@(private = "file")
+goat_parts := [9]MobPart {
+	{{0, 0.72, 0}, {0.4, 0.5, 0.85}, GOATC, 0}, // body
+	{{0, 0.9, -0.55}, {0.32, 0.34, 0.34}, GOATC, 0}, // head
+	{{-0.1, 1.16, -0.55}, {0.06, 0.18, 0.06}, GOATDK, 0}, // horn L
+	{{0.1, 1.16, -0.55}, {0.06, 0.18, 0.06}, GOATDK, 0}, // horn R
+	{{0, 0.78, -0.72}, {0.1, 0.14, 0.08}, WHITE, 0}, // beard
+	{{-0.24, 0.3, -0.3}, {0.16, 0.6, 0.16}, GOATC, 1},
+	{{0.24, 0.3, -0.3}, {0.16, 0.6, 0.16}, GOATC, -1},
+	{{-0.24, 0.3, 0.3}, {0.16, 0.6, 0.16}, GOATC, -1},
+	{{0.24, 0.3, 0.3}, {0.16, 0.6, 0.16}, GOATC, 1},
+}
+
+@(private = "file")
+deer_parts := [10]MobPart {
+	{{0, 0.95, 0}, {0.4, 0.5, 0.95}, DEERC, 0}, // body
+	{{0, 1.25, -0.55}, {0.24, 0.4, 0.28}, DEERC, 0}, // neck
+	{{0, 1.5, -0.7}, {0.22, 0.22, 0.3}, DEERC, 0}, // head
+	{{-0.1, 1.72, -0.72}, {0.05, 0.24, 0.05}, DEERDK, 0}, // antler L
+	{{0.1, 1.72, -0.72}, {0.05, 0.24, 0.05}, DEERDK, 0}, // antler R
+	{{0, 0.95, 0.5}, {0.08, 0.16, 0.1}, WHITE, 0}, // tail
+	{{-0.22, 0.36, -0.35}, {0.14, 0.72, 0.14}, DEERC, 1},
+	{{0.22, 0.36, -0.35}, {0.14, 0.72, 0.14}, DEERC, -1},
+	{{-0.22, 0.36, 0.35}, {0.14, 0.72, 0.14}, DEERC, -1},
+	{{0.22, 0.36, 0.35}, {0.14, 0.72, 0.14}, DEERC, 1},
+}
+
+// Bee has no legs (it hovers); its wings use the fin-style z-sway (swing -1).
+@(private = "file")
+bee_parts := [6]MobPart {
+	{{0, 0.4, 0.08}, {0.24, 0.24, 0.28}, BEEY, 0}, // abdomen
+	{{0, 0.4, -0.1}, {0.22, 0.22, 0.16}, BEEDK, 0}, // thorax stripe
+	{{0, 0.42, -0.28}, {0.18, 0.18, 0.16}, BEEDK, 0}, // head
+	{{-0.16, 0.52, 0}, {0.02, 0.02, 0.2}, WHITE, -1}, // wing L
+	{{0.16, 0.52, 0}, {0.02, 0.02, 0.2}, WHITE, -1}, // wing R
+	{{0, 0.4, 0.26}, {0.05, 0.05, 0.08}, BEEDK, 0}, // stinger
+}
+
+// Turtle is aquatic: flippers use the fin sway (swing -1), not a leg stride.
+@(private = "file")
+turtle_parts := [7]MobPart {
+	{{0, 0.28, 0}, {0.6, 0.3, 0.7}, TURTLESH, 0}, // shell
+	{{0, 0.18, -0.02}, {0.5, 0.14, 0.6}, TURTLEBODY, 0}, // underbelly
+	{{0, 0.26, -0.44}, {0.2, 0.18, 0.2}, TURTLESK, 0}, // head
+	{{-0.34, 0.16, -0.24}, {0.16, 0.1, 0.22}, TURTLESK, -1}, // front flipper L
+	{{0.34, 0.16, -0.24}, {0.16, 0.1, 0.22}, TURTLESK, -1}, // front flipper R
+	{{-0.34, 0.16, 0.24}, {0.16, 0.1, 0.22}, TURTLESK, -1}, // rear flipper L
+	{{0.34, 0.16, 0.24}, {0.16, 0.1, 0.22}, TURTLESK, -1}, // rear flipper R
+}
+
 mob_parts :: proc(k: MobKind) -> []MobPart {
 	switch k {
 	case .Pig:
@@ -575,6 +693,20 @@ mob_parts :: proc(k: MobKind) -> []MobPart {
 		return camel_parts[:]
 	case .Llama:
 		return llama_parts[:]
+	case .Wolf:
+		return wolf_parts[:]
+	case .Cat:
+		return cat_parts[:]
+	case .Fox:
+		return fox_parts[:]
+	case .Goat:
+		return goat_parts[:]
+	case .Deer:
+		return deer_parts[:]
+	case .Bee:
+		return bee_parts[:]
+	case .Turtle:
+		return turtle_parts[:]
 	}
 	return pig_parts[:]
 }
@@ -754,6 +886,20 @@ face_def_for_mob :: proc(k: MobKind) -> MobFace {
 		return {{0, 1.78, -0.86}, {0.26, 0.28, 0.42}, .Animal, {}, {}, EYE_DARK}
 	case .Llama:
 		return {{0, 1.72, -0.44}, {0.26, 0.26, 0.34}, .Animal, {}, {}, EYE_DARK}
+	case .Wolf:
+		return {{0, 0.72, -0.5}, {0.32, 0.34, 0.34}, .Animal, {}, {}, EYE_DARK}
+	case .Cat:
+		return {{0, 0.42, -0.32}, {0.22, 0.22, 0.22}, .Animal, {}, {}, EYE_DARK}
+	case .Fox:
+		return {{0, 0.5, -0.42}, {0.24, 0.24, 0.26}, .Animal, {}, {}, EYE_DARK}
+	case .Goat:
+		return {{0, 0.9, -0.55}, {0.32, 0.34, 0.34}, .Animal, {}, {}, EYE_DARK}
+	case .Deer:
+		return {{0, 1.5, -0.7}, {0.22, 0.22, 0.3}, .Animal, {}, {}, EYE_DARK}
+	case .Bee:
+		return {{0, 0.42, -0.28}, {0.18, 0.18, 0.16}, .Animal, {}, {}, EYE_DARK}
+	case .Turtle:
+		return {{0, 0.26, -0.44}, {0.2, 0.18, 0.2}, .Animal, {}, {}, EYE_DARK}
 	}
 	return {style = .None}
 }

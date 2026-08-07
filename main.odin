@@ -310,6 +310,40 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_NEWMOBS lines up one of each newly-added land animal ahead,
+	// facing the camera, so their models can be screenshotted side by side.
+	if os.get_env("MC_NEWMOBS", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 7
+		newmobs := [6]MobKind{.Wolf, .Cat, .Fox, .Goat, .Deer, .Bee}
+		py := int(base.y)
+		// flatten a grass platform so the lineup isn't broken up by terrain
+		for i in -2 ..= 14 {
+			for j in -2 ..= 3 {
+				p := base + right * f32(i - 6) * 1.0 + fwd * f32(j) * 1.0
+				bx, bz := int(p.x), int(p.z)
+				world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+				world_set_block(&world, bx, py - 1, bz, .Grass)
+				for h in 0 ..< 3 do world_set_block(&world, bx, py + h, bz, .Air)
+			}
+		}
+		for i in 0 ..< 6 {
+			p := base + right * (f32(i) - 2.5) * 2.0
+			wx, wz := int(p.x), int(p.z)
+			sy := py - 1
+			append(
+				&world.mobs,
+				Mob {
+					kind = newmobs[i],
+					pos = Vec3{f32(wx) + 0.5, f32(sy + 1), f32(wz) + 0.5},
+					yaw = 0,
+					health = 6,
+				},
+			)
+		}
+	}
+
 	// Debug: MC_ZOMBIES=N spawns N zombies ahead (for screenshots/testing).
 	if s := os.get_env("MC_ZOMBIES", context.temp_allocator); s != "" {
 		if n, ok := strconv.parse_int(s); ok {
@@ -589,7 +623,7 @@ main :: proc() {
 				}
 			}
 		}
-		kinds := [5]MobKind{.Fish, .Squid, .Dolphin, .Pufferfish, .Jellyfish}
+		kinds := [6]MobKind{.Fish, .Squid, .Dolphin, .Pufferfish, .Jellyfish, .Turtle}
 		for k, i in kinds {
 			append(
 				&world.mobs,
