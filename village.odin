@@ -141,8 +141,10 @@ vtapering_roof :: proc(b: ^VBrush, cx, base_y, cz: int, radii: []int, material: 
 	}
 }
 
-// Ground a footprint (+ its fenced yard) so nothing floats: for every column,
-// stack Stone from that column's own terrain surface up to just below base_y.
+// Ground a footprint (+ a blended apron) so nothing floats: for every column,
+// stack up from that column's own terrain surface to just below base_y. Filled
+// with Dirt (topped Grass where it's exposed at the surface) so a slope-side
+// pedestal reads as raised earth the building sits on, not an artificial plinth.
 @(private = "file")
 vfoundation :: proc(b: ^VBrush, seed: u64, wx0, wz0, wx1, wz1, base_y: int) {
 	for wz in wz0 ..= wz1 {
@@ -150,7 +152,8 @@ vfoundation :: proc(b: ^VBrush, seed: u64, wx0, wz0, wx1, wz1, base_y: int) {
 			if _, _, ok := in_chunk(b, wx, wz); !ok do continue // skip cols outside this chunk
 			ground, _, _ := world_height_and_biome(seed, wx, wz)
 			for y in ground ..< base_y {
-				vset(b, wx, y, wz, .Stone)
+				// the exposed top course grasses over; everything below is dirt
+				vset(b, wx, y, wz, y == base_y - 1 ? .Grass : .Dirt)
 			}
 		}
 	}
@@ -610,9 +613,9 @@ village_valid :: proc(w: ^World, seed: u64, anchor: Ivec2) -> (surf: int, biome:
 			hi = max(hi, ph)
 		}
 	}
-	// Per-plot foundations terrace the town, so it tolerates rolling ground;
-	// this gate just rejects sites that straddle a cliff or spill into the sea.
-	if hi - lo > 14 do return
+	// Require fairly flat ground so the town beds cleanly instead of perching
+	// its buildings on tall terraced pedestals (which read as "floating").
+	if hi - lo > 6 do return
 	return ch, cb, true
 }
 
@@ -653,8 +656,8 @@ draw_village :: proc(b: ^VBrush, seed: u64, anchor: Ivec2, biome: Biome) {
 			oz := pcz - 2
 			salt := hash_u64(seed ~ u64(gi * 928371 + gj * 1237) ~ u64(i64(anchor.x)) ~ 0xABCD)
 
-			// ground the footprint + yard
-			vfoundation(b, seed, ox - 1, oz - 1, ox + 5, oz + 5, base_y)
+			// ground the footprint + yard + a one-block blended apron
+			vfoundation(b, seed, ox - 2, oz - 2, ox + 6, oz + 6, base_y)
 
 			switch pt {
 			case .Well:
