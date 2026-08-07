@@ -57,10 +57,10 @@ harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
 	world_set_block(w, x, y, z, .Air)
 	crop_forget(w, Ivec3{x, y, z})
 	net_send_edit(x, y, z, .Air, w.dimension)
-	p.wheat += 1
-	p.seeds += 1 + rng_int(2)
+	inv_add(p, .Wheat, 1)
+	inv_add(p, .Seeds, 1 + rng_int(2))
 	audio_play(.Break, 0.6)
-	msg := fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", p.wheat, p.seeds)
+	msg := fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", inv_count(p, .Wheat), inv_count(p, .Seeds))
 	fmt.println(msg)
 	toast_show(msg)
 }
@@ -98,16 +98,16 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		if ay >= CHUNK_H || world_block(w, ax, ay, az) != .Air {
 			return
 		}
-		if p.seeds <= 0 {
+		if !inv_has(p, .Seeds, 1) {
 			toast_show("NO SEEDS - BREAK GRASS TO FIND SOME")
 			return
 		}
 		world_set_block(w, ax, ay, az, .Wheat1)
 		net_send_edit(ax, ay, az, .Wheat1, w.dimension)
 		append(&w.crops, Crop{pos = Ivec3{ax, ay, az}})
-		p.seeds -= 1
+		inv_take(p, .Seeds, 1)
 		audio_play(.Place, 0.4)
-		toast_show(fmt.tprintf("PLANTED WHEAT (%d SEEDS LEFT)", p.seeds))
+		toast_show(fmt.tprintf("PLANTED WHEAT (%d SEEDS LEFT)", inv_count(p, .Seeds)))
 	case .Grass, .Dirt:
 		if world_block(w, hit.bx, hit.by + 1, hit.bz) != .Air do return
 		world_set_block(w, hit.bx, hit.by, hit.bz, .Farmland)

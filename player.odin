@@ -22,11 +22,6 @@ Player :: struct {
 	fall_speed:  f32, // tracked while airborne for fall damage
 	respawn:     Vec3,
 	hunger:      f32, // 0..HUNGER_MAX
-	raw_food:     int, // raw meat dropped by mobs (weak)
-	cooked_food:  int, // cooked in a furnace (restores more hunger)
-	seeds:        int, // plant on farmland
-	wheat:        int, // harvested crop; bake into bread
-	bread:        int, // baked food (restores a good chunk of hunger)
 	portal_timer: f32, // time stood in a portal (triggers dimension travel)
 	lava_timer:   f32, // lava-damage tick
 	starve:      f32, // starvation damage timer
@@ -63,6 +58,7 @@ STARTER_KIT := [?]ItemStack {
 	{.Ore, 6},
 	{.Iron, 8},
 	{.Obsidian, 30}, // enough to build a nether portal (press P)
+	{.Seeds, 8}, // enough to start a small farm (R to till/plant)
 }
 
 player_init :: proc(p: ^Player, pos: Vec3) {
@@ -81,7 +77,6 @@ player_init :: proc(p: ^Player, pos: Vec3) {
 	// starting kit so you can build right away; gather more by mining
 	p.slots = {}
 	for s, i in STARTER_KIT do p.slots[i] = s
-	p.seeds = 8 // enough to start a small farm (R to till/plant)
 
 	// starting tools: a wooden pickaxe and sword (upgrade in the tools menu, X)
 	p.tool_tier[.Pickaxe] = 1
@@ -267,18 +262,18 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 		if p.hunger < f32(HUNGER_MAX) {
 			ate := true
 			food_col := Vec3{0.72, 0.28, 0.22}
-			if p.cooked_food > 0 {
-				p.cooked_food -= 1
+			if inv_has(p, .CookedFood, 1) {
+				inv_take(p, .CookedFood, 1)
 				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
 				food_col = Vec3{0.55, 0.35, 0.2}
 				toast_show(fmt.tprintf("ATE COOKED FOOD (HUNGER %d)", int(p.hunger)))
-			} else if p.bread > 0 {
-				p.bread -= 1
+			} else if inv_has(p, .Bread, 1) {
+				inv_take(p, .Bread, 1)
 				p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
 				food_col = Vec3{0.78, 0.58, 0.30}
 				toast_show(fmt.tprintf("ATE BREAD (HUNGER %d)", int(p.hunger)))
-			} else if p.raw_food > 0 {
-				p.raw_food -= 1
+			} else if inv_has(p, .RawFood, 1) {
+				inv_take(p, .RawFood, 1)
 				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
 				toast_show(fmt.tprintf("ATE RAW FOOD - COOK IT FOR MORE (HUNGER %d)", int(p.hunger)))
 			} else {
@@ -346,8 +341,8 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 		crop_forget(w, Ivec3{bx, by, bz})
 		net_send_edit(bx, by, bz, .Air, w.dimension)
 		audio_play(.Break)
-		p.seeds += 1
-		if broken == .Wheat3 do p.wheat += 1
+		inv_add(p, .Seeds, 1)
+		if broken == .Wheat3 do inv_add(p, .Wheat, 1)
 		return
 	}
 	if broken == .Chest do chest_break(w, p, Ivec3{bx, by, bz}) // recover contents first
@@ -357,7 +352,7 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 	particle_spawn_break(&w.particles, broken, bx, by, bz)
 	audio_play(.Break)
 	item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.3, f32(bz) + 0.5})
-	if broken == .Grass && rng_int(4) == 0 do p.seeds += 1 // seeds hide in grass
+	if broken == .Grass && rng_int(4) == 0 do inv_add(p, .Seeds, 1) // seeds hide in grass
 	if kind, applies := mine_tool(broken); applies do tool_wear(p, kind)
 }
 
@@ -428,6 +423,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		   world_block(w, tx, ty, tz) == .Air &&
 		   !block_hits_player(p, tx, ty, tz) &&
 		   sel != .Air &&
+		   !block_is_item(sel) && // food/seeds are held, not placed
 		   inv_has(p, sel, 1) {
 			world_set_block(w, tx, ty, tz, sel)
 			// Stairs are oriented by the direction the player is looking.
@@ -486,11 +482,11 @@ try_smelt :: proc(w: ^World, p: ^Player) {
 		toast_show("SMELT: NEED WOOD OR COAL AS FUEL")
 		return
 	}
-	if p.raw_food >= 1 {
+	if inv_has(p, .RawFood, 1) {
 		inv_take(p, fuel, 1)
-		p.raw_food -= 1
-		p.cooked_food += 1
-		toast_show(fmt.tprintf("COOKED FOOD (HAVE %d)", p.cooked_food))
+		inv_take(p, .RawFood, 1)
+		inv_add(p, .CookedFood, 1)
+		toast_show(fmt.tprintf("COOKED FOOD (HAVE %d)", inv_count(p, .CookedFood)))
 		return
 	}
 	if inv_has(p, .Ore, 1) {
@@ -530,10 +526,10 @@ try_craft :: proc(p: ^Player) {
 		toast_show(fmt.tprintf("CRAFTED GLOWSTONE (HAVE %d)", inv_count(p, .Glowstone)))
 		return
 	}
-	if p.wheat >= 3 {
-		p.wheat -= 3
-		p.bread += 1
-		toast_show(fmt.tprintf("BAKED BREAD (HAVE %d)", p.bread))
+	if inv_has(p, .Wheat, 3) {
+		inv_take(p, .Wheat, 3)
+		inv_add(p, .Bread, 1)
+		toast_show(fmt.tprintf("BAKED BREAD (HAVE %d)", inv_count(p, .Bread)))
 		return
 	}
 	toast_show("CRAFT: 8 STONE, 4 SAND+1 ORE, OR 3 WHEAT")

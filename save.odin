@@ -104,7 +104,7 @@ load_meta :: proc() -> (u64, bool) {
 @(private = "file")
 PLAYER_PATH :: "saves/player.dat"
 @(private = "file")
-PLAYER_SAVE_VERSION :: u8(2)
+PLAYER_SAVE_VERSION :: u8(3)
 
 // Persist the player's own state (position, look, vitals, respawn, the full
 // inventory + food counters, the hotbar layout, and tool/armor tiers +
@@ -124,8 +124,6 @@ save_player :: proc(p: ^Player) {
 	put_f32(&buf, p.hunger);put_f32(&buf, p.oxygen)
 	put_f32(&buf, p.respawn.x);put_f32(&buf, p.respawn.y);put_f32(&buf, p.respawn.z)
 	put_i32(&buf, i32(p.selected_slot))
-	put_i32(&buf, i32(p.raw_food));put_i32(&buf, i32(p.cooked_food))
-	put_i32(&buf, i32(p.seeds));put_i32(&buf, i32(p.wheat));put_i32(&buf, i32(p.bread))
 	for k in ToolKind {put_i32(&buf, i32(p.tool_tier[k]));put_i32(&buf, i32(p.tool_dur[k]))}
 	for s in ArmorSlot {put_i32(&buf, i32(p.armor_tier[s]));put_i32(&buf, i32(p.armor_dur[s]))}
 
@@ -166,13 +164,8 @@ load_player :: proc(p: ^Player) -> bool {
 	p.respawn.x = get_f32(data, off);off += 4
 	p.respawn.y = get_f32(data, off);off += 4
 	p.respawn.z = get_f32(data, off);off += 4
-	if !need(off, 6 * 4, len(data)) do return false
+	if !need(off, 4, len(data)) do return false
 	p.selected_slot = int(get_i32(data, off));off += 4
-	p.raw_food = int(get_i32(data, off));off += 4
-	p.cooked_food = int(get_i32(data, off));off += 4
-	p.seeds = int(get_i32(data, off));off += 4
-	p.wheat = int(get_i32(data, off));off += 4
-	p.bread = int(get_i32(data, off));off += 4
 	for k in ToolKind {
 		if !need(off, 8, len(data)) do return false
 		p.tool_tier[k] = int(get_i32(data, off));off += 4

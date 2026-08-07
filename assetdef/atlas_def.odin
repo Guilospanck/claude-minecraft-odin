@@ -52,3 +52,8 @@ FLOWER_WHITE :: Tile{11, 2} // sprite
 TALL_GRASS   :: Tile{12, 2} // sprite
 FERN         :: Tile{13, 2} // sprite
 DEAD_BUSH    :: Tile{14, 2} // sprite
+RAW_FOOD     :: Tile{15, 2} // item icon
+COOKED_FOOD  :: Tile{0, 3} // item icon
+BREAD        :: Tile{1, 3} // item icon
+WHEAT_ITEM   :: Tile{2, 3} // item icon
+SEEDS        :: Tile{3, 3} // item icon

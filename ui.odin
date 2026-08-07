@@ -509,21 +509,6 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 			ch_h * 0.8,
 			Vec4{0.7, 0.75, 0.82, 1},
 		)
-		// Food/seeds are non-block consumables: shown as a small read-out.
-		text_center(
-			fmt.tprintf(
-				"RAW %d   COOKED %d   BREAD %d   WHEAT %d   SEEDS %d",
-				p.raw_food,
-				p.cooked_food,
-				p.bread,
-				p.wheat,
-				p.seeds,
-			),
-			hotbar_y - sz - 0.02,
-			ch_w * 0.6,
-			ch_h * 0.6,
-			Vec4{0.65, 0.7, 0.76, 1},
-		)
 	case .Craft:
 		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.66)
 	case .Tools:

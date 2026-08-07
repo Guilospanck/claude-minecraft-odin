@@ -302,10 +302,10 @@ test_cooking :: proc(t: ^testing.T) {
 	player_init(&p, Vec3{8.5, 40.0, 8.5})
 	p.slots = {}
 	inv_add(&p, .Wood, 2)
-	p.raw_food = 3
+	inv_add(&p, .RawFood, 3)
 	try_smelt(&w, &p) // cook near the furnace
-	testing.expect(t, p.cooked_food == 1, "raw food cooks to cooked")
-	testing.expect(t, p.raw_food == 2, "one raw consumed")
+	testing.expect(t, inv_count(&p, .CookedFood) == 1, "raw food cooks to cooked")
+	testing.expect(t, inv_count(&p, .RawFood) == 2, "one raw consumed")
 	testing.expect(t, inv_count(&p, .Wood) == 1, "one wood fuel consumed")
 }
 
@@ -481,7 +481,7 @@ test_crop_forget_on_harvest :: proc(t: ^testing.T) {
 	p: Player
 	harvest_crop(&w, &p, 3, 40, 3)
 	testing.expect(t, world_block(&w, 3, 40, 3) == .Air, "harvest clears the block")
-	testing.expect(t, p.wheat == 1, "harvest yields wheat")
+	testing.expect(t, inv_count(&p, .Wheat) == 1, "harvest yields wheat")
 	testing.expect(t, len(w.crops) == 0, "harvest forgets the crop immediately (no stale entry)")
 	// replanting the same cell tracks exactly one crop (no duplicate double-growth)
 	world_set_block(&w, 3, 40, 3, .Wheat1)
@@ -723,7 +723,7 @@ test_eat_triggers_animation_and_particles :: proc(t: ^testing.T) {
 	defer free_test_world(&w)
 	p: Player
 	player_init(&p, Vec3{8.5, 40.0, 8.5})
-	p.cooked_food = 1
+	inv_add(&p, .CookedFood, 1)
 	p.hunger = 5
 	g_input = {}
 	g_input.eat = true
@@ -852,13 +852,13 @@ test_breeding_makes_a_baby :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)
 	p: Player
-	p.wheat = 2
+	inv_add(&p, .Wheat, 2)
 	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{8, 40, 8}, health = 6})
 	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{9, 40, 8}, health = 6})
 	ok1 := try_feed(&w, &p, &w.mobs[0])
 	ok2 := try_feed(&w, &p, &w.mobs[1])
 	testing.expect(t, ok1 && ok2, "feeding wheat to a cow is accepted")
-	testing.expect(t, p.wheat == 0, "each feeding consumes one wheat")
+	testing.expect(t, inv_count(&p, .Wheat) == 0, "each feeding consumes one wheat")
 	testing.expect(t, w.mobs[0].love_timer > 0 && w.mobs[1].love_timer > 0, "both cows enter love mode")
 
 	before := len(w.mobs)
@@ -1367,11 +1367,11 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	player_init(&p, Vec3{10, 20, 30})
 	p.health = 7
 	p.selected_slot = 3
-	p.raw_food = 4
-	p.wheat = 9
 	p.slots = {}
 	p.slots[0] = {.Stone, 42}
 	p.slots[10] = {.Gold, 3}
+	inv_add(&p, .RawFood, 4) // food is now just another slot item
+	inv_add(&p, .Wheat, 9)
 	p.tool_tier[.Pickaxe] = 3
 	p.tool_dur[.Pickaxe] = 120
 	p.armor_tier[.Helmet] = 2
@@ -1385,7 +1385,7 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, ok, "the saved player loads back")
 	testing.expect(t, q.health == 7, "health restored")
 	testing.expect(t, q.selected_slot == 3, "equipped hotbar slot restored")
-	testing.expect(t, q.raw_food == 4 && q.wheat == 9, "food counters restored")
+	testing.expect(t, inv_count(&q, .RawFood) == 4 && inv_count(&q, .Wheat) == 9, "food counters restored")
 	testing.expect(t, q.slots[0] == ItemStack{.Stone, 42} && q.slots[10] == ItemStack{.Gold, 3}, "slot stacks restored in place")
 	testing.expect(t, q.tool_tier[.Pickaxe] == 3 && q.tool_dur[.Pickaxe] == 120, "tools restored")
 	testing.expect(t, q.armor_tier[.Helmet] == 2, "armor restored")

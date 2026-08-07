@@ -59,9 +59,9 @@ items_update :: proc(w: ^World, p: ^Player, items: ^[dynamic]Item, dt: f32) {
 		if it.age > 0.4 && dx * dx + dy * dy + dz * dz < ITEM_PICKUP * ITEM_PICKUP {
 			col: Vec3
 			if it.food {
-				p.raw_food += 1
+				inv_add(p, .RawFood, 1)
 				col = Vec3{0.72, 0.28, 0.22}
-				toast_show(fmt.tprintf("+1 RAW FOOD (%d)", p.raw_food))
+				toast_show(fmt.tprintf("+1 RAW FOOD (%d)", inv_count(p, .RawFood)))
 			} else {
 				inv_add(p, it.block, 1)
 				col = block_color(it.block)

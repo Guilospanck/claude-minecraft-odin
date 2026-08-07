@@ -281,8 +281,8 @@ main :: proc() {
 	if os.get_env("MC_INV", context.temp_allocator) != "" {
 		g_show_inventory = true;g_inv_tab = .Items
 		// sample stock across storage slots so the Items grid is populated
-		sample := [?]BlockId{.Grass, .Dirt, .Stone, .Wood, .Sand, .Glass, .Stair, .CoalOre, .Iron, .Leaves, .Snow, .FlowerRed, .Cactus}
-		for b, i in sample do player.slots[HOTBAR_SLOTS + i] = {b, 16 + i}
+		sample := [?]BlockId{.Grass, .Dirt, .Stone, .Wood, .Sand, .Glass, .Stair, .CoalOre, .Iron, .RawFood, .CookedFood, .Bread, .Wheat, .Seeds}
+		for b, i in sample do player.slots[HOTBAR_SLOTS + i] = {b, 8 + i}
 		// MC_DRAG shows a stack held on the cursor for a screenshot, since
 		// headless has no live mouse.
 		if os.get_env("MC_DRAG", context.temp_allocator) != "" {
@@ -795,7 +795,7 @@ main :: proc() {
 	// Debug: MC_EAT gives the player cooked food and triggers the eat
 	// animation (camera bob + crumb particles) so it lands on frame 0.
 	if os.get_env("MC_EAT", context.temp_allocator) != "" {
-		player.cooked_food = 3
+		inv_add(&player, .CookedFood, 3)
 		g_input.eat = true
 	}
 
@@ -849,7 +849,7 @@ main :: proc() {
 		append(&world.mobs, Mob{kind = .Cow, pos = base + Vec3{-4, 0, 0}, health = 6})
 		append(&world.mobs, Mob{kind = .Cow, pos = base + Vec3{4, 0, 0}, health = 6})
 		fed_p: Player
-		fed_p.wheat = 2
+		inv_add(&fed_p, .Wheat, 2)
 		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 2])
 		try_feed(&world, &fed_p, &world.mobs[len(world.mobs) - 1])
 	}

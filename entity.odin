@@ -1053,7 +1053,7 @@ try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast || m.is_baby {
 		return false
 	}
-	if p.wheat <= 0 {
+	if !inv_has(p, .Wheat, 1) {
 		toast_show("FEED: NEED WHEAT")
 		return true
 	}
@@ -1061,7 +1061,7 @@ try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 		toast_show("ALREADY IN LOVE MODE")
 		return true
 	}
-	p.wheat -= 1
+	inv_take(p, .Wheat, 1)
 	m.love_timer = BREED_LOVE_DURATION
 	audio_play(.Place, 0.4)
 	toast_show("FED - LOOKING FOR A MATE")

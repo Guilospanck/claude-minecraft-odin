@@ -47,6 +47,23 @@ BlockId :: enum u8 {
 	Fern, // forest/taiga/jungle understory
 	DeadBush, // dry twigs: desert/badlands/savanna
 	Stair, // stepped block; facing 0..3 in w.stairs
+	// Inventory-only items (never placed in the world) — held/dragged like any
+	// stack, but block_is_item gates them out of block placement.
+	RawFood,
+	CookedFood,
+	Bread,
+	Wheat, // harvested crop item (Wheat1..3 are the growing block stages)
+	Seeds,
+}
+
+// Inventory-only items (food/seeds): they live in slots and stack like blocks
+// but can never be placed into the world.
+block_is_item :: proc(b: BlockId) -> bool {
+	#partial switch b {
+	case .RawFood, .CookedFood, .Bread, .Wheat, .Seeds:
+		return true
+	}
+	return false
 }
 
 // Block light emitted (0..15). Opaque emitters still light the air around them.
@@ -131,7 +148,7 @@ block_is_solid :: proc(b: BlockId) -> bool {
 	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
 		return false
 	}
-	if block_is_plant(b) do return false
+	if block_is_plant(b) || block_is_item(b) do return false
 	return true
 }
 
@@ -253,6 +270,16 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.DEAD_BUSH
 	case .Stair:
 		return ad.STONE
+	case .RawFood:
+		return ad.RAW_FOOD
+	case .CookedFood:
+		return ad.COOKED_FOOD
+	case .Bread:
+		return ad.BREAD
+	case .Wheat:
+		return ad.WHEAT_ITEM
+	case .Seeds:
+		return ad.SEEDS
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -348,6 +375,16 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.55, 0.42, 0.22}
 	case .Stair:
 		return {0.50, 0.50, 0.52}
+	case .RawFood:
+		return {0.72, 0.28, 0.22}
+	case .CookedFood:
+		return {0.55, 0.35, 0.20}
+	case .Bread:
+		return {0.78, 0.58, 0.30}
+	case .Wheat:
+		return {0.82, 0.70, 0.28}
+	case .Seeds:
+		return {0.55, 0.62, 0.30}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -444,6 +481,16 @@ block_name :: proc(b: BlockId) -> string {
 		return "Dead Bush"
 	case .Stair:
 		return "Stairs"
+	case .RawFood:
+		return "Raw Food"
+	case .CookedFood:
+		return "Cooked Food"
+	case .Bread:
+		return "Bread"
+	case .Wheat:
+		return "Wheat"
+	case .Seeds:
+		return "Seeds"
 	}
 	return "?"
 }

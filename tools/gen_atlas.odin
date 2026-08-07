@@ -159,6 +159,42 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(Color{140, 104, 52, 255}, jitter(gx, gy, 16))
 					c.a = 255
 				}
+			case "raw_food":
+				c = Color{0, 0, 0, 0}
+				// a rounded raw meat cut: pink flesh with a bone nub
+				meat := (px - 8) * (px - 8) + (py - 9) * (py - 9) < 28
+				bone := (px - 5) * (px - 5) + (py - 4) * (py - 4) < 5
+				if bone {c = Color{232, 224, 208, 255}} else if meat {c = shade(Color{198, 96, 96, 255}, jitter(gx, gy, 14));c.a = 255}
+			case "cooked_food":
+				c = Color{0, 0, 0, 0}
+				meat := (px - 8) * (px - 8) + (py - 9) * (py - 9) < 28
+				bone := (px - 5) * (px - 5) + (py - 4) * (py - 4) < 5
+				if bone {c = Color{232, 224, 208, 255}} else if meat {c = shade(Color{150, 92, 48, 255}, jitter(gx, gy, 14));c.a = 255}
+			case "bread":
+				c = Color{0, 0, 0, 0}
+				// a rounded golden loaf with a few score marks
+				loaf := px >= 3 && px <= 12 && py >= 5 && py <= 12 && !((px <= 4 || px >= 11) && (py <= 6 || py >= 11))
+				if loaf {
+					score := (px % 3 == 0) && py <= 7
+					c = shade(score ? Color{150, 100, 44, 255} : Color{198, 148, 74, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
+			case "wheat_item":
+				c = Color{0, 0, 0, 0}
+				// a bound sheaf: vertical golden stalks with grain heads
+				stalk := px == 5 || px == 8 || px == 11
+				if stalk && py >= 2 {
+					c = shade(py < 7 ? Color{224, 196, 92, 255} : Color{198, 160, 68, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
+			case "seeds":
+				c = Color{0, 0, 0, 0}
+				// a small scatter of pale green seeds
+				seed := ((px * 5 + py * 3) % 7 == 0) && px >= 3 && px <= 12 && py >= 5 && py <= 11
+				if seed {
+					c = shade(Color{150, 168, 92, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
 			case "obsidian":
 				spec := ((jitter(gx * 2, gy * 2, 100) + 100) % 9) < 2
 				c = spec ? Color{80, 50, 110, 255} : shade(Color{28, 20, 40, 255}, jitter(gx, gy, 8))
@@ -309,6 +345,11 @@ main :: proc() {
 	paint(ad.TALL_GRASS, Color{0, 0, 0, 0}, "tall_grass")
 	paint(ad.FERN, Color{0, 0, 0, 0}, "fern")
 	paint(ad.DEAD_BUSH, Color{0, 0, 0, 0}, "dead_bush")
+	paint(ad.RAW_FOOD, Color{0, 0, 0, 0}, "raw_food")
+	paint(ad.COOKED_FOOD, Color{0, 0, 0, 0}, "cooked_food")
+	paint(ad.BREAD, Color{0, 0, 0, 0}, "bread")
+	paint(ad.WHEAT_ITEM, Color{0, 0, 0, 0}, "wheat_item")
+	paint(ad.SEEDS, Color{0, 0, 0, 0}, "seeds")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
