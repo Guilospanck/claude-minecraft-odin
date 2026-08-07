@@ -220,18 +220,22 @@ main :: proc() {
 	world_init(&world, seed)
 	load_chests(&world)
 	load_doors(&world)
+	load_stairs(&world)
 	defer world_save_all(&world)
 	defer save_chests(&world)
 	defer save_doors(&world)
+	defer save_stairs(&world)
 
 	// The Nether: a second world reached through portals.
 	nether: World
 	world_init(&nether, seed ~ 0x4E45_5448_4552_0001, .Nether)
 	load_chests(&nether)
 	load_doors(&nether)
+	load_stairs(&nether)
 	defer world_save_all(&nether)
 	defer save_chests(&nether)
 	defer save_doors(&nether)
+	defer save_stairs(&nether)
 	cur := &world // the dimension currently being played/rendered
 
 	// One-off: locate nearby biomes for this seed, print, and exit.
@@ -245,6 +249,8 @@ main :: proc() {
 
 	player: Player
 	player_init(&player, spawn_pos(&world))
+	load_player(&player) // restore saved state over the fresh defaults, if any
+	defer save_player(&player)
 
 	// Optional camera override for screenshots/tests: MC_CAM="x,y,z,yaw,pitch"
 	if s := os.get_env("MC_CAM", context.temp_allocator); s != "" {

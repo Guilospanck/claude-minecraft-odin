@@ -100,3 +100,149 @@ load_meta :: proc() -> (u64, bool) {
 	}
 	return seed, true
 }
+
+@(private = "file")
+PLAYER_PATH :: "saves/player.dat"
+@(private = "file")
+PLAYER_SAVE_VERSION :: u8(1)
+
+// Persist the player's own state (position, look, vitals, respawn, the full
+// inventory + food counters, the hotbar layout, and tool/armor tiers +
+// durability) so a saved world comes back exactly as you left it. Version-
+// tagged so a format change just falls back to a fresh player instead of
+// loading garbage.
+save_player :: proc(p: ^Player) {
+	if net_is_client() do return
+	save_ensure_dir()
+	buf := make([dynamic]u8, 0, 256)
+	defer delete(buf)
+
+	append(&buf, PLAYER_SAVE_VERSION)
+	put_f32(&buf, p.pos.x);put_f32(&buf, p.pos.y);put_f32(&buf, p.pos.z)
+	put_f32(&buf, p.yaw);put_f32(&buf, p.pitch)
+	put_i32(&buf, i32(p.health))
+	put_f32(&buf, p.hunger);put_f32(&buf, p.oxygen)
+	put_f32(&buf, p.respawn.x);put_f32(&buf, p.respawn.y);put_f32(&buf, p.respawn.z)
+	append(&buf, u8(p.selected))
+	put_i32(&buf, i32(p.raw_food));put_i32(&buf, i32(p.cooked_food))
+	put_i32(&buf, i32(p.seeds));put_i32(&buf, i32(p.wheat));put_i32(&buf, i32(p.bread))
+	for i in 0 ..< 9 do append(&buf, u8(p.hotbar[i]))
+	for k in ToolKind {put_i32(&buf, i32(p.tool_tier[k]));put_i32(&buf, i32(p.tool_dur[k]))}
+	for s in ArmorSlot {put_i32(&buf, i32(p.armor_tier[s]));put_i32(&buf, i32(p.armor_dur[s]))}
+
+	// inventory as (id, count) pairs for every non-empty block type
+	n := 0
+	for b in BlockId do if p.inventory[b] > 0 do n += 1
+	put_i32(&buf, i32(n))
+	for b in BlockId {
+		if p.inventory[b] <= 0 do continue
+		append(&buf, u8(b));put_i32(&buf, i32(p.inventory[b]))
+	}
+
+	if err := os.write_entire_file(PLAYER_PATH, buf[:]); err != nil {
+		fmt.eprintln("save_player failed:", err)
+	}
+}
+
+// Restore a saved player over an already-initialised one. Returns false (and
+// leaves p untouched) if there's no save, it's truncated, or the version
+// doesn't match.
+load_player :: proc(p: ^Player) -> bool {
+	if net_is_client() do return false
+	if !os.exists(PLAYER_PATH) do return false
+	data, err := os.read_entire_file(PLAYER_PATH, context.allocator)
+	if err != nil do return false
+	defer delete(data)
+	if len(data) < 1 || data[0] != PLAYER_SAVE_VERSION do return false
+
+	off := 1
+	// bounds helper: every read below is guarded so a truncated file can't panic
+	need :: proc(off, n, total: int) -> bool {return off + n <= total}
+
+	if !need(off, 5 * 4, len(data)) do return false
+	p.pos.x = get_f32(data, off);off += 4
+	p.pos.y = get_f32(data, off);off += 4
+	p.pos.z = get_f32(data, off);off += 4
+	p.yaw = get_f32(data, off);off += 4
+	p.pitch = get_f32(data, off);off += 4
+	if !need(off, 4 + 2 * 4 + 3 * 4 + 1, len(data)) do return false
+	p.health = int(get_i32(data, off));off += 4
+	p.hunger = get_f32(data, off);off += 4
+	p.oxygen = get_f32(data, off);off += 4
+	p.respawn.x = get_f32(data, off);off += 4
+	p.respawn.y = get_f32(data, off);off += 4
+	p.respawn.z = get_f32(data, off);off += 4
+	p.selected = BlockId(data[off]);off += 1
+	if !need(off, 5 * 4, len(data)) do return false
+	p.raw_food = int(get_i32(data, off));off += 4
+	p.cooked_food = int(get_i32(data, off));off += 4
+	p.seeds = int(get_i32(data, off));off += 4
+	p.wheat = int(get_i32(data, off));off += 4
+	p.bread = int(get_i32(data, off));off += 4
+	if !need(off, 9, len(data)) do return false
+	for i in 0 ..< 9 {p.hotbar[i] = BlockId(data[off]);off += 1}
+	for k in ToolKind {
+		if !need(off, 8, len(data)) do return false
+		p.tool_tier[k] = int(get_i32(data, off));off += 4
+		p.tool_dur[k] = int(get_i32(data, off));off += 4
+	}
+	for s in ArmorSlot {
+		if !need(off, 8, len(data)) do return false
+		p.armor_tier[s] = int(get_i32(data, off));off += 4
+		p.armor_dur[s] = int(get_i32(data, off));off += 4
+	}
+	if !need(off, 4, len(data)) do return false
+	count := int(get_i32(data, off));off += 4
+	p.inventory = {}
+	for _ in 0 ..< count {
+		if !need(off, 5, len(data)) do return false
+		b := BlockId(data[off]);off += 1
+		p.inventory[b] = int(get_i32(data, off));off += 4
+	}
+	return true
+}
+
+@(private = "file")
+stairs_path :: proc(dim: Dimension) -> string {
+	return fmt.tprintf("%s/stairs.dat", dim_dir(dim))
+}
+
+// Persist placed stairs' facings (village-built and player-placed alike),
+// keyed by world position, mirroring how doors are saved.
+save_stairs :: proc(w: ^World) {
+	if net_is_client() do return
+	if len(w.stairs) == 0 {
+		os.remove(stairs_path(w.dimension))
+		return
+	}
+	save_ensure_dir(w.dimension)
+	buf := make([dynamic]u8, 0, 128)
+	defer delete(buf)
+	put_i32(&buf, i32(len(w.stairs)))
+	for pos, facing in w.stairs {
+		put_i32(&buf, i32(pos.x));put_i32(&buf, i32(pos.y));put_i32(&buf, i32(pos.z))
+		append(&buf, facing)
+	}
+	if err := os.write_entire_file(stairs_path(w.dimension), buf[:]); err != nil {
+		fmt.eprintln("save_stairs failed:", err)
+	}
+}
+
+load_stairs :: proc(w: ^World) {
+	if net_is_client() do return
+	path := stairs_path(w.dimension)
+	if !os.exists(path) do return
+	data, err := os.read_entire_file(path, context.allocator)
+	if err != nil do return
+	defer delete(data)
+	off := 0
+	if len(data) < 4 do return
+	count := int(get_i32(data, off));off += 4
+	for _ in 0 ..< count {
+		if off + 13 > len(data) do return
+		x := int(get_i32(data, off));off += 4
+		y := int(get_i32(data, off));off += 4
+		z := int(get_i32(data, off));off += 4
+		w.stairs[Ivec3{x, y, z}] = data[off];off += 1
+	}
+}

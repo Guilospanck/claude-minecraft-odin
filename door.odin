@@ -51,13 +51,13 @@ doors_path :: proc(dim: Dimension) -> string {
 	return fmt.tprintf("%s/doors.dat", dim == .Nether ? NETHER_DIR : WORLD_DIR)
 }
 
-@(private = "file")
+// Little-endian int/float serialization helpers, shared by all the .dat
+// savers (doors, stairs, chests, player). Not file-private.
 put_i32 :: proc(buf: ^[dynamic]u8, v: i32) {
 	u := u32(v)
 	append(buf, u8(u), u8(u >> 8), u8(u >> 16), u8(u >> 24))
 }
 
-@(private = "file")
 get_i32 :: proc(data: []u8, off: int) -> i32 {
 	return i32(
 		u32(data[off]) |
@@ -65,6 +65,14 @@ get_i32 :: proc(data: []u8, off: int) -> i32 {
 		u32(data[off + 2]) << 16 |
 		u32(data[off + 3]) << 24,
 	)
+}
+
+put_f32 :: proc(buf: ^[dynamic]u8, v: f32) {
+	put_i32(buf, transmute(i32)v)
+}
+
+get_f32 :: proc(data: []u8, off: int) -> f32 {
+	return transmute(f32)get_i32(data, off)
 }
 
 // Format: [count i32] then per door [x y z i32][facing u8][open u8]

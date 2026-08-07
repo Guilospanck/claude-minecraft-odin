@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "core:os"
 import "core:testing"
 
 @(private = "file")
@@ -1355,6 +1356,39 @@ test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
 	testing.expect(t, biome_build_mats(.Snow).roof == .Snow, "snow villages get white roofs")
 	testing.expect(t, biome_build_mats(.Desert).wall == .Sand, "desert villages get sand walls")
 	testing.expect(t, biome_build_mats(.Plains).roof == .Stone, "temperate villages keep stone roofs")
+}
+
+@(test)
+test_player_save_roundtrip :: proc(t: ^testing.T) {
+	p: Player
+	player_init(&p, Vec3{10, 20, 30})
+	p.health = 7
+	p.selected = .Wood
+	p.raw_food = 4
+	p.wheat = 9
+	p.inventory[.Stone] = 42
+	p.inventory[.Gold] = 3
+	p.hotbar[2] = .Stone
+	p.hotbar[5] = .Wood
+	p.tool_tier[.Pickaxe] = 3
+	p.tool_dur[.Pickaxe] = 120
+	p.armor_tier[.Helmet] = 2
+
+	save_player(&p)
+	defer os.remove("saves/player.dat")
+
+	q: Player
+	player_init(&q, Vec3{0, 0, 0})
+	ok := load_player(&q)
+	testing.expect(t, ok, "the saved player loads back")
+	testing.expect(t, q.health == 7, "health restored")
+	testing.expect(t, q.selected == .Wood, "equipped block restored")
+	testing.expect(t, q.raw_food == 4 && q.wheat == 9, "food counters restored")
+	testing.expect(t, q.inventory[.Stone] == 42 && q.inventory[.Gold] == 3, "inventory counts restored")
+	testing.expect(t, q.hotbar[2] == .Stone && q.hotbar[5] == .Wood, "hotbar layout restored")
+	testing.expect(t, q.tool_tier[.Pickaxe] == 3 && q.tool_dur[.Pickaxe] == 120, "tools restored")
+	testing.expect(t, q.armor_tier[.Helmet] == 2, "armor restored")
+	testing.expect(t, math.abs(q.pos.x - 10) < 0.01 && math.abs(q.pos.z - 30) < 0.01, "position restored")
 }
 
 @(test)
