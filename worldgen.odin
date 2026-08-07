@@ -48,13 +48,16 @@ climate_spread :: proc(x: f32) -> f32 {
 world_climate :: proc(seed: u64, wx, wz: int) -> (temp: f32, moist: f32) {
 	fx := f32(wx)
 	fz := f32(wz)
-	warp_x := fbm2(seed + 9001, fx * 0.01, fz * 0.01, 2) * 8.0
-	warp_z := fbm2(seed + 9002, fx * 0.01, fz * 0.01, 2) * 8.0
-	// Slightly lower frequency than before (0.003 vs 0.0035) so each biome
-	// region is a bit larger — big enough to travel across, still small enough
-	// that a short trip crosses several.
-	t := fbm2(seed + 101, (fx + warp_x) * 0.003, (fz + warp_z) * 0.003, 3)
-	m := fbm2(seed + 202, (fx + warp_x) * 0.003, (fz + warp_z) * 0.003, 3)
+	warp_x := fbm2(seed + 9001, fx * 0.006, fz * 0.006, 2) * 16.0
+	warp_z := fbm2(seed + 9002, fx * 0.006, fz * 0.006, 2) * 16.0
+	// Low frequencies so biome regions are LARGE and coherent, and transitions
+	// are wide enough to pass through the intermediate biomes (a lush forest
+	// grades to desert through a broad savanna/plains belt, not in 40 blocks).
+	// Humidity runs at an even lower frequency than temperature, so big arid and
+	// big humid zones span several temperature bands rather than fragmenting into
+	// small patches.
+	t := fbm2(seed + 101, (fx + warp_x) * 0.0016, (fz + warp_z) * 0.0016, 3)
+	m := fbm2(seed + 202, (fx + warp_x) * 0.0011, (fz + warp_z) * 0.0011, 3)
 	return climate_spread(t), climate_spread(m)
 }
 
