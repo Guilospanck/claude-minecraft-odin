@@ -447,8 +447,9 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 		az := int(math.floor(m.pos.z + fwd.z * (dims.hw + 0.4)))
 		ay := int(math.floor(m.pos.y))
 		if water_ahead(w, ax, az, ay) {
-			m.moving = false
-			m.ai_timer = 0 // pick a new direction next tick
+			// turn away from the water and keep walking (deterministic — no RNG
+			// re-roll that could randomly send it straight back in).
+			m.yaw += math.PI
 			m.vel.x = 0
 			m.vel.z = 0
 		} else {

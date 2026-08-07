@@ -150,8 +150,9 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 		az := int(math.floor(v.pos.z + fwd.z * (VILLAGER_HW + 0.4)))
 		ay := int(math.floor(v.pos.y))
 		if water_ahead(w, ax, az, ay) {
-			v.moving = false
-			v.ai_timer = 0 // pick a new direction next tick
+			// turn away from the water and keep walking (deterministic — no RNG
+			// re-roll, which could randomly send them straight back in).
+			v.yaw += math.PI
 			v.vel.x = 0
 			v.vel.z = 0
 		} else {
