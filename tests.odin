@@ -1339,7 +1339,9 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	testing.expect(t, chunk_get(c, 2, 40, 2) == .Stone, "wall corner starts with a stone foundation")
 	testing.expect(t, chunk_get(c, 2, 41, 2) == .Wood, "wall corner continues in wood above the foundation")
 	// interior is hollowed out, not solid wood
-	testing.expect(t, chunk_get(c, 4, 40, 4) == .Air, "the interior is hollow")
+	testing.expect(t, chunk_get(c, 4, 40, 4) == .Planks, "the interior floor is planks")
+	testing.expect(t, block_is_carpet(chunk_get(c, 4, 41, 4)), "a carpet rug sits on the floor")
+	testing.expect(t, chunk_get(c, 4, 42, 4) == .Air, "the interior is hollow above the floor")
 	// a door sits in the middle of the south wall, with headroom above it
 	testing.expect(t, chunk_get(c, 4, 40, 2) == .Door, "a door opening exists in the south wall")
 	testing.expect(t, chunk_get(c, 4, 41, 2) == .Air, "there's headroom above the door")
@@ -1549,11 +1551,13 @@ test_new_aquatic_mobs :: proc(t: ^testing.T) {
 @(test)
 test_biome_specialist_animals :: proc(t: ^testing.T) {
 	k, ok := biome_specialist(.Snow)
-	testing.expect(t, ok && k == .SnowLeopard, "snow biomes get snow leopards")
+	testing.expect(t, ok && (k == .SnowLeopard || k == .Fox), "snow biomes get snow leopards or foxes")
 	k, ok = biome_specialist(.Desert)
 	testing.expect(t, ok && k == .Camel, "deserts get camels")
 	k, ok = biome_specialist(.Savanna)
 	testing.expect(t, ok && k == .Llama, "savanna gets llamas")
+	k, ok = biome_specialist(.Mountains)
+	testing.expect(t, ok && (k == .Goat || k == .Llama), "mountains get goats or llamas")
 	_, ok = biome_specialist(.Plains)
 	testing.expect(t, !ok, "ordinary biomes have no specialist (grazers spawn there)")
 	// specialists must be passive land animals, not hostile or aquatic
