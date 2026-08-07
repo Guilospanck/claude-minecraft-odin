@@ -27,6 +27,7 @@ InputState :: struct {
 	nav_up, nav_down:     bool, // arrow keys (menus)
 	nav_left, nav_right:  bool,
 	select:               int, // 1..9, or 0 for none
+	scroll:               f32, // accumulated mouse-wheel delta since last frame
 	quit:                 bool,
 	fb_w, fb_h:           i32,
 }
@@ -60,6 +61,10 @@ cursor_ndc :: proc() -> (f32, f32) {
 	nx := f32(g_input.mx) / f32(ww) * 2 - 1
 	ny := 1 - f32(g_input.my) / f32(wh) * 2
 	return nx, ny
+}
+
+scroll_cb :: proc "c" (win: glfw.WindowHandle, xoff, yoff: f64) {
+	g_input.scroll += f32(yoff)
 }
 
 mouse_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: c.int) {

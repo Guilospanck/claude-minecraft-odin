@@ -61,3 +61,4 @@ PLANKS       :: Tile{4, 3}
 STONE_BRICK  :: Tile{5, 3}
 BRICKS       :: Tile{6, 3}
 COBBLESTONE  :: Tile{7, 3}
+LADDER       :: Tile{8, 3} // sprite (transparent background)

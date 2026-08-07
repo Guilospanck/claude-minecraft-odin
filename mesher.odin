@@ -302,6 +302,52 @@ emit_fence :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int
 	}
 }
 
+// A chunky cobblestone wall: a thick central post plus a taller rail toward any
+// neighbouring wall or solid block, so a run of them reads as a connected wall.
+@(private = "file")
+emit_wall :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
+	con :: proc(nb: BlockId) -> bool {return nb == .Wall || (block_is_solid(nb) && block_is_opaque(nb))}
+	emit_box(arr, b, wx, wy, wz, 0.25, 0.75, 0, 1.0, 0.25, 0.75, bl) // post
+	if con(world_block(w, wx - 1, wy, wz)) do emit_box(arr, b, wx, wy, wz, 0, 0.5, 0.15, 0.85, 0.3, 0.7, bl)
+	if con(world_block(w, wx + 1, wy, wz)) do emit_box(arr, b, wx, wy, wz, 0.5, 1.0, 0.15, 0.85, 0.3, 0.7, bl)
+	if con(world_block(w, wx, wy, wz - 1)) do emit_box(arr, b, wx, wy, wz, 0.3, 0.7, 0.15, 0.85, 0, 0.5, bl)
+	if con(world_block(w, wx, wy, wz + 1)) do emit_box(arr, b, wx, wy, wz, 0.3, 0.7, 0.15, 0.85, 0.5, 1.0, bl)
+}
+
+// A thin translucent window pane: a central strip plus an arm toward any
+// neighbouring pane, glass, or solid block, so a row of panes joins into a
+// window. Emitted into the translucent pass by the caller.
+@(private = "file")
+emit_pane :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
+	con :: proc(nb: BlockId) -> bool {
+		return nb == .GlassPane || nb == .Glass || (block_is_solid(nb) && block_is_opaque(nb))
+	}
+	emit_box(arr, b, wx, wy, wz, 0.45, 0.55, 0, 1.0, 0.45, 0.55, bl) // center strip
+	if con(world_block(w, wx - 1, wy, wz)) do emit_box(arr, b, wx, wy, wz, 0, 0.5, 0, 1.0, 0.45, 0.55, bl)
+	if con(world_block(w, wx + 1, wy, wz)) do emit_box(arr, b, wx, wy, wz, 0.5, 1.0, 0, 1.0, 0.45, 0.55, bl)
+	if con(world_block(w, wx, wy, wz - 1)) do emit_box(arr, b, wx, wy, wz, 0.45, 0.55, 0, 1.0, 0, 0.5, bl)
+	if con(world_block(w, wx, wy, wz + 1)) do emit_box(arr, b, wx, wy, wz, 0.45, 0.55, 0, 1.0, 0.5, 1.0, bl)
+}
+
+// A wooden fence gate: two side posts and two horizontal rails spanning the
+// axis that has fence/wall/gate neighbours (defaults to the x axis otherwise).
+@(private = "file")
+emit_gate :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl: f32) {
+	con :: proc(nb: BlockId) -> bool {return nb == .Fence || nb == .Wall || nb == .FenceGate}
+	z_axis := con(world_block(w, wx, wy, wz - 1)) || con(world_block(w, wx, wy, wz + 1))
+	if z_axis {
+		emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0.15, 0.9, 0, 0.15, bl) // post
+		emit_box(arr, b, wx, wy, wz, 0.4, 0.6, 0.15, 0.9, 0.85, 1.0, bl) // post
+		emit_box(arr, b, wx, wy, wz, 0.42, 0.58, 0.3, 0.45, 0, 1.0, bl) // rail
+		emit_box(arr, b, wx, wy, wz, 0.42, 0.58, 0.6, 0.75, 0, 1.0, bl) // rail
+	} else {
+		emit_box(arr, b, wx, wy, wz, 0, 0.15, 0.15, 0.9, 0.4, 0.6, bl) // post
+		emit_box(arr, b, wx, wy, wz, 0.85, 1.0, 0.15, 0.9, 0.4, 0.6, bl) // post
+		emit_box(arr, b, wx, wy, wz, 0, 1.0, 0.3, 0.45, 0.42, 0.58, bl) // rail
+		emit_box(arr, b, wx, wy, wz, 0, 1.0, 0.6, 0.75, 0.42, 0.58, bl) // rail
+	}
+}
+
 mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 	md: MeshData
 	md.opaque = make([dynamic]Vertex, 0, 4096)
@@ -336,6 +382,21 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				if b == .Fence {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
 					emit_fence(w, &md.opaque, b, wx, y, wz, bl)
+					continue
+				}
+				if b == .Wall {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_wall(w, &md.opaque, b, wx, y, wz, bl)
+					continue
+				}
+				if b == .FenceGate {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_gate(w, &md.opaque, b, wx, y, wz, bl)
+					continue
+				}
+				if b == .GlassPane {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_pane(w, &md.water, b, wx, y, wz, bl) // translucent pass
 					continue
 				}
 				if b == .Stair {

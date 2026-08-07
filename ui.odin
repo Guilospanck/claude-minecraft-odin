@@ -18,6 +18,18 @@ InvTab :: enum {
 INV_TAB_COUNT :: len(InvTab)
 g_inv_tab: InvTab
 
+// Craft tab shows a scrollable window into RECIPES (the list outgrew the screen
+// once building blocks were added). g_craft_scroll is the index of the top
+// visible recipe; the mouse wheel moves it (see main loop).
+CRAFT_VISIBLE :: 11
+g_craft_scroll: int
+
+craft_scroll_clamp :: proc() {
+	maxs := max(0, len(RECIPES) - CRAFT_VISIBLE)
+	if g_craft_scroll < 0 do g_craft_scroll = 0
+	if g_craft_scroll > maxs do g_craft_scroll = maxs
+}
+
 @(private = "file")
 inv_tab_name :: proc(t: InvTab) -> string {
 	switch t {
@@ -212,12 +224,19 @@ ui_draw_settings :: proc(fbw, fbh: int) {
 @(private = "file")
 ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
 	sw := ch_h / aspect * 1.3
+	craft_scroll_clamp()
+	lo := g_craft_scroll
+	hi := min(len(RECIPES), lo + CRAFT_VISIBLE)
 	y := top
-	for i in 0 ..< len(RECIPES) {
+	if lo > 0 do text_draw("^ scroll up", -0.86, top + ch_h * 1.6, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.8, 0.9, 1})
+	for i in lo ..< hi {
 		r := RECIPES[i]
 		afford: f32 = recipe_can_make(p, w, r) ? 1.0 : 0.35
 		x: f32 = -0.86
-		text_draw(fmt.tprintf("%d", i + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, afford})
+		// number label only for the first 9 visible rows (keys 1-9 map to them)
+		if i - lo < 9 {
+			text_draw(fmt.tprintf("%d", i - lo + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, afford})
+		}
 		x += ch_w * 2.2
 		for j in 0 ..< r.n_in {
 			ing := r.inputs[j]
@@ -242,6 +261,7 @@ ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
 		)
 		y -= ch_h * 2.1
 	}
+	if hi < len(RECIPES) do text_draw("v scroll down", -0.86, y + ch_h * 0.4, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.8, 0.9, 1})
 }
 
 // One Minecraft-style slot: bordered square, a real block texture (or a flat
@@ -525,8 +545,10 @@ CRAFT_ROW_CH_H :: f32(0.045 * 0.95)
 inv_hit_craft_row :: proc(nx, ny: f32) -> int {
 	top := f32(0.66)
 	spacing := CRAFT_ROW_CH_H * 2.1
-	for i in 0 ..< len(RECIPES) {
-		y := top - f32(i) * spacing
+	craft_scroll_clamp()
+	hi := min(len(RECIPES), g_craft_scroll + CRAFT_VISIBLE)
+	for i in g_craft_scroll ..< hi {
+		y := top - f32(i - g_craft_scroll) * spacing
 		if nx >= -0.88 && nx <= 0.78 && ny <= y + CRAFT_ROW_CH_H * 0.4 && ny >= y - CRAFT_ROW_CH_H * 1.3 {
 			return i
 		}

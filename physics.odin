@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "vendor:glfw"
 
 @(private = "file")
 EPS :: f32(0.001)
@@ -89,6 +90,16 @@ player_in_water :: proc(w: ^World, pos: Vec3) -> bool {
 	)
 }
 
+// True when the player's body shares a cell with a ladder, so they can climb.
+player_on_ladder :: proc(w: ^World, pos: Vec3) -> bool {
+	x := int(math.floor(pos.x))
+	z := int(math.floor(pos.z))
+	for dy in ([?]f32{0.2, 1.0, 1.6}) {
+		if world_block(w, x, int(math.floor(pos.y + dy)), z) == .Ladder do return true
+	}
+	return false
+}
+
 physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.fly {
 		// Fly with no gravity but still collide with solid blocks, so you can't
@@ -110,6 +121,21 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 		if p.vel.y < -3 do p.vel.y = -3 // slow sink
 		if p.vel.y > 5 do p.vel.y = 5
 		p.fall_speed = 0 // splashing down never hurts
+		return
+	}
+
+	if !p.fly && player_on_ladder(w, p.pos) {
+		// Climb the rungs: space goes up, shift goes down, otherwise slide
+		// gently. Directly driving vel.y (no gravity) means no fall on release.
+		if glfw.GetKey(g_win, glfw.KEY_SPACE) == glfw.PRESS {
+			p.vel.y = 3.5
+		} else if glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS {
+			p.vel.y = -3.5
+		} else {
+			p.vel.y = -1.2
+		}
+		p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt, 0.0)
+		p.fall_speed = 0
 		return
 	}
 

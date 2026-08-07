@@ -60,6 +60,10 @@ BlockId :: enum u8 {
 	StoneBrick,
 	Bricks,
 	Cobblestone,
+	GlassPane, // thin translucent window panel (connects to neighbours)
+	Ladder, // climbable sprite lattice
+	Wall, // chunky cobblestone wall (connects to neighbours)
+	FenceGate, // wooden gate bar (orients to fence/wall neighbours)
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -101,7 +105,8 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	     .FlowerWhite,
 	     .TallGrass,
 	     .Fern,
-	     .DeadBush:
+	     .DeadBush,
+	     .Ladder:
 		return true
 	}
 	return false
@@ -151,7 +156,7 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch:
+	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Ladder:
 		return false
 	}
 	if block_is_plant(b) || block_is_item(b) do return false
@@ -161,7 +166,21 @@ block_is_solid :: proc(b: BlockId) -> bool {
 // Fully occludes a neighbouring face (used for face culling + AO sampling).
 block_is_opaque :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Glass, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Door, .Fence, .Stair:
+	case .Air,
+	     .Water,
+	     .Glass,
+	     .Portal,
+	     .Wheat1,
+	     .Wheat2,
+	     .Wheat3,
+	     .Torch,
+	     .Door,
+	     .Fence,
+	     .Stair,
+	     .GlassPane,
+	     .Ladder,
+	     .Wall,
+	     .FenceGate:
 		return false
 	}
 	if block_is_plant(b) do return false
@@ -170,7 +189,7 @@ block_is_opaque :: proc(b: BlockId) -> bool {
 
 // Drawn in the translucent pass (blended, no depth write).
 block_is_translucent :: proc(b: BlockId) -> bool {
-	return b == .Water || b == .Glass || b == .Portal
+	return b == .Water || b == .Glass || b == .Portal || b == .GlassPane
 }
 
 // Should a face of `cur` against neighbour `nb` be emitted?
@@ -294,6 +313,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.BRICKS
 	case .Cobblestone:
 		return ad.COBBLESTONE
+	case .GlassPane:
+		return ad.GLASS
+	case .Ladder:
+		return ad.LADDER
+	case .Wall:
+		return ad.COBBLESTONE
+	case .FenceGate:
+		return ad.PLANKS
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -407,6 +434,14 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.62, 0.30, 0.24}
 	case .Cobblestone:
 		return {0.44, 0.44, 0.46}
+	case .GlassPane:
+		return {0.70, 0.85, 0.95}
+	case .Ladder:
+		return {0.55, 0.40, 0.22}
+	case .Wall:
+		return {0.44, 0.44, 0.46}
+	case .FenceGate:
+		return {0.55, 0.40, 0.24}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -521,6 +556,14 @@ block_name :: proc(b: BlockId) -> string {
 		return "Bricks"
 	case .Cobblestone:
 		return "Cobblestone"
+	case .GlassPane:
+		return "Glass Pane"
+	case .Ladder:
+		return "Ladder"
+	case .Wall:
+		return "Cobblestone Wall"
+	case .FenceGate:
+		return "Fence Gate"
 	}
 	return "?"
 }

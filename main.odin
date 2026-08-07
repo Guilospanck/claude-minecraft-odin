@@ -522,6 +522,38 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_TRIM builds a little scene ahead showing the connecting trim
+	// pieces (wall run, glass-pane window in a brick frame, fence gate between
+	// fences, ladder up a wall) so their join logic is visible in one shot.
+	if os.get_env("MC_TRIM", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 5
+		by := int(base.y) + 1
+		set :: proc(w: ^World, o, r, f: Vec3, rr, ff: f32, y: int, b: BlockId) {
+			p := o + r * rr + f * ff
+			bx, bz := int(p.x), int(p.z)
+			world_ensure_chunk(w, world_chunk_at(w, bx, bz))
+			world_set_block(w, bx, y, bz, b)
+		}
+		// wall run
+		for i in 0 ..< 4 do set(&world, base, right, fwd, f32(i - 3), 0, by, .Wall)
+		// brick-framed glass-pane window
+		for i in 0 ..< 4 {
+			set(&world, base, right, fwd, f32(i + 1), 0, by, i == 0 || i == 3 ? .Bricks : .GlassPane)
+			set(&world, base, right, fwd, f32(i + 1), 0, by + 1, i == 0 || i == 3 ? .Bricks : .GlassPane)
+		}
+		// fence | gate | fence
+		set(&world, base, right, fwd, -1, 2, by, .Fence)
+		set(&world, base, right, fwd, 0, 2, by, .FenceGate)
+		set(&world, base, right, fwd, 1, 2, by, .Fence)
+		// ladder up a stone-brick column
+		for h in 0 ..< 4 {
+			set(&world, base, right, fwd, 3, 3, by + h, .StoneBrick)
+			set(&world, base, right, fwd, 3, 2, by + h, .Ladder)
+		}
+	}
+
 	// Debug: MC_AQUA floods a big pool ahead and spawns one of every aquatic
 	// mob inside it, then submerges the camera to view them (like MC_FISH but
 	// for the full aquatic roster).
@@ -1093,8 +1125,13 @@ main :: proc() {
 						if right_press do inv_rclick_slot(&player, slot)
 					}
 				case .Craft:
+					if g_input.scroll != 0 {
+						g_craft_scroll -= int(g_input.scroll) // wheel up -> earlier recipes
+						craft_scroll_clamp()
+					}
+					// keys 1-9 map to the first 9 currently-visible rows
 					if g_input.select > 0 {
-						recipe_try(&player, cur, g_input.select - 1)
+						recipe_try(&player, cur, g_craft_scroll + g_input.select - 1)
 					}
 					if ui_click {
 						mnx, mny := cursor_ndc()
@@ -1116,8 +1153,15 @@ main :: proc() {
 				}
 			}
 			g_input.select = 0
+			g_input.scroll = 0
 		} else {
 			process_input(&player, dt)
+				// mouse wheel cycles the hotbar selection, like Minecraft
+				if g_input.scroll != 0 {
+					step := g_input.scroll > 0 ? -1 : 1
+					player.selected_slot = (player.selected_slot + step + HOTBAR_SLOTS) % HOTBAR_SLOTS
+					g_input.scroll = 0
+				}
 			physics_update(cur, &player, dt)
 			player_tick(cur, &player, dt)
 			handle_break_place(cur, &player, dt)

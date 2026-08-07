@@ -29,6 +29,10 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Stone, 4}, {}, {}}, n_in = 1, out = .Cobblestone, out_count = 4},
 	{inputs = {{.Cobblestone, 4}, {}, {}}, n_in = 1, out = .StoneBrick, out_count = 4},
 	{inputs = {{.Sand, 4}, {}, {}}, n_in = 1, out = .Bricks, out_count = 4, needs_furnace = true},
+	{inputs = {{.Glass, 6}, {}, {}}, n_in = 1, out = .GlassPane, out_count = 16},
+	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .Ladder, out_count = 4},
+	{inputs = {{.Cobblestone, 6}, {}, {}}, n_in = 1, out = .Wall, out_count = 6},
+	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .FenceGate, out_count = 2},
 }
 
 recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {

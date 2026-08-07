@@ -28,6 +28,7 @@ window_init :: proc(width, height: i32, title: cstring) -> glfw.WindowHandle {
 	glfw.SetKeyCallback(win, key_cb)
 	glfw.SetMouseButtonCallback(win, mouse_cb)
 	glfw.SetCursorPosCallback(win, cursor_cb)
+	glfw.SetScrollCallback(win, scroll_cb)
 	glfw.SetFramebufferSizeCallback(win, framebuffer_cb)
 
 	fbw, fbh := glfw.GetFramebufferSize(win)

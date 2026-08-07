@@ -306,6 +306,14 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					mortar \
 					? shade(Color{180, 168, 156, 255}, jitter(gx, gy, 6)) \
 					: shade(base, jitter(gx, gy, 10))
+			case "ladder":
+				c = Color{0, 0, 0, 0} // transparent (cutout sprite)
+				rail := px == 3 || px == 4 || px == 11 || px == 12
+				rung := (py % 4 == 1) && px >= 3 && px <= 12
+				if rail || rung {
+					c = shade(Color{132, 92, 46, 255}, jitter(gx, gy, 10))
+					c.a = 255
+				}
 			case "cobble":
 				// rounded cobbles: dark mortar where a cell hash dips low
 				h := (jitter(gx / 2 * 2, gy / 2 * 2, 100) + 100) % 10
@@ -385,6 +393,7 @@ main :: proc() {
 	paint(ad.STONE_BRICK, Color{118, 118, 124, 255}, "stone_brick")
 	paint(ad.BRICKS, Color{158, 78, 62, 255}, "bricks")
 	paint(ad.COBBLESTONE, Color{112, 112, 118, 255}, "cobble")
+	paint(ad.LADDER, Color{0, 0, 0, 0}, "ladder")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
