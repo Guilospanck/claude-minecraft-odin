@@ -33,8 +33,12 @@ wg_smoothstep :: proc(e0, e1, x: f32) -> f32 {
 // turning the narrow bell into a spread that actually reaches every biome band
 // at drive-through scale. Not file-private: tests exercise it directly.
 climate_spread :: proc(x: f32) -> f32 {
+	// Push bell-shaped fbm toward the extremes so snow/desert (the tails) aren't
+	// vanishingly rare, but not so hard that the temperate transition band
+	// collapses — a wider middle means biomes grade into each other over a
+	// longer walk instead of snapping from forest to snow in a block or two.
 	s: f32 = x < 0 ? -1 : 1
-	return clamp(s * math.pow(min(abs(x) * 2.3, 1.0), 0.72), -1, 1)
+	return clamp(s * math.pow(min(abs(x) * 1.95, 1.0), 0.82), -1, 1)
 }
 
 // Temperature + humidity for a column, as one shared function so the terrain
@@ -74,14 +78,32 @@ classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: in
 	if h <= SEA_LEVEL + 1 do return .Beach
 	if (pv > 0.55 && erosion_amp > 0.55) || h > SEA_LEVEL + 30 do return .Mountains
 
+	// Altitude cools the air: the higher a column sits above the coastal
+	// lowlands, the colder its effective temperature. This makes climate bands
+	// STACK with elevation — a temperate valley grades up through taiga into
+	// snowy highland instead of the biome flipping abruptly at a noise edge —
+	// and keeps snow off warm lowlands (near oceans/lagoons, which stay mild)
+	// unless the underlying climate is genuinely frigid. The adjustment is a
+	// smooth function of height, so neighbouring columns stay within a hair of
+	// each other and the temp-monotonic ordering (cold never borders hot) holds.
+	alt := max(0, h - (SEA_LEVEL + 8))
+	t := temp - f32(alt) * 0.010 // altitude-cooled effective temperature
+
+	// Proximity to water moderates climate: low-lying columns near the sea are
+	// pulled toward mild temperate (a maritime effect), so a coastline or lagoon
+	// grades gently into forest/plains instead of snapping straight to snow or
+	// desert at the water's edge. Fades out as the land rises inland.
+	maritime := clamp((f32(SEA_LEVEL + 8) - f32(h)) / 8.0, 0, 1) // 1 right at the shore .. 0 a few blocks inland
+	t *= 1 - 0.22 * maritime
+
 	// Low, very wet, and not cold: swamp (checked before the temp bands so it
 	// can claim wet lowlands out of what would otherwise be forest).
-	if temp > -0.3 && temp < 0.35 && moist > 0.5 && h < SEA_LEVEL + 6 do return .Swamp
+	if t > -0.3 && t < 0.35 && moist > 0.5 && h < SEA_LEVEL + 6 do return .Swamp
 
-	if temp < -0.35 { 	// frigid: only the coldest columns, split dry/wet
+	if t < -0.35 { 	// frigid: only the coldest columns, split dry/wet
 		return moist < 0.05 ? .Snow : .Taiga
 	}
-	if temp > 0.4 { 	// torrid
+	if t > 0.4 { 	// torrid
 		// Desert/Badlands share the hot+dry corner and split on ruggedness —
 		// a flatter (low-amplitude) area mesas into Badlands, rougher stays
 		// open Desert dunes.
@@ -89,7 +111,7 @@ classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: in
 		if moist < 0.15 do return .Savanna
 		return .Jungle
 	}
-	if temp < -0.1 { 	// cool temperate: flowery meadow when dry, else forest
+	if t < -0.1 { 	// cool temperate: flowery meadow when dry, else forest
 		return moist < -0.1 ? .Meadow : .Forest
 	}
 	// warm temperate

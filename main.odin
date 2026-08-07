@@ -314,6 +314,14 @@ main :: proc() {
 			b = .Meadow
 		case "taiga":
 			b = .Taiga
+		case "snow":
+			b = .Snow
+		case "desert":
+			b = .Desert
+		case "badlands":
+			b = .Badlands
+		case "mountains":
+			b = .Mountains
 		}
 		dev_teleport_biome(&world, &player, b)
 		player.pos.y += 6
