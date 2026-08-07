@@ -253,6 +253,16 @@ emit_door :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, d: Door, b
 	emit_box(arr, b, wx, wy, wz, x0, x1, 0, 0.95, z0, z1, bl)
 }
 
+// Which facing a stair placed while looking along `fwd` should take: the tall
+// half goes on the side the player is facing, so the step ascends in their look
+// direction. Not file-private: placement (player.odin) and tests use it.
+stair_facing_from_dir :: proc(fwd: Vec3) -> u8 {
+	if abs(fwd.x) > abs(fwd.z) {
+		return fwd.x > 0 ? 2 : 3
+	}
+	return fwd.z > 0 ? 0 : 1
+}
+
 // A stair: a full lower slab plus an upper half-block on the "tall" side. The
 // facing (0..3) says which side the tall half sits on, so the step you climb
 // faces the opposite way (see stair_facing use sites in village.odin).

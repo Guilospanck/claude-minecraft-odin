@@ -24,6 +24,7 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Wood, 1}, {}, {}}, n_in = 1, out = .Torch, out_count = 4},
 	{inputs = {{.Wood, 5}, {}, {}}, n_in = 1, out = .Bed, out_count = 1},
 	{inputs = {{.Wood, 8}, {}, {}}, n_in = 1, out = .Chest, out_count = 1},
+	{inputs = {{.Stone, 3}, {}, {}}, n_in = 1, out = .Stair, out_count = 4},
 }
 
 recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {

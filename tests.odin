@@ -266,6 +266,29 @@ test_place_block :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_place_stair_records_facing :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	chunk_set(c, 8, 12, 3, .Stone) // aim at this, place onto its -Z face
+	p: Player
+	player_init(&p, Vec3{8.5, 11.0, 8.5})
+	p.yaw = 0 // look toward -Z
+	p.pitch = 0
+	p.selected = .Stair
+	p.inventory = {}
+	p.inventory[.Stair] = 3
+
+	g_input = {}
+	g_input.place_req = true
+	handle_break_place(&w, &p, 0.016)
+	g_input = {}
+
+	testing.expect(t, world_block(&w, 8, 12, 4) == .Stair, "the stair was placed")
+	f, ok := w.stairs[Ivec3{8, 12, 4}]
+	testing.expect(t, ok && f == 1, "a stair placed looking -Z records facing 1")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }
@@ -1332,6 +1355,21 @@ test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
 	testing.expect(t, biome_build_mats(.Snow).roof == .Snow, "snow villages get white roofs")
 	testing.expect(t, biome_build_mats(.Desert).wall == .Sand, "desert villages get sand walls")
 	testing.expect(t, biome_build_mats(.Plains).roof == .Stone, "temperate villages keep stone roofs")
+}
+
+@(test)
+test_stairs_are_craftable :: proc(t: ^testing.T) {
+	found := false
+	for r in RECIPES do if r.out == .Stair {found = true}
+	testing.expect(t, found, "there is a recipe that outputs stairs")
+}
+
+@(test)
+test_stair_facing_from_look_direction :: proc(t: ^testing.T) {
+	testing.expect(t, stair_facing_from_dir(Vec3{1, 0, 0}) == 2, "looking +X: tall half on +X")
+	testing.expect(t, stair_facing_from_dir(Vec3{-1, 0, 0}) == 3, "looking -X: tall half on -X")
+	testing.expect(t, stair_facing_from_dir(Vec3{0, 0, 1}) == 0, "looking +Z: tall half on +Z")
+	testing.expect(t, stair_facing_from_dir(Vec3{-0.2, -0.5, -1}) == 1, "look dir picks the dominant horizontal axis")
 }
 
 @(test)

@@ -361,6 +361,7 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 		return
 	}
 	if broken == .Chest do chest_break(w, p, Ivec3{bx, by, bz}) // recover contents first
+	if broken == .Stair do delete_key(&w.stairs, Ivec3{bx, by, bz}) // drop its stored facing
 	world_set_block(w, bx, by, bz, .Air)
 	net_send_edit(bx, by, bz, .Air, w.dimension)
 	particle_spawn_break(&w.particles, broken, bx, by, bz)
@@ -437,6 +438,10 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		   !block_hits_player(p, tx, ty, tz) &&
 		   p.inventory[p.selected] > 0 {
 			world_set_block(w, tx, ty, tz, p.selected)
+			// Stairs are oriented by the direction the player is looking.
+			if p.selected == .Stair {
+				w.stairs[Ivec3{tx, ty, tz}] = stair_facing_from_dir(dir)
+			}
 			net_send_edit(tx, ty, tz, p.selected, w.dimension)
 			p.inventory[p.selected] -= 1
 			audio_play(.Place)
