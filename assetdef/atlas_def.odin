@@ -57,3 +57,7 @@ COOKED_FOOD  :: Tile{0, 3} // item icon
 BREAD        :: Tile{1, 3} // item icon
 WHEAT_ITEM   :: Tile{2, 3} // item icon
 SEEDS        :: Tile{3, 3} // item icon
+PLANKS       :: Tile{4, 3}
+STONE_BRICK  :: Tile{5, 3}
+BRICKS       :: Tile{6, 3}
+COBBLESTONE  :: Tile{7, 3}

@@ -54,6 +54,12 @@ BlockId :: enum u8 {
 	Bread,
 	Wheat, // harvested crop item (Wheat1..3 are the growing block stages)
 	Seeds,
+	// Building blocks (craftable, placeable) — appended at the end so existing
+	// block ids stay stable across saves.
+	Planks,
+	StoneBrick,
+	Bricks,
+	Cobblestone,
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -280,6 +286,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.WHEAT_ITEM
 	case .Seeds:
 		return ad.SEEDS
+	case .Planks:
+		return ad.PLANKS
+	case .StoneBrick:
+		return ad.STONE_BRICK
+	case .Bricks:
+		return ad.BRICKS
+	case .Cobblestone:
+		return ad.COBBLESTONE
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -385,6 +399,14 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.82, 0.70, 0.28}
 	case .Seeds:
 		return {0.55, 0.62, 0.30}
+	case .Planks:
+		return {0.62, 0.46, 0.26}
+	case .StoneBrick:
+		return {0.46, 0.46, 0.48}
+	case .Bricks:
+		return {0.62, 0.30, 0.24}
+	case .Cobblestone:
+		return {0.44, 0.44, 0.46}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -491,6 +513,14 @@ block_name :: proc(b: BlockId) -> string {
 		return "Wheat"
 	case .Seeds:
 		return "Seeds"
+	case .Planks:
+		return "Planks"
+	case .StoneBrick:
+		return "Stone Bricks"
+	case .Bricks:
+		return "Bricks"
+	case .Cobblestone:
+		return "Cobblestone"
 	}
 	return "?"
 }

@@ -282,6 +282,37 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(Color{255, 208, 92, 255}, jitter(gx, gy, 12))
 					c.a = 255
 				}
+			case "planks":
+				// horizontal plank boards separated by dark seams
+				seam := (py % 5 == 0) || (px == 0)
+				nail := (py % 5 == 2) && (px == 2 || px == 13)
+				if nail {
+					c = Color{60, 42, 24, 255}
+				} else {
+					c = shade(base, jitter(gx, gy, 8) + (seam ? -30 : 6))
+				}
+			case "stone_brick":
+				// grey brick courses, offset every other row, pale mortar
+				row := py / 4
+				offset := (row % 2) * 4
+				mortar := (py % 4 == 0) || ((px + offset) % 8 == 0)
+				c = shade(base, jitter(gx, gy, 8) + (mortar ? 26 : -6))
+			case "bricks":
+				// red bricks with light mortar lines, running-bond offset
+				row := py / 4
+				offset := (row % 2) * 4
+				mortar := (py % 4 == 0) || ((px + offset) % 8 == 0)
+				c =
+					mortar \
+					? shade(Color{180, 168, 156, 255}, jitter(gx, gy, 6)) \
+					: shade(base, jitter(gx, gy, 10))
+			case "cobble":
+				// rounded cobbles: dark mortar where a cell hash dips low
+				h := (jitter(gx / 2 * 2, gy / 2 * 2, 100) + 100) % 10
+				c =
+					h < 3 \
+					? shade(Color{70, 70, 74, 255}, jitter(gx, gy, 8)) \
+					: shade(base, jitter(gx, gy, 14))
 			case:
 				// plain grain (already applied)
 			}
@@ -350,6 +381,10 @@ main :: proc() {
 	paint(ad.BREAD, Color{0, 0, 0, 0}, "bread")
 	paint(ad.WHEAT_ITEM, Color{0, 0, 0, 0}, "wheat_item")
 	paint(ad.SEEDS, Color{0, 0, 0, 0}, "seeds")
+	paint(ad.PLANKS, Color{158, 118, 68, 255}, "planks")
+	paint(ad.STONE_BRICK, Color{118, 118, 124, 255}, "stone_brick")
+	paint(ad.BRICKS, Color{158, 78, 62, 255}, "bricks")
+	paint(ad.COBBLESTONE, Color{112, 112, 118, 255}, "cobble")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

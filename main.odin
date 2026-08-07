@@ -507,6 +507,21 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_MATS places a row of the craftable building blocks ahead at
+	// eye level, for screenshotting the new textures without crafting them.
+	if os.get_env("MC_MATS", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 4
+		mats := [4]BlockId{.Planks, .Cobblestone, .StoneBrick, .Bricks}
+		for i in 0 ..< 4 {
+			bp := base + Vec3{0, 2, 0} + right * (f32(i) - 1.5) * 1.4
+			bx, by, bz := int(bp.x), int(bp.y), int(bp.z)
+			world_ensure_chunk(&world, world_chunk_at(&world, bx, bz))
+			world_set_block(&world, bx, by, bz, mats[i])
+		}
+	}
+
 	// Debug: MC_AQUA floods a big pool ahead and spawns one of every aquatic
 	// mob inside it, then submerges the camera to view them (like MC_FISH but
 	// for the full aquatic roster).
