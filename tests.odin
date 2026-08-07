@@ -941,6 +941,8 @@ test_biome_precip_follows_biome_and_level :: proc(t: ^testing.T) {
 	testing.expect(t, biome_precip(.Forest, 2) == .Rain, "a normal spell rains")
 	testing.expect(t, biome_precip(.Forest, 3) == .Thunder, "a heavy spell thunders")
 	testing.expect(t, biome_precip(.Jungle, 2) == .Rain, "jungle gets rain")
+	testing.expect(t, biome_precip(.Swamp, 1) == .Fog, "a light spell fogs the swamp")
+	testing.expect(t, biome_precip(.Jungle, 1) == .Fog, "a light spell fogs the jungle")
 	// cold biomes snow, and hail in a heavy storm
 	testing.expect(t, biome_precip(.Snow, 2) == .Snow, "cold biomes get snow")
 	testing.expect(t, biome_precip(.Taiga, 1) == .Snow, "taiga gets snow")

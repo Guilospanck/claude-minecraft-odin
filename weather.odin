@@ -25,6 +25,7 @@ Precip :: enum {
 	Snow, // cold, light/normal: fat drifting flakes
 	Hail, // cold, heavy: small fast icy pellets
 	Sandstorm, // desert, heavy: sand blown near-horizontal in a tan haze
+	Fog, // swamp/jungle, light: a thick humid mist that drops visibility
 }
 
 // What precipitation a biome gets during a wet spell of a given intensity
@@ -35,6 +36,11 @@ biome_precip :: proc(b: Biome, level: int = 2) -> Precip {
 		return level >= 3 ? .Hail : .Snow // cold: snow, or hail in a heavy storm
 	case .Desert, .Badlands:
 		return level >= 2 ? .Sandstorm : .None // deserts kick up sand only in strong spells
+	case .Swamp, .Jungle:
+		// humid country: a light spell rolls in as a fog bank; stronger spells
+		// still rain and thunder like the rest of the temperate band.
+		if level <= 1 do return .Fog
+		return level == 2 ? .Rain : .Thunder
 	}
 	// temperate country: drizzle -> rain -> thunderstorm as the storm intensifies
 	switch {
@@ -160,6 +166,8 @@ precip_style :: proc(kind: Precip) -> PrecipStyle {
 		return {10, -17, 0.8, 0.9, 0.055, {0.86, 0.92, 0.98}, false}
 	case .Sandstorm:
 		return {16, -2, 2.6, 0.8, 0.07, {0.78, 0.64, 0.38}, true}
+	case .Fog:
+		return {4, -0.5, 1.0, 2.6, 0.05, {0.82, 0.86, 0.82}, true} // slow pale mist motes
 	case .None:
 		return {}
 	}
@@ -172,8 +180,9 @@ precip_style :: proc(kind: Precip) -> PrecipStyle {
 precip_particles_spawn :: proc(ps: ^[dynamic]Particle, center: Vec3, kind: Precip, wind_x, wind_z: f32) {
 	if kind == .None do return
 	s := precip_style(kind)
+	misty := kind == .Fog // fog motes drift at eye level instead of falling
 	for _ in 0 ..< s.count {
-		y_off := s.spawn_low ? rng_range(0.5, 5.0) : rng_range(10, 16)
+		y_off := (s.spawn_low || misty) ? rng_range(0.5, 5.0) : rng_range(10, 16)
 		append(
 			ps,
 			Particle {
@@ -182,6 +191,7 @@ precip_particles_spawn :: proc(ps: ^[dynamic]Particle, center: Vec3, kind: Preci
 				max_life = s.life,
 				color = s.color,
 				size = s.size,
+				float = misty,
 			},
 		)
 	}

@@ -269,6 +269,11 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 			fog_start *= 0.6
 			fog_end *= 0.6
 			ambient *= 0.92
+		case .Fog:
+			fog_col = fog_col * 0.35 + Vec3{0.74, 0.80, 0.74} * 0.65 // pale grey-green murk
+			fog_start *= 0.22
+			fog_end *= 0.28 // a thick bank: can only see a short way
+			ambient *= 0.88
 		case:
 			// rain family (drizzle/rain/thunder): grey overcast haze
 			fog_col = fog_col * 0.55 + Vec3{0.5, 0.54, 0.58} * 0.45

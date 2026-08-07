@@ -779,7 +779,10 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					)
 				}
 			case .Swamp:
-				if grass && site_ok && r < 16 {
+				// humid ground pools with standing marsh water on flat spots
+				if grass && site_ok && (hsh >> 26) % 100 < 26 {
+					chunk_set(c, lx, surf_y, lz, .Water)
+				} else if grass && site_ok && r < 16 {
 					k := pick_tree(hsh, {.Willow, .Willow, .Oak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th % 2), k)
 				} else if grass && r < 70 {
@@ -825,8 +828,10 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					)
 				}
 			case .Jungle:
-				// Dense, tall canopy over a lush understorey.
-				if grass && site_ok && r < 58 {
+				// Dense, tall canopy over a lush understorey, with the odd pool.
+				if grass && site_ok && (hsh >> 26) % 100 < 8 {
+					chunk_set(c, lx, surf_y, lz, .Water)
+				} else if grass && site_ok && r < 58 {
 					k := pick_tree(hsh, {.BigOak, .Oak, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 7 + th), k)
 				} else if grass && r < 90 {
