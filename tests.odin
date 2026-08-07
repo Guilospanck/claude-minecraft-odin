@@ -309,6 +309,28 @@ test_portal_is_walk_through :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_portal_reused_not_duplicated :: proc(t: ^testing.T) {
+	nw: World
+	world_init(&nw, 313, .Nether)
+	count_portals :: proc(w: ^World) -> int {
+		n := 0
+		for cz in -2 ..= 2 do for cx in -2 ..= 2 do world_ensure_chunk(w, Ivec2{cx, cz})
+		for z in -24 ..< 24 do for x in -24 ..< 24 do for y in 1 ..< CHUNK_H {
+			if world_block(w, x, y, z) == .Portal do n += 1
+		}
+		return n
+	}
+
+	dest := portal_destination(&nw, 4, 4) // builds the first portal
+	first := count_portals(&nw)
+	testing.expect(t, first > 0, "a portal was built the first time")
+
+	// Coming back to a spot near that portal must REUSE it, not stamp a new one.
+	_ = portal_destination(&nw, int(dest.x), int(dest.z))
+	testing.expect(t, count_portals(&nw) == first, "no duplicate portal is built near an existing one")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }

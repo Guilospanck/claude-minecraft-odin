@@ -58,7 +58,10 @@ toast_draw :: proc(fbw, fbh: int) {
 	pady: f32 = 0.02
 	rise := (1 - clamp(elapsed / 0.22, 0, 1)) * 0.03 // small upward slide-in
 	y := TOAST_Y - rise
-	cy := y + ch_h * 0.5 // vertical centre of the text
+	// text_draw fills [y-ch_h, y] vertically (glyphs hang below the baseline),
+	// so the text's true centre is y - ch_h/2 — the plate must sit there or it
+	// floats above the text and clips the bottom of the letters.
+	cy := y - ch_h * 0.5
 	hw := w * 0.5 + padx
 	hh := ch_h * 0.5 + pady
 	bx := 0.006 / aspect // border thickness, aspect-corrected so it's even all round

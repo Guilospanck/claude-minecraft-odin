@@ -43,9 +43,61 @@ player_in_lava :: proc(w: ^World, pos: Vec3) -> bool {
 	)
 }
 
+// The nearest existing portal to (x,z) in `w` within `radius`, as the bottom
+// interior block (the walk-in spot). Used so travelling back doesn't stamp a
+// fresh portal every trip when one is already right there.
+PORTAL_REUSE_RADIUS :: 10
+@(private = "file")
+find_portal_near :: proc(w: ^World, x, z, radius: int) -> (px, py, pz: int, ok: bool) {
+	for cz in floor_div(z - radius, CHUNK_D) ..= floor_div(z + radius, CHUNK_D) {
+		for cx in floor_div(x - radius, CHUNK_W) ..= floor_div(x + radius, CHUNK_W) {
+			world_ensure_chunk(w, Ivec2{cx, cz})
+		}
+	}
+	best := radius * radius + 1
+	for dz in -radius ..= radius {
+		for dx in -radius ..= radius {
+			d := dx * dx + dz * dz
+			if d >= best do continue
+			cx, cz := x + dx, z + dz
+			for y := CHUNK_H - 2; y >= 2; y -= 1 {
+				if world_block(w, cx, y, cz) == .Portal {
+					// walk down to the bottom interior block (the entry level)
+					by := y
+					for world_block(w, cx, by - 1, cz) == .Portal do by -= 1
+					px, py, pz, ok, best = cx, by, cz, true, d
+					break
+				}
+			}
+		}
+	}
+	return
+}
+
+// A safe standing spot beside an already-built portal in `w`: two blocks out on
+// whichever face (±z) is clear, so you land facing it without re-entering.
+@(private = "file")
+portal_landing :: proc(w: ^World, px, py, pz: int) -> Vec3 {
+	for dz in ([?]int{2, -2}) {
+		lz := pz + dz
+		if !block_is_solid(world_block(w, px, py, lz)) &&
+		   !block_is_solid(world_block(w, px, py + 1, lz)) {
+			if !block_is_solid(world_block(w, px, py - 1, lz)) {
+				world_set_block(w, px, py - 1, lz, .Obsidian) // guarantee a floor
+			}
+			return Vec3{f32(px) + 0.5, f32(py), f32(lz) + 0.5}
+		}
+	}
+	return Vec3{f32(px) + 0.5, f32(py), f32(pz + 2) + 0.5}
+}
+
 // Ensure a return portal exists in `w` near (x,z) and return a safe spot beside
-// it (2 blocks in front so you don't immediately re-enter).
+// it. Reuses an existing nearby portal instead of building a new one, so
+// round-tripping doesn't litter the world with duplicates.
 portal_destination :: proc(w: ^World, x, z: int) -> Vec3 {
+	if px, py, pz, ok := find_portal_near(w, x, z, PORTAL_REUSE_RADIUS); ok {
+		return portal_landing(w, px, py, pz)
+	}
 	// Ensure every chunk the frame + landing can touch (x..x+3, z..z+3), so no
 	// write lands in an unloaded chunk and gets silently dropped.
 	for cz in floor_div(z, CHUNK_D) ..= floor_div(z + 3, CHUNK_D) {

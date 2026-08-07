@@ -799,9 +799,10 @@ main :: proc() {
 		g_input.eat = true
 	}
 
-	// Debug: MC_TOAST shows a sample on-screen action-bar message.
-	if os.get_env("MC_TOAST", context.temp_allocator) != "" {
-		toast_show("GOOD MORNING - SPAWN POINT SET")
+	// Debug: MC_TOAST shows an action-bar message (MC_TOAST=<text>, or "1" for a
+	// default sample) so the plate sizing can be eyeballed.
+	if s := os.get_env("MC_TOAST", context.temp_allocator); s != "" {
+		toast_show(s == "1" ? "GOOD MORNING - SPAWN POINT SET" : s)
 	}
 
 	// Debug UI screenshots.
