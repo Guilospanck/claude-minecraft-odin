@@ -1339,12 +1339,13 @@ test_generate_house_places_walls_door_and_hollow_interior :: proc(t: ^testing.T)
 	testing.expect(t, chunk_get(c, 2, 40, 2) == .Stone, "wall corner starts with a stone foundation")
 	testing.expect(t, chunk_get(c, 2, 41, 2) == .Wood, "wall corner continues in wood above the foundation")
 	// interior is hollowed out, not solid wood
-	testing.expect(t, chunk_get(c, 4, 40, 4) == .Planks, "the interior floor is planks")
-	testing.expect(t, block_is_carpet(chunk_get(c, 4, 41, 4)), "a carpet rug sits on the floor")
-	testing.expect(t, chunk_get(c, 4, 42, 4) == .Air, "the interior is hollow above the floor")
+	testing.expect(t, chunk_get(c, 4, 39, 4) == .Planks, "the floor is planks, flush with outside ground")
+	testing.expect(t, block_is_carpet(chunk_get(c, 4, 40, 4)), "a carpet rug sits at walk level")
+	testing.expect(t, chunk_get(c, 4, 41, 4) == .Air, "the interior is hollow above the floor")
 	// a door sits in the middle of the south wall, with headroom above it
 	testing.expect(t, chunk_get(c, 4, 40, 2) == .Door, "a door opening exists in the south wall")
 	testing.expect(t, chunk_get(c, 4, 41, 2) == .Air, "there's headroom above the door")
+	testing.expect(t, chunk_get(c, 4, 42, 2) == .Air, "the doorway is two cells tall")
 	_, ok := w.doors[Ivec3{4, 40, 2}]
 	testing.expect(t, ok, "the placed door is registered in w.doors")
 	// the tapering roof starts right above the walls, centred on the house

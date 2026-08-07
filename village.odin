@@ -100,7 +100,10 @@ vstair :: proc(b: ^VBrush, wx, wy, wz: int, facing: u8) {
 vdoor :: proc(b: ^VBrush, wx, wy, wz: int, facing: int) {
 	if lx, lz, ok := in_chunk(b, wx, wz); ok {
 		chunk_set(b.c, lx, wy, lz, .Door)
+		// clear TWO cells above the sill so a full-height body fits through the
+		// doorway (a 1-cell opening leaves the head clipping the lintel).
 		if wy + 1 < CHUNK_H do chunk_set(b.c, lx, wy + 1, lz, .Air)
+		if wy + 2 < CHUNK_H do chunk_set(b.c, lx, wy + 2, lz, .Air)
 		b.w.doors[Ivec3{wx, wy, wz}] = Door{facing = facing, open = false}
 	}
 }
@@ -186,8 +189,10 @@ build_house :: proc(b: ^VBrush, ox, oz, base_y, variant: int, mats: BuildMats) {
 			for dy in 0 ..< HEIGHT {
 				vset(b, ox + dx, base_y + dy, oz + dz, .Air)
 			}
-			vset(b, ox + dx, base_y, oz + dz, .Planks) // plank floor
-			vset(b, ox + dx, base_y + 1, oz + dz, rug) // rug on the floor
+			// floor sits one below base_y so the interior is FLUSH with the
+			// ground outside (a floor at base_y makes the doorway a step up).
+			vset(b, ox + dx, base_y - 1, oz + dz, .Planks)
+			vset(b, ox + dx, base_y, oz + dz, rug) // rug at walk level
 		}
 	}
 
@@ -247,11 +252,13 @@ build_bighouse :: proc(b: ^VBrush, ox, oz, base_y, variant: int, mats: BuildMats
 	for dx in 1 ..< SIZE - 1 {
 		for dz in 1 ..< SIZE - 1 {
 			for dy in 0 ..< HEIGHT do vset(b, ox + dx, base_y + dy, oz + dz, .Air)
-			vset(b, ox + dx, base_y, oz + dz, .Planks) // ground floor
+			vset(b, ox + dx, base_y - 1, oz + dz, .Planks) // ground floor (flush outside)
 			vset(b, ox + dx, base_y + 3, oz + dz, .Planks) // upper floor
 		}
 	}
-	vset(b, ox + 1, base_y + 3, oz + 1, .Air) // stairwell hole to the upper floor
+	// stairwell: a hole in the upper floor with a ladder climbing up to it
+	vset(b, ox + 1, base_y + 3, oz + 1, .Air)
+	for h in 1 ..= 3 do vset(b, ox + 1, base_y + h, oz + 2, .Ladder)
 	// flat roof + parapet
 	for dx in 0 ..< SIZE {
 		for dz in 0 ..< SIZE do vset(b, ox + dx, base_y + HEIGHT, oz + dz, mats.roof)
@@ -296,7 +303,7 @@ build_church :: proc(b: ^VBrush, ox, oz, base_y: int) {
 	for dx in 1 ..< SIZE - 1 {
 		for dz in 1 ..< SIZE - 1 {
 			for dy in 0 ..< HEIGHT do vset(b, ox + dx, base_y + dy, oz + dz, .Air)
-			vset(b, ox + dx, base_y, oz + dz, .StoneBrick) // tiled nave floor
+			vset(b, ox + dx, base_y - 1, oz + dz, .StoneBrick) // tiled nave floor (flush)
 		}
 	}
 	eave_y := base_y + HEIGHT
@@ -323,8 +330,9 @@ build_church :: proc(b: ^VBrush, ox, oz, base_y: int) {
 	vfence_ring(b, ox - 1, oz - 1, SIZE + 2, base_y, cx, oz - 1)
 }
 
-// An open-fronted smithy: cobblestone walls, a lava-lit forge behind glass, a
-// furnace and a chest, and a low chimney. The village Blacksmith works here.
+// A walled smithy you can walk into: cobblestone walls with a door, a
+// glowstone-topped obsidian forge (lit but safe — no walk-in lava), a furnace,
+// a chest, and a chimney. The village Blacksmith works here.
 @(private = "file")
 build_blacksmith :: proc(b: ^VBrush, ox, oz, base_y: int) {
 	SIZE :: 5
@@ -334,11 +342,6 @@ build_blacksmith :: proc(b: ^VBrush, ox, oz, base_y: int) {
 		for dz in 0 ..< SIZE {
 			edge := dx == 0 || dx == SIZE - 1 || dz == 0 || dz == SIZE - 1
 			if !edge do continue
-			// leave the front-centre open as the shop counter
-			if dz == 0 && (dx == cx - ox - 1 || dx == cx - ox || dx == cx - ox + 1) {
-				vset(b, ox + dx, base_y, oz + dz, .StoneBrick) // low counter only
-				continue
-			}
 			vset(b, ox + dx, base_y, oz + dz, .Cobblestone)
 			for dy in 1 ..< HEIGHT do vset(b, ox + dx, base_y + dy, oz + dz, .Cobblestone)
 		}
@@ -346,21 +349,23 @@ build_blacksmith :: proc(b: ^VBrush, ox, oz, base_y: int) {
 	for dx in 1 ..< SIZE - 1 {
 		for dz in 1 ..< SIZE - 1 {
 			for dy in 0 ..< HEIGHT do vset(b, ox + dx, base_y + dy, oz + dz, .Air)
-			vset(b, ox + dx, base_y, oz + dz, .StoneBrick)
+			vset(b, ox + dx, base_y - 1, oz + dz, .StoneBrick) // shop floor (flush)
 		}
 	}
 	// flat cobble roof
 	for dx in 0 ..< SIZE {
 		for dz in 0 ..< SIZE do vset(b, ox + dx, base_y + HEIGHT, oz + dz, .Cobblestone)
 	}
-	// forge: a lava cell walled in glass, a furnace beside it, a chest
+	// safe lit forge (obsidian block topped with glowstone), a furnace, a chest
 	vset(b, ox + 1, base_y, oz + SIZE - 2, .Obsidian)
-	vset(b, ox + 1, base_y + 1, oz + SIZE - 2, .Lava)
-	vset(b, ox + 1, base_y + 2, oz + SIZE - 2, .Glass)
-	vset(b, ox + 2, base_y + 1, oz + SIZE - 2, .Furnace)
+	vset(b, ox + 1, base_y + 1, oz + SIZE - 2, .Glowstone)
+	vset(b, ox + 2, base_y, oz + SIZE - 2, .Furnace)
 	vset(b, ox + 3, base_y, oz + 1, .Chest)
-	// chimney
-	vset(b, ox + 1, base_y + HEIGHT + 1, oz + SIZE - 2, .Cobblestone)
+	vset(b, ox + 1, base_y + HEIGHT + 1, oz + SIZE - 2, .Cobblestone) // chimney
+	// a door + a window, and a fenced yard with a gap at the door
+	vdoor(b, cx, base_y, oz, 0)
+	vstair(b, cx, base_y, oz - 1, 0)
+	vset(b, ox + SIZE - 1, base_y + 1, oz + 2, .GlassPane)
 	vfence_ring(b, ox - 1, oz - 1, SIZE + 2, base_y, cx, oz - 1)
 }
 
@@ -451,30 +456,32 @@ build_pen :: proc(b: ^VBrush, ox, oz, base_y: int) {
 	vset(b, ox + 1, base_y, oz + 1, .Planks)
 	vset(b, ox + 2, base_y, oz + 1, .Planks)
 	vset(b, ox + SIZE - 2, base_y - 1, oz + SIZE - 2, .Water)
-	vfence_ring(b, ox, oz, SIZE, base_y, cx, oz) // fence right on the footprint, gap for a gate
-	vset(b, cx, base_y, oz, .FenceGate)
+	// fence with a real 1-cell gap you can walk through (a solid gate would
+	// seal the pen shut).
+	vfence_ring(b, ox, oz, SIZE, base_y, cx, oz)
 }
 
-// A slender stone watchtower with a fence-railed platform on top for the Guard.
-// Returns the platform position (world coords).
+// A stout stone watchtower topped with a railed lookout, climbed by an external
+// ladder up one face (a 1-wide interior shaft can't fit a ladder AND standing
+// room, so the ladder goes up the outside to the roof). Returns the lookout
+// position (world coords) where the Guard stands.
 @(private = "file")
 build_watchtower :: proc(b: ^VBrush, cx, cz, base_y: int) -> Ivec3 {
-	HEIGHT :: 8
-	for dy in 0 ..< HEIGHT {
+	H :: 7
+	// solid stone pillar
+	for dy in 0 ..< H {
 		for dx in -1 ..= 1 {
-			for dz in -1 ..= 1 {
-				if dx != 0 || dz != 0 do vset(b, cx + dx, base_y + dy, cz + dz, .Cobblestone)
-			}
+			for dz in -1 ..= 1 do vset(b, cx + dx, base_y + dy, cz + dz, .Cobblestone)
 		}
 	}
-	for dy in 0 ..< HEIGHT do vset(b, cx, base_y + dy, cz, .Air)
-	vset(b, cx, base_y + HEIGHT - 1, cz, .Cobblestone) // platform floor
-	vfence_ring(b, cx - 1, cz - 1, 3, base_y + HEIGHT, cx + 99, cz + 99)
-	vset(b, cx - 1, base_y + HEIGHT + 1, cz - 1, .Torch)
-	vset(b, cx + 1, base_y + HEIGHT + 1, cz + 1, .Torch)
-	// a ladder up one outer face so the guard can actually climb it
-	for dy in 0 ..< HEIGHT do vset(b, cx, base_y + dy, cz - 1, .Ladder)
-	return Ivec3{cx, base_y + HEIGHT, cz}
+	// external ladder up the -z face (against the wall at cz-1) to the roof
+	for dy in 0 ..< H do vset(b, cx, base_y + dy, cz - 2, .Ladder)
+	// railed lookout on the roof (surface at base_y+H), with a gap where the
+	// ladder arrives so you can step off the ladder onto the platform
+	vfence_ring(b, cx - 1, cz - 1, 3, base_y + H, cx, cz - 1)
+	vset(b, cx - 1, base_y + H + 1, cz - 1, .Torch)
+	vset(b, cx + 1, base_y + H + 1, cz + 1, .Torch)
+	return Ivec3{cx, base_y + H, cz}
 }
 
 // The central well plaza: a stone-ringed water pool with a lamp post at each
