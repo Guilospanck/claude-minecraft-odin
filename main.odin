@@ -295,6 +295,20 @@ main :: proc() {
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
 	if os.get_env("MC_CRAFT", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Craft}
 	if os.get_env("MC_QUITUI", context.temp_allocator) != "" do g_show_quit_confirm = true
+	// MC_DEV=mobs|give|teleport|world opens the dev overlay on that tab.
+	if s := os.get_env("MC_DEV", context.temp_allocator); s != "" {
+		g_show_dev = true
+		switch s {
+		case "give":
+			g_dev_cat = .Give
+		case "teleport":
+			g_dev_cat = .Teleport
+		case "world":
+			g_dev_cat = .World
+		case:
+			g_dev_cat = .Mobs
+		}
+	}
 
 	// Optional fixed time-of-day for screenshots (0=midnight .. 0.5=noon).
 	fixed_time: f32 = -1
@@ -1040,6 +1054,7 @@ main :: proc() {
 	g_input.confirm = false
 	g_input.portal = false
 	g_input.tools_toggle = false
+			g_input.dev_toggle = false
 	g_input.quit = false // an ESC on the title screen must not open quit-confirm on frame 0
 
 	frame := 0
@@ -1067,10 +1082,11 @@ main :: proc() {
 			g_input.quit = false
 			if g_show_quit_confirm {
 				g_show_quit_confirm = false
-			} else if g_show_inventory || g_show_settings || g_show_chest {
+			} else if g_show_inventory || g_show_settings || g_show_chest || g_show_dev {
 				g_show_inventory = false
 				g_show_settings = false
 				g_show_chest = false
+				g_show_dev = false
 			} else {
 				g_show_quit_confirm = true
 			}
@@ -1097,6 +1113,10 @@ main :: proc() {
 			if g_input.inv_toggle do open_tab(.Items)
 			if g_input.craft_toggle do open_tab(.Craft)
 			if g_input.tools_toggle do open_tab(.Tools)
+				if g_input.dev_toggle {
+					g_show_dev = !g_show_dev
+					if g_show_dev {g_show_inventory = false;g_show_settings = false;g_show_chest = false}
+				}
 			if g_input.settings_toggle {
 				g_show_settings = !g_show_settings
 				if g_show_settings {g_show_inventory = false;g_show_chest = false}
@@ -1106,8 +1126,9 @@ main :: proc() {
 		g_input.settings_toggle = false
 		g_input.craft_toggle = false
 		g_input.tools_toggle = false
+			g_input.dev_toggle = false
 
-		paused := g_show_inventory || g_show_settings || g_show_chest || g_show_quit_confirm
+		paused := g_show_inventory || g_show_settings || g_show_chest || g_show_quit_confirm || g_show_dev
 		// Release the OS cursor so menus are clickable; recapture it for
 		// gameplay. Clearing have_last stops the reacquired cursor from
 		// snapping the camera on the next move.
@@ -1163,7 +1184,45 @@ main :: proc() {
 				if g_input.nav_left do settings_adjust(-1)
 				if g_input.nav_right do settings_adjust(1)
 			}
-			if g_show_inventory {
+			if g_show_dev {
+					if g_input.scroll != 0 {
+						g_dev_scroll -= int(g_input.scroll)
+						dev_scroll_clamp()
+						g_input.scroll = 0
+					}
+					left_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+					left_press := left_down && !g_prev_left_ui
+					g_prev_left_ui = left_down
+					if left_press {
+						mnx, mny := cursor_ndc()
+						if cat := dev_hit_cat(mnx, mny); cat >= 0 {
+							g_dev_cat = DevCat(cat)
+							g_dev_scroll = 0
+						} else if row := dev_hit_entry(mnx, mny); row >= 0 {
+							switch g_dev_cat {
+							case .Mobs:
+								dev_spawn_mob(cur, &player, MobKind(row))
+							case .Give:
+								inv_add(&player, DEV_GIVE[row], 64)
+								toast_show(fmt.tprintf("GAVE %s", block_name(DEV_GIVE[row])))
+							case .Teleport:
+								if row < len(Biome) {
+									dev_teleport_biome(cur, &player, Biome(row))
+								} else if row == DEV_TP_VILLAGE {
+									dev_teleport_village(cur, &player)
+								} else {
+									cur = cur == &world ? &nether : &world
+									player.pos = portal_destination(cur, int(player.pos.x), int(player.pos.z))
+									player.vel = Vec3{0, 0, 0}
+									toast_show(fmt.tprintf("ENTERED THE %v", cur.dimension))
+								}
+							case .World:
+								dev_world_action(cur, &player, row)
+							}
+						}
+					}
+				}
+				if g_show_inventory {
 				switch g_inv_tab {
 				case .Items:
 					// Fixed-slot inventory: left-click a slot to pick up / drop
@@ -1335,6 +1394,7 @@ main :: proc() {
 		else if g_show_settings do ui_draw_settings(fw, fh)
 		else if g_show_chest do ui_draw_chest(&player, cur, fw, fh)
 		if g_show_quit_confirm do ui_draw_quit_confirm(fw, fh)
+			if g_show_dev do dev_draw(fw, fh)
 
 		is_last := max_frames > 0 && frame + 1 >= max_frames
 		if is_last && shot_path != "" {
