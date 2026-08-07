@@ -1387,11 +1387,16 @@ main :: proc() {
 			// Precipitation type follows the biome the player is in: rain in
 			// temperate country, snow in the cold biomes, nothing in deserts.
 			precip := Precip.None
-			if cur.raining {
+			if cur.dimension == .Overworld {
 				_, pbiome, _ := world_height_and_biome(cur.seed, int(player.pos.x), int(player.pos.z))
-				precip = biome_precip(pbiome, cur.storm_level)
-				precip_particles_spawn(&cur.particles, player.pos, precip, cur.wind_x, cur.wind_z)
+				if cur.raining {
+					precip = biome_precip(pbiome, cur.storm_level)
+					precip_particles_spawn(&cur.particles, player.pos, precip, cur.wind_x, cur.wind_z)
 					weather_maybe_lightning(cur, precip, dt)
+				} else {
+					// clear day: drifting biome ambience (dust/spores/pollen/petals)
+					biome_ambient_spawn(&cur.particles, player.pos, pbiome, cur.wind_x, cur.wind_z)
+				}
 			}
 			cur.active_precip = precip // render reads this for fog tint + flashes
 			audio_set_rain(precip_is_wet(precip)) // snow/hail/sand fall quietly

@@ -94,6 +94,45 @@ weather_maybe_lightning :: proc(w: ^World, precip: Precip, dt: f32) {
 	}
 }
 
+// Drifting ambient motes that give each biome its own living air on a clear
+// day: blowing dust in the deserts, spores over the swamps, pollen in the
+// jungle, petals across the meadows. A couple per frame near the player, blown
+// by the wind. Cheap — reuses the generic Particle system (float = true).
+biome_ambient_spawn :: proc(ps: ^[dynamic]Particle, center: Vec3, b: Biome, wind_x, wind_z: f32) {
+	n := 0
+	col: Vec3
+	drift, rise, size: f32
+	#partial switch b {
+	case .Desert, .Badlands:
+		n = 2;col = {0.84, 0.74, 0.52};drift = 1.6;rise = -0.3;size = 0.05 // dust
+	case .Swamp:
+		n = 1;col = {0.52, 0.70, 0.42};drift = 0.3;rise = 0.1;size = 0.05 // spores
+	case .Jungle:
+		n = 1;col = {0.78, 0.86, 0.46};drift = 0.4;rise = 0.05;size = 0.045 // pollen
+	case .Meadow:
+		n = 1;col = {0.95, 0.80, 0.90};drift = 0.5;rise = 0.1;size = 0.06 // petals
+	case:
+		return
+	}
+	for _ in 0 ..< n {
+		append(
+			ps,
+			Particle {
+				pos = center + Vec3{rng_range(-9, 9), rng_range(0.5, 6), rng_range(-9, 9)},
+				vel = Vec3 {
+					wind_x * drift + rng_range(-0.3, 0.3),
+					rise + rng_range(-0.25, 0.25),
+					wind_z * drift + rng_range(-0.3, 0.3),
+				},
+				max_life = rng_range(1.5, 3.0),
+				color = col,
+				size = size,
+				float = true,
+			},
+		)
+	}
+}
+
 // Per-precip visual parameters for the falling particles.
 @(private = "file")
 PrecipStyle :: struct {

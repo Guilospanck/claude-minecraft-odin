@@ -8,6 +8,7 @@ Particle :: struct {
 	life, max_life: f32,
 	color:          Vec3,
 	size:           f32,
+	float:          bool, // drifting ambient mote: barely any gravity, no settle
 }
 
 particle_spawn_break :: proc(ps: ^[dynamic]Particle, block: BlockId, bx, by, bz: int) {
@@ -53,6 +54,13 @@ particles_update :: proc(w: ^World, ps: ^[dynamic]Particle, dt: f32) {
 		if pt.life >= pt.max_life {
 			ps^[i] = ps^[len(ps^) - 1]
 			pop(ps)
+			continue
+		}
+		if pt.float {
+			// drifting ambient mote: gentle sink, floats through the air freely
+			pt.vel.y -= 0.6 * dt
+			pt.pos += pt.vel * dt
+			i += 1
 			continue
 		}
 		pt.vel.y -= 20.0 * dt
