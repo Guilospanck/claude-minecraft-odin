@@ -23,6 +23,28 @@ build_portal :: proc(w: ^World, ox, oy, oz: int) {
 	world_set_block(w, ox + 2, oy - 1, oz, .Obsidian)
 }
 
+// Break the obsidian frame -> the portal interior it powered winks out. Called
+// after an Obsidian block at (bx,by,bz) is removed: flood-fill the connected
+// .Portal cells reachable from its neighbours and clear them, so mining out the
+// frame collapses the whole portal instead of leaving a floating purple sheet.
+portal_collapse :: proc(w: ^World, bx, by, bz: int) {
+	stack: [dynamic]Ivec3
+	defer delete(stack)
+	seed := [?]Ivec3{{bx + 1, by, bz}, {bx - 1, by, bz}, {bx, by + 1, bz}, {bx, by - 1, bz}}
+	for s in seed {
+		if world_block(w, s.x, s.y, s.z) == .Portal do append(&stack, s)
+	}
+	for len(stack) > 0 {
+		c := pop(&stack)
+		if world_block(w, c.x, c.y, c.z) != .Portal do continue
+		world_set_block(w, c.x, c.y, c.z, .Air)
+		net_send_edit(c.x, c.y, c.z, .Air, w.dimension)
+		for n in ([?]Ivec3{{c.x + 1, c.y, c.z}, {c.x - 1, c.y, c.z}, {c.x, c.y + 1, c.z}, {c.x, c.y - 1, c.z}}) {
+			if world_block(w, n.x, n.y, n.z) == .Portal do append(&stack, n)
+		}
+	}
+}
+
 // True when any part of the player's body (feet to head) is inside a portal
 // block, so simply walking into the purple triggers travel — no need to line up
 // on one exact cell.

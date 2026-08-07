@@ -331,6 +331,21 @@ test_portal_reused_not_duplicated :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_portal_collapses_when_frame_broken :: proc(t: ^testing.T) {
+	nw: World
+	world_init(&nw, 99, .Nether)
+	dest := portal_destination(&nw, 8, 8) // builds a portal near x=8,z=8
+	oy := int(dest.y)
+	testing.expect(t, world_block(&nw, 9, oy, 8) == .Portal, "interior present before break")
+
+	// Mine a frame block (the obsidian floor under the interior) -> interior clears.
+	world_set_block(&nw, 9, oy - 1, 8, .Air)
+	portal_collapse(&nw, 9, oy - 1, 8)
+	testing.expect(t, world_block(&nw, 9, oy, 8) == .Air, "interior winks out when the frame is broken")
+	testing.expect(t, world_block(&nw, 9, oy + 1, 8) == .Air, "the whole interior column collapses")
+}
+
+@(test)
 test_net_protocol :: proc(t: ^testing.T) {
 	testing.expect(t, net_test_roundtrip(), "net message encode/decode must roundtrip")
 }
