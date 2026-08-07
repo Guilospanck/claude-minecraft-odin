@@ -3,13 +3,15 @@ package main
 import "core:fmt"
 import "core:os"
 
-// Chests: placeable storage keyed by world position, per dimension. Contents are
-// block counts (a mini inventory). Opened with R; deposit a hotbar item with its
-// number key, withdraw everything with R again. Persisted to a per-dimension
-// file so a chest keeps its contents across restarts.
+// Chests: placeable storage keyed by world position, per dimension. Contents
+// are a fixed slot grid (drag stacks between the chest and your inventory);
+// R still empties it all into your inventory. Persisted per dimension so a
+// chest keeps its contents across restarts.
+
+CHEST_SLOTS :: 27 // 3 rows of 9
 
 Chest :: struct {
-	items: [BlockId]int,
+	slots: [CHEST_SLOTS]ItemStack,
 }
 
 g_show_chest: bool
@@ -33,31 +35,17 @@ chest_open :: proc(w: ^World, pos: Ivec3) {
 	audio_play(.Place, 0.35)
 }
 
-// Move every unit of block b from the player into the open chest.
-chest_deposit :: proc(w: ^World, p: ^Player, b: BlockId) {
-	if net_is_client() do return
-	if b == .Air do return
-	n := inv_count(p, b)
-	if n <= 0 do return
-	ch, ok := w.chests[g_chest_pos]
-	if !ok do return
-	ch.items[b] += n
-	w.chests[g_chest_pos] = ch
-	inv_remove_all(p, b)
-	toast_show(fmt.tprintf("STORED %d %s", n, block_name(b)))
-	audio_play(.Place, 0.4)
-}
-
-// Move all contents of the open chest into the player's inventory.
+// Move all contents of the open chest into the player's inventory (R).
 chest_withdraw_all :: proc(w: ^World, p: ^Player) {
 	if net_is_client() do return
 	ch, ok := w.chests[g_chest_pos]
 	if !ok do return
 	moved := 0
-	for b in BlockId {
-		moved += ch.items[b]
-		inv_add(p, b, ch.items[b])
-		ch.items[b] = 0
+	for &s in ch.slots {
+		if s.id == .Air do continue
+		moved += s.count
+		inv_add(p, s.id, s.count)
+		s = {}
 	}
 	w.chests[g_chest_pos] = ch
 	if moved > 0 {
@@ -69,7 +57,7 @@ chest_withdraw_all :: proc(w: ^World, p: ^Player) {
 // Empty a broken chest straight into the player's inventory, then forget it.
 chest_break :: proc(w: ^World, p: ^Player, pos: Ivec3) {
 	if ch, ok := w.chests[pos]; ok {
-		for b in BlockId do inv_add(p, b, ch.items[b])
+		for s in ch.slots do if s.id != .Air do inv_add(p, s.id, s.count)
 		delete_key(&w.chests, pos)
 	}
 	if g_show_chest && g_chest_pos == pos do g_show_chest = false
@@ -97,7 +85,8 @@ get_i32 :: proc(data: []u8, off: int) -> i32 {
 	)
 }
 
-// Format: [count i32] then per chest [x y z i32][nEntries i32] then nEntries*[block u8][count i32]
+// Format: [count i32] then per chest [x y z i32][nEntries i32] then
+// nEntries*[slotIdx u8][id u8][count i32]
 save_chests :: proc(w: ^World) {
 	if net_is_client() do return
 	if len(w.chests) == 0 {
@@ -113,12 +102,12 @@ save_chests :: proc(w: ^World) {
 		put_i32(&buf, i32(pos.y))
 		put_i32(&buf, i32(pos.z))
 		n := 0
-		for b in BlockId do if ch.items[b] > 0 do n += 1
+		for s in ch.slots do if s.id != .Air && s.count > 0 do n += 1
 		put_i32(&buf, i32(n))
-		for b in BlockId {
-			if ch.items[b] > 0 {
-				append(&buf, u8(b))
-				put_i32(&buf, i32(ch.items[b]))
+		for s, i in ch.slots {
+			if s.id != .Air && s.count > 0 {
+				append(&buf, u8(i), u8(s.id))
+				put_i32(&buf, i32(s.count))
 			}
 		}
 	}
@@ -146,12 +135,13 @@ load_chests :: proc(w: ^World) {
 		n := int(get_i32(data, off));off += 4
 		ch: Chest
 		for _ in 0 ..< n {
-			if off + 5 > len(data) do return
+			if off + 6 > len(data) do return
+			idx := int(data[off]);off += 1
 			raw := data[off];off += 1
 			cnt := int(get_i32(data, off));off += 4
-			// guard against a corrupt/tampered file: skip out-of-range block ids
-			if raw != u8(BlockId.Air) && raw <= u8(max(BlockId)) {
-				ch.items[BlockId(raw)] = cnt
+			// guard against a corrupt/tampered file
+			if idx >= 0 && idx < CHEST_SLOTS && raw != u8(BlockId.Air) && raw <= u8(max(BlockId)) {
+				ch.slots[idx] = {BlockId(raw), cnt}
 			}
 		}
 		w.chests[Ivec3{x, y, z}] = ch

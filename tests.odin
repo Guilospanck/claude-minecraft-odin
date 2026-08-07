@@ -533,18 +533,28 @@ test_tool_craft_upgrades :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_chest_store_and_take :: proc(t: ^testing.T) {
+test_chest_drag_and_take :: proc(t: ^testing.T) {
+	p: Player
+	p.slots = {}
+	p.slots[0] = {.Stone, 30}
+	ch: Chest
+	g_cursor_stack = {}
+
+	// drag the stack out of the player slot and into a chest slot
+	stack_click(&p.slots[0])
+	testing.expect(t, g_cursor_stack == ItemStack{.Stone, 30} && p.slots[0].id == .Air, "picked the stack off the player slot")
+	stack_click(&ch.slots[5])
+	testing.expect(t, ch.slots[5] == ItemStack{.Stone, 30} && g_cursor_stack.id == .Air, "dropped it into the chest slot")
+	g_cursor_stack = {}
+
+	// R (take all) moves it back into the inventory
 	w, _ := make_test_world()
 	defer free_test_world(&w)
-	p: Player
-	inv_add(&p, .Stone, 30)
 	chest_open(&w, Ivec3{1, 2, 3})
-	chest_deposit(&w, &p, .Stone)
-	testing.expect(t, inv_count(&p, .Stone) == 0, "stone left the player")
-	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 30, "stone is in the chest")
+	w.chests[g_chest_pos] = ch
 	chest_withdraw_all(&w, &p)
-	testing.expect(t, inv_count(&p, .Stone) == 30, "stone returned")
-	testing.expect(t, w.chests[g_chest_pos].items[.Stone] == 0, "chest emptied")
+	testing.expect(t, inv_count(&p, .Stone) == 30, "take-all returned the stone")
+	testing.expect(t, w.chests[g_chest_pos].slots[5].id == .Air, "chest slot emptied")
 }
 
 @(test)
@@ -553,9 +563,8 @@ test_chest_break_recovers_contents :: proc(t: ^testing.T) {
 	defer free_test_world(&w)
 	p: Player
 	pos := Ivec3{4, 5, 6}
-	w.chests[pos] = Chest{}
-	ch := w.chests[pos]
-	ch.items[.Iron] = 7
+	ch: Chest
+	ch.slots[0] = {.Iron, 7}
 	w.chests[pos] = ch
 	chest_break(&w, &p, pos)
 	testing.expect(t, inv_count(&p, .Iron) == 7, "broken chest returns its contents")
@@ -569,8 +578,8 @@ test_chest_save_roundtrip :: proc(t: ^testing.T) {
 	defer free_test_world(&w)
 	pos := Ivec3{10, 20, -30}
 	ch: Chest
-	ch.items[.Wood] = 12
-	ch.items[.Glowstone] = 3
+	ch.slots[2] = {.Wood, 12}
+	ch.slots[7] = {.Glowstone, 3}
 	w.chests[pos] = ch
 	save_chests(&w)
 
@@ -580,7 +589,7 @@ test_chest_save_roundtrip :: proc(t: ^testing.T) {
 	rc, ok := w2.chests[pos]
 	testing.expect(t, ok, "chest loaded back")
 	if ok {
-		testing.expect(t, rc.items[.Wood] == 12 && rc.items[.Glowstone] == 3, "counts preserved")
+		testing.expect(t, rc.slots[2] == ItemStack{.Wood, 12} && rc.slots[7] == ItemStack{.Glowstone, 3}, "slot stacks preserved in place")
 	}
 	// cleanup the on-disk file so the test is repeatable
 	clear(&w.chests)

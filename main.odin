@@ -865,10 +865,10 @@ main :: proc() {
 	if os.get_env("MC_CHESTUI", context.temp_allocator) != "" {
 		g_chest_pos = Ivec3{int(player.pos.x), int(player.pos.y), int(player.pos.z)}
 		ch: Chest
-		ch.items[.Stone] = 64
-		ch.items[.Iron] = 12
-		ch.items[.Glowstone] = 8
-		ch.items[.Wood] = 30
+		ch.slots[0] = {.Stone, 64}
+		ch.slots[1] = {.Iron, 12}
+		ch.slots[5] = {.Glowstone, 8}
+		ch.slots[11] = {.Wood, 30}
 		world.chests[g_chest_pos] = ch
 		g_show_chest = true
 	}
@@ -1008,17 +1008,30 @@ main :: proc() {
 		}
 		// If the inventory closes with a stack on the cursor, put it back so
 		// nothing is lost.
-		if !g_show_inventory && g_cursor_stack.id != .Air {
+		if !g_show_inventory && !g_show_chest && g_cursor_stack.id != .Air {
 			inv_add(&player, g_cursor_stack.id, g_cursor_stack.count)
 			g_cursor_stack = {}
 		}
 		if paused {
 			ui_click := g_input.break_req // left-click, captured before it's discarded below
-			// chest transfers: R takes everything, a hotbar number deposits it
+			// Chest: R empties it into the inventory; left/right-click drags
+			// stacks between the chest grid and your inventory.
 			if g_show_chest {
 				if g_input.interact do chest_withdraw_all(cur, &player)
-				if g_input.select >= 1 && g_input.select <= 9 {
-					chest_deposit(cur, &player, player.slots[g_input.select - 1].id)
+				aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
+				mnx, mny := cursor_ndc()
+				left_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+				right_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+				left_press := left_down && !g_prev_left_ui
+				right_press := right_down && !g_prev_right_ui
+				g_prev_left_ui = left_down
+				g_prev_right_ui = right_down
+				if vi := chest_view_hit(aspect, mnx, mny); vi >= 0 && (left_press || right_press) {
+					ch := cur.chests[g_chest_pos]
+					dst := chest_view_stack(&player, &ch, vi)
+					if left_press do stack_click(dst)
+					else do stack_rclick(dst)
+					cur.chests[g_chest_pos] = ch
 				}
 			}
 			// discard buffered gameplay one-shots so they don't fire on close

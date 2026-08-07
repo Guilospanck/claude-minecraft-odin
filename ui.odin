@@ -304,71 +304,62 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 	}
 }
 
-// Chest panel (opened with R on a chest): stored contents on the left, your
-// blocks on the right. A hotbar number deposits that item; R takes everything.
+// Chest panel (opened with R on a chest): the chest's slot grid on top, your
+// whole inventory below. Drag stacks between them (left = whole/swap/merge,
+// right = split/one); R empties the chest into your inventory.
 ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	hud_quad(-0.86, -0.72, 0.86, 0.82, Vec4{0.05, 0.05, 0.08, 0.93})
+	hud_quad(-0.99, -0.99, 0.99, 0.90, Vec4{0.05, 0.05, 0.08, 0.97})
 	ch_h: f32 = 0.045
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	text_center("CHEST", 0.74, ch_w * 1.3, ch_h * 1.3, Vec4{1, 0.88, 0.5, 1})
+	text_center("CHEST", 0.86, ch_w * 1.2, ch_h * 1.2, Vec4{1, 0.88, 0.5, 1})
 
-	ch, ok := w.chests[g_chest_pos]
+	ch := w.chests[g_chest_pos] // a copy is fine for drawing
+	mnx, mny := cursor_ndc()
+	hov := chest_view_hit(aspect, mnx, mny)
 
-	// left column: stored contents
-	lx: f32 = -0.78
-	ly: f32 = 0.56
-	text_draw("STORED", lx, ly, ch_w * 1.1, ch_h * 1.1, Vec4{0.9, 0.82, 0.6, 1})
-	ly -= ch_h * 2.0
-	stored := false
-	if ok {
-		for b in BlockId {
-			if b == .Air || ch.items[b] <= 0 do continue
-			col := block_color(b)
-			hud_quad(lx, ly - ch_h, lx + ch_w * 1.1, ly, Vec4{col.r, col.g, col.b, 1})
-			text_draw(
-				fmt.tprintf("%s X%d", block_name(b), ch.items[b]),
-				lx + ch_w * 2.0,
-				ly,
-				ch_w,
-				ch_h,
-				Vec4{0.95, 0.95, 0.95, 1},
-			)
-			ly -= ch_h * 1.4
-			stored = true
-			if ly < -0.55 do break
+	// section labels above the chest grid and the player grid
+	_, cy, _, csz := chest_view_rect(aspect, 0)
+	_, py, _, _ := chest_view_rect(aspect, CHEST_SLOTS)
+	lx := gx0chest(aspect)
+	text_draw("CHEST", lx, cy + csz + 0.02, ch_w * 0.8, ch_h * 0.8, Vec4{0.9, 0.82, 0.6, 1})
+	text_draw("YOUR INVENTORY", lx, py + csz + 0.02, ch_w * 0.8, ch_h * 0.8, Vec4{0.9, 0.82, 0.6, 1})
+
+	for vi in 0 ..< CHEST_VIEW_N {
+		x0, y0, sw, sz := chest_view_rect(aspect, vi)
+		s := chest_view_stack(p, &ch, vi)^
+		if vi == hov {
+			hud_quad(x0 - 0.009, y0 - 0.009, x0 + sw + 0.009, y0 + sz + 0.009, Vec4{0.3, 0.85, 0.95, 1})
 		}
-	}
-	if !stored do text_draw("(empty)", lx, ly, ch_w, ch_h, Vec4{0.6, 0.6, 0.65, 1})
-
-	// right column: the player's blocks
-	rx: f32 = 0.12
-	ry: f32 = 0.56
-	text_draw("YOUR BLOCKS", rx, ry, ch_w * 1.1, ch_h * 1.1, Vec4{0.9, 0.82, 0.6, 1})
-	ry -= ch_h * 2.0
-	for b in BlockId {
-		if b == .Air || inv_count(p, b) <= 0 do continue
-		col := block_color(b)
-		hud_quad(rx, ry - ch_h, rx + ch_w * 1.1, ry, Vec4{col.r, col.g, col.b, 1})
-		text_draw(
-			fmt.tprintf("%s X%d", block_name(b), inv_count(p, b)),
-			rx + ch_w * 2.0,
-			ry,
-			ch_w,
-			ch_h,
-			Vec4{0.95, 0.95, 0.95, 1},
-		)
-		ry -= ch_h * 1.4
-		if ry < -0.55 do break
+		// mark the equipped hotbar slot
+		equipped := vi >= CHEST_SLOTS + 27 && (vi - CHEST_SLOTS - 27) == p.selected_slot
+		ui_slot(x0, y0, sw, sz, true, s.id, Vec3{}, s.count, ch_w, ch_h, equipped, "")
 	}
 
 	text_center(
-		"HOTBAR NUMBER = STORE ITEM    R = TAKE ALL    E CLOSE",
-		-0.66,
-		ch_w * 0.62,
-		ch_h * 0.62,
+		"DRAG TO MOVE STACKS   RIGHT-CLICK SPLIT   R TAKE ALL   E CLOSE",
+		-0.90,
+		ch_w * 0.6,
+		ch_h * 0.6,
 		Vec4{0.72, 0.82, 0.92, 1},
 	)
+
+	// held stack rides the cursor
+	if g_cursor_stack.id != .Air {
+		_, _, sw, sz := chest_view_rect(aspect, 0)
+		hud_quad(mnx - sw * 0.55, mny - sz * 0.55, mnx + sw * 0.55, mny + sz * 0.55, Vec4{0.10, 0.10, 0.13, 0.7})
+		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_cursor_stack.id)
+		if g_cursor_stack.count > 1 {
+			cs := fmt.tprintf("%d", g_cursor_stack.count)
+			text_draw(cs, mnx + sw * 0.5 - text_width(cs, ch_w * 0.8), mny - sz * 0.5, ch_w * 0.8, ch_h * 0.8, Vec4{1, 1, 1, 1})
+		}
+	}
+}
+
+// Left edge of the chest-screen grid (for the section labels).
+gx0chest :: proc(aspect: f32) -> f32 {
+	x0, _, _, _ := chest_view_rect(aspect, 0)
+	return x0
 }
 
 INV_COLS :: 9
@@ -398,6 +389,49 @@ inv_slot_rect :: proc(aspect: f32, slot: int) -> (x0, y0, sw, sz: f32) {
 	return
 }
 
+// The chest screen shows all the chest's slots plus the player's whole
+// inventory in one grid so you can drag between them. A "view index" spans
+// both: 0..CHEST_SLOTS-1 are chest slots, then CHEST_SLOTS.. are the player's
+// slots (storage first, then hotbar). Compact geometry so it all fits.
+CHEST_VIEW_N :: CHEST_SLOTS + INV_SLOTS
+
+chest_view_rect :: proc(aspect: f32, vi: int) -> (x0, y0, sw, sz: f32) {
+	sz = 0.078
+	sw = sz / aspect
+	gap := f32(0.008)
+	pitch := sz + 0.036
+	gx0 := -(f32(9) * (sw + gap) - gap) * 0.5
+	top := f32(0.80)
+	col, gridrow: int
+	if vi < CHEST_SLOTS { 	// chest: rows 0..2
+		col = vi % 9;gridrow = vi / 9
+	} else if vi < CHEST_SLOTS + 27 { 	// player storage: rows 4..6 (gap row 3)
+		s := vi - CHEST_SLOTS;col = s % 9;gridrow = s / 9 + 4
+	} else { 	// player hotbar: row 7
+		col = vi - CHEST_SLOTS - 27;gridrow = 7
+	}
+	x0 = gx0 + f32(col) * (sw + gap)
+	y0 = top - f32(gridrow) * pitch - sz
+	return
+}
+
+// Map a chest-view index to the actual stack it refers to. Chest indices resolve
+// against `ch`, player indices against `p` (storage slots 9.., then hotbar 0..8).
+chest_view_stack :: proc(p: ^Player, ch: ^Chest, vi: int) -> ^ItemStack {
+	if vi < CHEST_SLOTS do return &ch.slots[vi]
+	pv := vi - CHEST_SLOTS
+	if pv < 27 do return &p.slots[HOTBAR_SLOTS + pv] // storage
+	return &p.slots[pv - 27] // hotbar
+}
+
+chest_view_hit :: proc(aspect, nx, ny: f32) -> int {
+	for vi in 0 ..< CHEST_VIEW_N {
+		x0, y0, sw, sz := chest_view_rect(aspect, vi)
+		if nx >= x0 && nx <= x0 + sw && ny >= y0 && ny <= y0 + sz do return vi
+	}
+	return -1
+}
+
 // Which inventory slot (0..INV_SLOTS-1) the NDC point is over, or -1.
 inv_hit_slot :: proc(aspect, nx, ny: f32) -> int {
 	for slot in 0 ..< INV_SLOTS {
@@ -407,11 +441,11 @@ inv_hit_slot :: proc(aspect, nx, ny: f32) -> int {
 	return -1
 }
 
-// Left-click on a slot with the cursor stack: pick up a whole stack, drop it,
-// merge onto a same-type stack (remainder stays on the cursor), or swap.
-inv_click_slot :: proc(p: ^Player, slot: int) {
+// Left-click on any slot (`dst`) with the cursor stack: pick up a whole stack,
+// drop it, merge onto a same-type stack (remainder stays on the cursor), or
+// swap. Works on player and chest slots alike.
+stack_click :: proc(dst: ^ItemStack) {
 	held := &g_cursor_stack
-	dst := &p.slots[slot]
 	if held.id == .Air {
 		g_cursor_stack = dst^ // pick up whole stack
 		dst^ = {}
@@ -429,11 +463,10 @@ inv_click_slot :: proc(p: ^Player, slot: int) {
 	}
 }
 
-// Right-click on a slot: with nothing held, pick up half a stack; with a stack
-// held, drop a single item onto an empty or same-type slot.
-inv_rclick_slot :: proc(p: ^Player, slot: int) {
+// Right-click on any slot: with nothing held, pick up half a stack; with a
+// stack held, drop a single item onto an empty or same-type slot.
+stack_rclick :: proc(dst: ^ItemStack) {
 	held := &g_cursor_stack
-	dst := &p.slots[slot]
 	if held.id == .Air {
 		if dst.id == .Air do return
 		half := (dst.count + 1) / 2 // ceil half onto the cursor
@@ -450,6 +483,9 @@ inv_rclick_slot :: proc(p: ^Player, slot: int) {
 		if held.count == 0 do held^ = {}
 	}
 }
+
+inv_click_slot :: proc(p: ^Player, slot: int) {stack_click(&p.slots[slot])}
+inv_rclick_slot :: proc(p: ^Player, slot: int) {stack_rclick(&p.slots[slot])}
 
 // Which Tools-tab row the NDC point is over, returned as the 1-8 "select"
 // number (1-4 tools, 5-8 armor) or -1. Mirrors ui_draw_tools_tab's layout
