@@ -191,6 +191,10 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 	if g_input.select > 0 {
 		p.selected_slot = g_input.select - 1 // 1-9 equips that hotbar slot
+		if b := inv_selected(p); b != .Air {
+			label := block_is_item(b) ? fmt.tprintf("%s (ITEM)", block_name(b)) : block_name(b)
+			toast_show(label, 0.9)
+		}
 		g_input.select = 0
 	}
 

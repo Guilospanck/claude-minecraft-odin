@@ -801,8 +801,7 @@ mob_death_color :: proc(cause: MobDeathCause) -> Vec3 {
 
 // The bitmap font only has uppercase letters, so fmt's default %v (which
 // would print mixed-case enum names like "Zombie") can't be used directly
-// in toasts.
-@(private = "file")
+// in toasts. Not file-private: try_interact names the mob you interact with.
 mob_kind_label :: proc(k: MobKind) -> string {
 	switch k {
 	case .Pig:
@@ -1050,21 +1049,26 @@ LOVE_HEART_COLOR :: Vec3{0.95, 0.25, 0.45}
 // its head. If another same-kind mob is also in love mode nearby, breed_pass
 // (run every mobs_update) pairs them off into a baby.
 try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
-	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast || m.is_baby {
-		return false
+	name := mob_kind_label(m.kind)
+	if mob_is_hostile(m.kind) || mob_is_aquatic(m.kind) || m.kind == .Ghast {
+		return false // caller still names it
+	}
+	if m.is_baby {
+		toast_show(fmt.tprintf("%s (BABY)", name))
+		return true
 	}
 	if !inv_has(p, .Wheat, 1) {
-		toast_show("FEED: NEED WHEAT")
+		toast_show(fmt.tprintf("%s - FEED WHEAT TO BREED", name))
 		return true
 	}
 	if m.love_timer > 0 {
-		toast_show("ALREADY IN LOVE MODE")
+		toast_show(fmt.tprintf("%s - ALREADY IN LOVE MODE", name))
 		return true
 	}
 	inv_take(p, .Wheat, 1)
 	m.love_timer = BREED_LOVE_DURATION
 	audio_play(.Place, 0.4)
-	toast_show("FED - LOOKING FOR A MATE")
+	toast_show(fmt.tprintf("%s - FED, LOOKING FOR A MATE", name))
 	particle_spawn_eat(&w.particles, m.pos + Vec3{0, MOB_DIMS[m.kind].h + 0.2, 0}, LOVE_HEART_COLOR)
 	return true
 }

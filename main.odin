@@ -1074,11 +1074,15 @@ main :: proc() {
 						}
 					}
 				case .Tools:
-					if g_input.select >= 1 && g_input.select <= TOOL_KIND_COUNT {
-						tool_craft(&player, ToolKind(g_input.select - 1))
-					} else if g_input.select > TOOL_KIND_COUNT &&
-					   g_input.select <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
-						armor_craft(&player, ArmorSlot(g_input.select - 1 - TOOL_KIND_COUNT))
+					sel := g_input.select
+					if sel == 0 && ui_click {
+						mnx, mny := cursor_ndc()
+						sel = inv_hit_tools_row(mnx, mny) // click a row to craft/upgrade it
+					}
+					if sel >= 1 && sel <= TOOL_KIND_COUNT {
+						tool_craft(&player, ToolKind(sel - 1))
+					} else if sel > TOOL_KIND_COUNT && sel <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
+						armor_craft(&player, ArmorSlot(sel - 1 - TOOL_KIND_COUNT))
 					}
 				}
 			}

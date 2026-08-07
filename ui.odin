@@ -451,6 +451,25 @@ inv_rclick_slot :: proc(p: ^Player, slot: int) {
 	}
 }
 
+// Which Tools-tab row the NDC point is over, returned as the 1-8 "select"
+// number (1-4 tools, 5-8 armor) or -1. Mirrors ui_draw_tools_tab's layout
+// (ch_h = 0.045, rows pitched 1.9*ch_h from top=0.66).
+inv_hit_tools_row :: proc(nx, ny: f32) -> int {
+	ch_h := f32(0.045)
+	top := f32(0.66)
+	if nx < -0.55 || nx > 0.7 do return -1
+	for k in 0 ..< 4 { 	// tools
+		y := top - f32(k) * ch_h * 1.9
+		if ny <= y + ch_h * 0.5 && ny >= y - ch_h * 1.4 do return k + 1
+	}
+	armor0 := top - 4 * ch_h * 1.9 - ch_h * 0.6 - ch_h * 1.9 // first armor row
+	for s in 0 ..< 4 {
+		y := armor0 - f32(s) * ch_h * 1.9
+		if ny <= y + ch_h * 0.5 && ny >= y - ch_h * 1.4 do return 5 + s
+	}
+	return -1
+}
+
 // Which Craft-tab recipe row the NDC point is over, or -1. Mirrors the row
 // layout in ui_draw_craft_tab (called with ch_h scaled by 0.95, from top).
 CRAFT_ROW_CH_H :: f32(0.045 * 0.95)

@@ -72,7 +72,12 @@ try_interact :: proc(w: ^World, p: ^Player) {
 	dir := camera_front(p.yaw, p.pitch)
 
 	mob_idx, _ := mob_pick(&w.mobs, eye, dir, REACH)
-	if mob_idx >= 0 && try_feed(w, p, &w.mobs[mob_idx]) do return
+	if mob_idx >= 0 {
+		m := &w.mobs[mob_idx]
+		if try_feed(w, p, m) do return
+		toast_show(mob_kind_label(m.kind)) // hostile/aquatic: at least say what it is
+		return
+	}
 
 	v_idx, _ := villager_pick(&w.villagers, eye, dir, REACH)
 	if v_idx >= 0 {
