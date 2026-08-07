@@ -204,6 +204,34 @@ draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
 	gl.DrawArrays(gl.LINES, 0, 24)
 }
 
+// Clear-weather horizon haze per biome (rgb + blend strength), so standing in a
+// desert, swamp, jungle or snowfield each has its own air. Neutral (a=0) for
+// plains/forest/ocean/beach, which keep the plain sky.
+@(private = "file")
+biome_atmosphere :: proc(b: Biome) -> Vec4 {
+	#partial switch b {
+	case .Desert:
+		return {0.87, 0.74, 0.50, 0.38}
+	case .Badlands:
+		return {0.80, 0.57, 0.41, 0.38}
+	case .Snow:
+		return {0.86, 0.91, 1.00, 0.32}
+	case .Taiga:
+		return {0.72, 0.82, 0.90, 0.22}
+	case .Jungle:
+		return {0.58, 0.82, 0.60, 0.30}
+	case .Swamp:
+		return {0.55, 0.63, 0.51, 0.34}
+	case .Savanna:
+		return {0.85, 0.78, 0.54, 0.28}
+	case .Meadow:
+		return {0.80, 0.90, 0.94, 0.16}
+	case .Mountains:
+		return {0.82, 0.87, 0.94, 0.20}
+	}
+	return {0, 0, 0, 0}
+}
+
 render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	sky, ambient, _ := daynight(w.time_of_day)
 
@@ -252,6 +280,19 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		if w.flash > 0 {
 			fog_col = fog_col + Vec3{0.5, 0.5, 0.55} * w.flash
 			ambient = min(1, ambient + w.flash * 0.6)
+		}
+	} else {
+		// clear weather: tint the horizon haze by the biome you're standing in,
+		// so each place has its own air (warm desert, cool snow, humid jungle,
+		// murky swamp) instead of the same blue sky everywhere.
+		_, pbiome, _ := world_height_and_biome(
+			w.seed,
+			int(math.floor(p.pos.x)),
+			int(math.floor(p.pos.z)),
+		)
+		at := biome_atmosphere(pbiome)
+		if at.a > 0 {
+			fog_col = fog_col * (1 - at.a) + Vec3{at.r, at.g, at.b} * at.a
 		}
 	}
 

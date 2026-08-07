@@ -14,13 +14,44 @@ Vertex :: struct {
 // Uses the shared world_climate (same temp/humidity the biome was chosen from)
 // so the tint never drifts from the biome the ground was actually generated as.
 @(private = "file")
+// Foliage colour, driven strongly by climate so each biome reads as its own
+// place: hot-dry country yellows to a dry savanna tan, cold country cools to a
+// blue-green taiga, wet country deepens to a saturated jungle green, and true
+// wetlands murk over into swamp olive. Continuous in temp/moist so the colour
+// grades smoothly across borders rather than snapping at biome edges.
 grass_tint :: proc(seed: u64, wx, wz: int) -> Vec3 {
 	temp, moist := world_climate(seed, wx, wz)
-	return Vec3 {
-		clamp(1.0 + 0.20 * temp - 0.05 * moist, 0.65, 1.3),
-		clamp(1.0 - 0.03 * abs(temp) + 0.06 * moist, 0.70, 1.15),
-		clamp(1.0 - 0.18 * temp + 0.12 * moist, 0.50, 1.25),
-	}
+	warm := clamp(temp, 0, 1)
+	cold := clamp(-temp, 0, 1)
+	dry := clamp(-moist, 0, 1)
+	wet := clamp(moist, 0, 1)
+	r := 1.0 + 0.34 * warm + 0.24 * dry - 0.12 * wet
+	g := 1.0 + 0.10 * wet - 0.16 * dry - 0.06 * cold + 0.04 * warm
+	b := 1.0 - 0.40 * warm - 0.34 * dry + 0.22 * wet + 0.22 * cold
+	// swamp murk: very wet + middling temperature desaturates toward brown-olive
+	swamp := wet * clamp(1 - abs(temp) * 3, 0, 1) * 0.45
+	r = r * (1 - swamp) + 0.72 * swamp
+	g = g * (1 - swamp) + 0.82 * swamp
+	b = b * (1 - swamp) + 0.50 * swamp
+	return Vec3{clamp(r, 0.6, 1.45), clamp(g, 0.66, 1.2), clamp(b, 0.42, 1.3)}
+}
+
+// Water colour by climate: swamps murk into green, cold seas go icy pale, warm
+// seas take a tropical teal, temperate water stays plain blue. Multiplies the
+// blue water texture, so it shifts hue without a separate tile per biome.
+water_tint :: proc(seed: u64, wx, wz: int) -> Vec3 {
+	temp, moist := world_climate(seed, wx, wz)
+	warm := clamp(temp, 0, 1)
+	cold := clamp(-temp, 0, 1)
+	swamp := clamp(moist, 0, 1) * clamp(1 - abs(temp) * 3, 0, 1) // wet + middling temp
+	r := 1.0 - 0.16 * warm + 0.10 * cold
+	g := 1.0 + 0.16 * warm + 0.12 * cold
+	b := 1.0 + 0.10 * cold
+	// swampy water pulls hard toward a murky green
+	r = r * (1 - swamp * 0.8) + 0.5 * (swamp * 0.8)
+	g = g * (1 - swamp * 0.8) + 1.0 * (swamp * 0.8)
+	b = b * (1 - swamp * 0.8) + 0.45 * (swamp * 0.8)
+	return Vec3{clamp(r, 0.4, 1.2), clamp(g, 0.7, 1.3), clamp(b, 0.4, 1.25)}
 }
 
 MeshData :: struct {
@@ -121,7 +152,12 @@ emit_face :: proc(w: ^World, arr: ^[dynamic]Vertex, b: BlockId, face: Face, wx, 
 	u0, v0, u1, v1 := tile_uv(tile)
 	shade := FACE_SHADE[face]
 	n := fd.n
-	tint := (b == .Grass || b == .Leaves) ? grass_tint(w.seed, wx, wz) : Vec3{1, 1, 1}
+	tint := Vec3{1, 1, 1}
+	if b == .Grass || b == .Leaves {
+		tint = grass_tint(w.seed, wx, wz)
+	} else if b == .Water {
+		tint = water_tint(w.seed, wx, wz)
+	}
 
 	verts: [4]Vertex
 	for i in 0 ..< 4 {
