@@ -554,6 +554,27 @@ main :: proc() {
 		}
 	}
 
+	// Debug: MC_WOOL places the four wool cubes with their matching carpet
+	// strip in front, to screenshot the dyed set and the thin carpet geometry.
+	if os.get_env("MC_WOOL", context.temp_allocator) != "" {
+		fwd := camera_front(player.yaw, 0)
+		right := Vec3{-fwd.z, 0, fwd.x}
+		base := player.pos + fwd * 4 + Vec3{0, 1, 0}
+		wools := [4]BlockId{.WoolWhite, .WoolRed, .WoolYellow, .WoolBlue}
+		carpets := [4]BlockId{.CarpetWhite, .CarpetRed, .CarpetYellow, .CarpetBlue}
+		for i in 0 ..< 4 {
+			wp := base + right * (f32(i) - 1.5) * 1.4
+			cp := wp - fwd * 1.2
+			wx, wy, wz := int(wp.x), int(wp.y), int(wp.z)
+			world_ensure_chunk(&world, world_chunk_at(&world, wx, wz))
+			world_set_block(&world, wx, wy, wz, wools[i])
+			cx, cy, cz := int(cp.x), int(cp.y), int(cp.z)
+			world_ensure_chunk(&world, world_chunk_at(&world, cx, cz))
+			world_set_block(&world, cx, cy - 1, cz, .Planks) // floor for the carpet
+			world_set_block(&world, cx, cy, cz, carpets[i])
+		}
+	}
+
 	// Debug: MC_AQUA floods a big pool ahead and spawns one of every aquatic
 	// mob inside it, then submerges the camera to view them (like MC_FISH but
 	// for the full aquatic roster).

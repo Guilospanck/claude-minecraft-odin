@@ -33,6 +33,15 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .Ladder, out_count = 4},
 	{inputs = {{.Cobblestone, 6}, {}, {}}, n_in = 1, out = .Wall, out_count = 6},
 	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .FenceGate, out_count = 2},
+	// Dyed wool: wheat fleece coloured by a flower. Carpet: two wool -> three.
+	{inputs = {{.Wheat, 4}, {.FlowerWhite, 1}, {}}, n_in = 2, out = .WoolWhite, out_count = 4},
+	{inputs = {{.Wheat, 4}, {.FlowerRed, 1}, {}}, n_in = 2, out = .WoolRed, out_count = 4},
+	{inputs = {{.Wheat, 4}, {.FlowerYellow, 1}, {}}, n_in = 2, out = .WoolYellow, out_count = 4},
+	{inputs = {{.Wheat, 4}, {.FlowerBlue, 1}, {}}, n_in = 2, out = .WoolBlue, out_count = 4},
+	{inputs = {{.WoolWhite, 2}, {}, {}}, n_in = 1, out = .CarpetWhite, out_count = 3},
+	{inputs = {{.WoolRed, 2}, {}, {}}, n_in = 1, out = .CarpetRed, out_count = 3},
+	{inputs = {{.WoolYellow, 2}, {}, {}}, n_in = 1, out = .CarpetYellow, out_count = 3},
+	{inputs = {{.WoolBlue, 2}, {}, {}}, n_in = 1, out = .CarpetBlue, out_count = 3},
 }
 
 recipe_can_make :: proc(p: ^Player, w: ^World, r: Recipe) -> bool {

@@ -409,6 +409,11 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 					emit_lowbox(&md.opaque, b, wx, y, wz, LOWBOX_HEIGHT, bl)
 					continue
 				}
+				if block_is_carpet(b) {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_lowbox(&md.opaque, b, wx, y, wz, CARPET_HEIGHT, bl)
+					continue
+				}
 				for face in Face {
 					fn := FACES[face].n
 					nb := world_block(w, wx + fn.x, y + fn.y, wz + fn.z)

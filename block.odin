@@ -64,6 +64,16 @@ BlockId :: enum u8 {
 	Ladder, // climbable sprite lattice
 	Wall, // chunky cobblestone wall (connects to neighbours)
 	FenceGate, // wooden gate bar (orients to fence/wall neighbours)
+	// Dyed wool (full cubes) + matching carpets (thin floor cover). Carpets
+	// share the wool atlas tile; only the geometry differs.
+	WoolWhite,
+	WoolRed,
+	WoolYellow,
+	WoolBlue,
+	CarpetWhite,
+	CarpetRed,
+	CarpetYellow,
+	CarpetBlue,
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -133,6 +143,12 @@ block_is_lowbox :: proc(b: BlockId) -> bool {
 // Fraction of a full cell's height a low-box block's top face sits at.
 LOWBOX_HEIGHT :: f32(0.5625)
 
+// Carpets: a paper-thin floor cover (own low-box height, walked over freely).
+CARPET_HEIGHT :: f32(0.0625)
+block_is_carpet :: proc(b: BlockId) -> bool {
+	return b == .CarpetWhite || b == .CarpetRed || b == .CarpetYellow || b == .CarpetBlue
+}
+
 block_is_crop :: proc(b: BlockId) -> bool {
 	return b == .Wheat1 || b == .Wheat2 || b == .Wheat3
 }
@@ -141,7 +157,7 @@ block_is_crop :: proc(b: BlockId) -> bool {
 // stop it (as does collision), and so do the non-solid sprites so you can aim
 // at crops and torches.
 block_stops_ray :: proc(b: BlockId) -> bool {
-	return block_is_solid(b) || block_is_sprite(b)
+	return block_is_solid(b) || block_is_sprite(b) || block_is_carpet(b)
 }
 
 Face :: enum {
@@ -159,7 +175,7 @@ block_is_solid :: proc(b: BlockId) -> bool {
 	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Ladder:
 		return false
 	}
-	if block_is_plant(b) || block_is_item(b) do return false
+	if block_is_plant(b) || block_is_item(b) || block_is_carpet(b) do return false
 	return true
 }
 
@@ -183,7 +199,7 @@ block_is_opaque :: proc(b: BlockId) -> bool {
 	     .FenceGate:
 		return false
 	}
-	if block_is_plant(b) do return false
+	if block_is_plant(b) || block_is_carpet(b) do return false
 	return true // Lava renders opaque (solid-looking) though it isn't collidable
 }
 
@@ -321,6 +337,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.COBBLESTONE
 	case .FenceGate:
 		return ad.PLANKS
+	case .WoolWhite, .CarpetWhite:
+		return ad.WOOL_WHITE
+	case .WoolRed, .CarpetRed:
+		return ad.WOOL_RED
+	case .WoolYellow, .CarpetYellow:
+		return ad.WOOL_YELLOW
+	case .WoolBlue, .CarpetBlue:
+		return ad.WOOL_BLUE
 	case .Air:
 		return ad.STONE // never rendered
 	}
@@ -442,6 +466,14 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.44, 0.44, 0.46}
 	case .FenceGate:
 		return {0.55, 0.40, 0.24}
+	case .WoolWhite, .CarpetWhite:
+		return {0.93, 0.93, 0.95}
+	case .WoolRed, .CarpetRed:
+		return {0.75, 0.20, 0.22}
+	case .WoolYellow, .CarpetYellow:
+		return {0.88, 0.78, 0.22}
+	case .WoolBlue, .CarpetBlue:
+		return {0.25, 0.35, 0.72}
 	case .Air:
 		return {0, 0, 0}
 	}
@@ -564,6 +596,22 @@ block_name :: proc(b: BlockId) -> string {
 		return "Cobblestone Wall"
 	case .FenceGate:
 		return "Fence Gate"
+	case .WoolWhite:
+		return "White Wool"
+	case .WoolRed:
+		return "Red Wool"
+	case .WoolYellow:
+		return "Yellow Wool"
+	case .WoolBlue:
+		return "Blue Wool"
+	case .CarpetWhite:
+		return "White Carpet"
+	case .CarpetRed:
+		return "Red Carpet"
+	case .CarpetYellow:
+		return "Yellow Carpet"
+	case .CarpetBlue:
+		return "Blue Carpet"
 	}
 	return "?"
 }

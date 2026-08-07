@@ -306,6 +306,10 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					mortar \
 					? shade(Color{180, 168, 156, 255}, jitter(gx, gy, 6)) \
 					: shade(base, jitter(gx, gy, 10))
+			case "wool":
+				// soft fleecy texture: gentle noise with a faint tuft grid
+				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
+				c = shade(base, jitter(gx, gy, 12) + (tuft ? 8 : -8))
 			case "ladder":
 				c = Color{0, 0, 0, 0} // transparent (cutout sprite)
 				rail := px == 3 || px == 4 || px == 11 || px == 12
@@ -394,6 +398,10 @@ main :: proc() {
 	paint(ad.BRICKS, Color{158, 78, 62, 255}, "bricks")
 	paint(ad.COBBLESTONE, Color{112, 112, 118, 255}, "cobble")
 	paint(ad.LADDER, Color{0, 0, 0, 0}, "ladder")
+	paint(ad.WOOL_WHITE, Color{236, 236, 240, 255}, "wool")
+	paint(ad.WOOL_RED, Color{190, 52, 56, 255}, "wool")
+	paint(ad.WOOL_YELLOW, Color{224, 198, 58, 255}, "wool")
+	paint(ad.WOOL_BLUE, Color{64, 90, 184, 255}, "wool")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -62,3 +62,7 @@ STONE_BRICK  :: Tile{5, 3}
 BRICKS       :: Tile{6, 3}
 COBBLESTONE  :: Tile{7, 3}
 LADDER       :: Tile{8, 3} // sprite (transparent background)
+WOOL_WHITE   :: Tile{9, 3}
+WOOL_RED     :: Tile{10, 3}
+WOOL_YELLOW  :: Tile{11, 3}
+WOOL_BLUE    :: Tile{12, 3}
