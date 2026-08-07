@@ -259,13 +259,21 @@ ui_slot :: proc(
 	selected: bool,
 	num_label: string,
 ) {
-	// The selected slot gets a thick bright-gold frame and a brighter, warmer
-	// background so it clearly stands apart from every unselected slot.
+	// Slots are square in pixels (w = sz/aspect), so a border that should look
+	// even all the way round needs its horizontal offset scaled by w/sz (=
+	// 1/aspect); using the same NDC value on both axes is what made the old
+	// highlight look off-centre and squished.
+	ax := w / sz
+	frame :: proc(x0, y0, w, sz, ax, t: f32, col: Vec4) {
+		hud_quad(x0 - t * ax, y0 - t, x0 + w + t * ax, y0 + sz + t, col)
+	}
+	// The selected slot gets a thick bright-gold frame + a warmer background so
+	// it clearly stands apart from every unselected slot.
 	if selected {
-		hud_quad(x0 - 0.014, y0 - 0.014, x0 + w + 0.014, y0 + sz + 0.014, Vec4{1.0, 0.82, 0.2, 1})
-		hud_quad(x0 - 0.006, y0 - 0.006, x0 + w + 0.006, y0 + sz + 0.006, Vec4{0.32, 0.26, 0.10, 1})
+		frame(x0, y0, w, sz, ax, 0.013, Vec4{1.0, 0.82, 0.2, 1})
+		frame(x0, y0, w, sz, ax, 0.006, Vec4{0.34, 0.27, 0.10, 1})
 	} else {
-		hud_quad(x0 - 0.005, y0 - 0.005, x0 + w + 0.005, y0 + sz + 0.005, Vec4{0.10, 0.10, 0.13, 0.85})
+		frame(x0, y0, w, sz, ax, 0.005, Vec4{0.10, 0.10, 0.13, 0.9})
 	}
 	hud_quad(x0, y0, x0 + w, y0 + sz, selected ? Vec4{0.30, 0.28, 0.20, 1} : Vec4{0.17, 0.17, 0.21, 1})
 	if use_tex {
@@ -273,13 +281,18 @@ ui_slot :: proc(
 	} else if count > 0 {
 		hud_quad(x0 + w * 0.20, y0 + sz * 0.20, x0 + w * 0.80, y0 + sz * 0.80, Vec4{flat.r, flat.g, flat.b, 1})
 	}
+	// A tiny drop shadow keeps numbers legible over any icon.
+	shadowed :: proc(s: string, x, y, cw, ch, ax: f32, col: Vec4) {
+		text_draw(s, x + 0.003 * ax, y - 0.003, cw, ch, Vec4{0, 0, 0, 0.7})
+		text_draw(s, x, y, cw, ch, col)
+	}
 	if num_label != "" {
-		text_draw(num_label, x0 + 0.004, y0 + sz - 0.004, ch_w * 0.75, ch_h * 0.75, Vec4{0.95, 0.95, 0.6, 0.9})
+		shadowed(num_label, x0 + 0.006 * ax, y0 + sz - 0.006, ch_w * 0.72, ch_h * 0.72, ax, Vec4{1, 0.95, 0.55, 1})
 	}
 	if count > 0 {
 		s := fmt.tprintf("%d", count)
 		cw2 := ch_w * 0.8
-		text_draw(s, x0 + w - text_width(s, cw2) - 0.005, y0 + 0.005, cw2, ch_h * 0.8, Vec4{1, 1, 1, 1})
+		shadowed(s, x0 + w - text_width(s, cw2) - 0.006 * ax, y0 + 0.006, cw2, ch_h * 0.8, ax, Vec4{1, 1, 1, 1})
 	}
 }
 
