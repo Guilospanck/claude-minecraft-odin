@@ -125,14 +125,18 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	}
 
 	if !p.fly && player_on_ladder(w, p.pos) {
-		// Climb the rungs: space goes up, shift goes down, otherwise slide
-		// gently. Directly driving vel.y (no gravity) means no fall on release.
-		if glfw.GetKey(g_win, glfw.KEY_SPACE) == glfw.PRESS {
-			p.vel.y = 3.5
-		} else if glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS {
-			p.vel.y = -3.5
+		// Climb the rungs swiftly: W (or space) goes up, S (or shift) down; with
+		// no climb input you cling in place. While climbing we cancel horizontal
+		// drift so W means "up the ladder" instead of shoving you off it — once
+		// you climb above the ladder, normal movement resumes and you walk off.
+		up := glfw.GetKey(g_win, glfw.KEY_W) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_SPACE) == glfw.PRESS
+		down := glfw.GetKey(g_win, glfw.KEY_S) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
+		if up || down {
+			p.vel.x = 0
+			p.vel.z = 0
+			p.vel.y = up ? 4.8 : -4.8
 		} else {
-			p.vel.y = -1.2
+			p.vel.y = 0 // hang on the rung
 		}
 		p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt, 0.0)
 		p.fall_speed = 0

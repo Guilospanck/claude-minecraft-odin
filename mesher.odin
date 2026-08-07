@@ -203,6 +203,36 @@ emit_sprite :: proc(arr: ^[dynamic]Vertex, b: BlockId, wx, wy, wz: int, bl, inse
 	)
 }
 
+// A ladder: a single flat textured quad laid against whichever solid wall it
+// backs onto (auto-detected from neighbours), instead of a floating cross
+// sprite. Freestanding ladders fall back to the -Z face.
+@(private = "file")
+emit_ladder :: proc(w: ^World, arr: ^[dynamic]Vertex, wx, wy, wz: int, bl: f32) {
+	u0, v0, u1, v1 := tile_uv(block_tile(.Ladder, .PosY))
+	shade: f32 = 0.92
+	x := f32(wx)
+	y := f32(wy)
+	z := f32(wz)
+	d := f32(0.06) // stand-off from the wall
+	lo := f32(0.02)
+	hi := f32(0.98)
+	sol :: proc(w: ^World, x, y, z: int) -> bool {return block_is_solid(world_block(w, x, y, z))}
+	if sol(w, wx, wy, wz - 1) {
+		emit_sprite_quad(arr, {x + lo, y, z + d}, {x + hi, y, z + d}, {x + hi, y + 1, z + d}, {x + lo, y + 1, z + d}, u0, v0, u1, v1, shade, bl)
+	} else if sol(w, wx, wy, wz + 1) {
+		zz := z + 1 - d
+		emit_sprite_quad(arr, {x + lo, y, zz}, {x + hi, y, zz}, {x + hi, y + 1, zz}, {x + lo, y + 1, zz}, u0, v0, u1, v1, shade, bl)
+	} else if sol(w, wx - 1, wy, wz) {
+		xx := x + d
+		emit_sprite_quad(arr, {xx, y, z + lo}, {xx, y, z + hi}, {xx, y + 1, z + hi}, {xx, y + 1, z + lo}, u0, v0, u1, v1, shade, bl)
+	} else if sol(w, wx + 1, wy, wz) {
+		xx := x + 1 - d
+		emit_sprite_quad(arr, {xx, y, z + lo}, {xx, y, z + hi}, {xx, y + 1, z + hi}, {xx, y + 1, z + lo}, u0, v0, u1, v1, shade, bl)
+	} else {
+		emit_sprite_quad(arr, {x + lo, y, z + d}, {x + hi, y, z + d}, {x + hi, y + 1, z + d}, {x + lo, y + 1, z + d}, u0, v0, u1, v1, shade, bl)
+	}
+}
+
 // An arbitrary box (all 6 faces, unculled) for furniture-style blocks that
 // shouldn't look like a plain full cube — reuses the same FACES corner
 // table as normal cubes, just remapping each corner's 0/1 offsets to
@@ -365,6 +395,11 @@ mesh_chunk :: proc(w: ^World, c: ^Chunk) -> MeshData {
 				if b == .Air do continue
 				wx := base_x + x
 				wz := base_z + z
+				if b == .Ladder {
+					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
+					emit_ladder(w, &md.opaque, wx, y, wz, bl)
+					continue
+				}
 				if block_is_sprite(b) {
 					bl := f32(chunk_light_at(c, x, y, z)) / 15.0
 					if b == .Torch {

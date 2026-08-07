@@ -439,9 +439,11 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		   !block_is_item(sel) && // food/seeds are held, not placed
 		   inv_has(p, sel, 1) {
 			world_set_block(w, tx, ty, tz, sel)
-			// Stairs are oriented by the direction the player is looking.
+			// Stairs are oriented by the player's horizontal facing (yaw only,
+			// so looking up/down while placing doesn't scramble the direction).
+			// Press R while aiming at a stair to rotate it (see try_interact).
 			if sel == .Stair {
-				w.stairs[Ivec3{tx, ty, tz}] = stair_facing_from_dir(dir)
+				w.stairs[Ivec3{tx, ty, tz}] = stair_facing_from_dir(camera_front(p.yaw, 0))
 			}
 			net_send_edit(tx, ty, tz, sel, w.dimension)
 			inv_take(p, sel, 1)

@@ -96,6 +96,13 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		try_sleep(w, p)
 	case .Door:
 		door_toggle(w, Ivec3{hit.bx, hit.by, hit.bz})
+	case .Stair:
+		// rotate the stair's facing (0->1->2->3->0) and remesh the chunk
+		key := Ivec3{hit.bx, hit.by, hit.bz}
+		w.stairs[key] = (w.stairs[key] + 1) % 4
+		world_set_block(w, hit.bx, hit.by, hit.bz, .Stair) // re-set to mark dirty
+		audio_play(.Place, 0.4)
+		toast_show("ROTATED STAIR")
 	case .Wheat3:
 		harvest_crop(w, p, hit.bx, hit.by, hit.bz)
 	case .Farmland:
