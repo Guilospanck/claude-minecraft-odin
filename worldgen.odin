@@ -470,6 +470,10 @@ TreeKind :: enum {
 	Birch,
 	Acacia, // flat, wide savanna umbrella
 	Pine, // tall narrow conifer spire
+	BigOak, // thick trunk, broad two-tier canopy
+	Palm, // tall bare trunk with a spray of drooping fronds (beaches)
+	Willow, // rounded crown with leaf strands hanging down (swamps)
+	Bush, // a low round leaf ball on a stub trunk
 }
 
 // Build a tree (round oak, conical spruce, slim birch, or a flat-topped
@@ -553,8 +557,63 @@ place_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind) {
 				}
 			}
 		}
+	case .BigOak:
+		// a thick tree: a second trunk column and a broad two-tier canopy.
+		for i in 0 ..< trunk_h do chunk_set(c, lx + 1, base + i, lz, .Wood)
+		for dy in -2 ..= 0 {
+			r := dy == 0 ? 2 : 3
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if abs(dx) == r && abs(dz) == r do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
+	case .Palm:
+		// a bare trunk crowned with four drooping fronds and a top tuft.
+		chunk_set(c, lx, crown + 1, lz, .Leaves)
+		for d in ([4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+			if chunk_get(c, lx + d[0], crown + 1, lz + d[1]) == .Air do chunk_set(c, lx + d[0], crown + 1, lz + d[1], .Leaves)
+			if chunk_get(c, lx + 2 * d[0], crown, lz + 2 * d[1]) == .Air do chunk_set(c, lx + 2 * d[0], crown, lz + 2 * d[1], .Leaves) // frond tip droops
+		}
+	case .Willow:
+		// a rounded crown with leaf strands trailing down from the rim.
+		for dy in -1 ..= 1 {
+			r := dy == 1 ? 1 : 2
+			for dz in -r ..= r {
+				for dx in -r ..= r {
+					if dx == 0 && dz == 0 && dy < 1 do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
+		chunk_set(c, lx, crown + 2, lz, .Leaves)
+		for d in ([4][2]int{{2, 0}, {-2, 0}, {0, 2}, {0, -2}}) {
+			for hang in 1 ..= 2 {
+				if chunk_get(c, lx + d[0], crown - hang, lz + d[1]) == .Air {
+					chunk_set(c, lx + d[0], crown - hang, lz + d[1], .Leaves)
+				}
+			}
+		}
+	case .Bush:
+		// a squat round leaf ball (trunk_h is small for these).
+		for dy in 0 ..= 1 {
+			for dz in -1 ..= 1 {
+				for dx in -1 ..= 1 {
+					if dy == 1 && abs(dx) == 1 && abs(dz) == 1 do continue
+					if chunk_get(c, lx + dx, crown + dy, lz + dz) == .Air {
+						chunk_set(c, lx + dx, crown + dy, lz + dz, .Leaves)
+					}
+				}
+			}
+		}
 	}
-	if kind != .Acacia do chunk_set(c, lx, crown + 2, lz, .Leaves) // rounded/pointed top for the others
+	rounded := kind != .Acacia && kind != .Palm && kind != .Bush && kind != .BigOak
+	if rounded do chunk_set(c, lx, crown + 2, lz, .Leaves) // rounded/pointed top
 }
 
 // Place a conifer and dust its canopy with snow: for every column the crown
@@ -583,6 +642,26 @@ place_snowy_tree :: proc(c: ^Chunk, lx, surf_y, lz, trunk_h: int, kind: TreeKind
 @(private = "file")
 oak_or_birch :: proc(hsh: u64) -> TreeKind {
 	return (hsh >> 20) % 4 == 0 ? TreeKind.Birch : TreeKind.Oak
+}
+
+// Pick a tree kind from a weighted list (repeat entries to weight them).
+@(private = "file")
+pick_tree :: proc(hsh: u64, kinds: []TreeKind) -> TreeKind {
+	return kinds[(hsh >> 20) % u64(len(kinds))]
+}
+
+// Bushes/palms want a stubby or bare trunk; everything else a normal one.
+@(private = "file")
+tree_trunk_h :: proc(kind: TreeKind, base: int) -> int {
+	#partial switch kind {
+	case .Bush:
+		return 1
+	case .Palm:
+		return base + 2 // taller bare stem
+	case .BigOak:
+		return base + 1
+	}
+	return base
 }
 
 @(private = "file")
@@ -666,7 +745,8 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				}
 			case .Forest:
 				if grass && site_ok && r < 42 {
-					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+					k := pick_tree(hsh, {.Oak, .Oak, .Birch, .BigOak})
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
 				} else if grass && r < 78 {
 					put_plant(
 						c,
@@ -678,13 +758,15 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				}
 			case .Swamp:
 				if grass && site_ok && r < 16 {
-					place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+					k := pick_tree(hsh, {.Willow, .Willow, .Oak})
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th % 2), k)
 				} else if grass && r < 70 {
 					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .Fern, .FlowerBlue, .DeadBush}))
 				}
 			case .Plains:
 				if grass && site_ok && r < 8 {
-					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+					k := pick_tree(hsh, {.Oak, .Birch, .Bush, .BigOak})
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
 				} else if grass && r < 60 {
 					put_plant(
 						c,
@@ -723,7 +805,8 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			case .Jungle:
 				// Dense, tall canopy over a lush understorey.
 				if grass && site_ok && r < 58 {
-					place_tree(c, lx, surf_y, lz, 7 + th, .Oak)
+					k := pick_tree(hsh, {.BigOak, .Oak, .BigOak})
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 7 + th), k)
 				} else if grass && r < 90 {
 					put_plant(
 						c,
@@ -736,7 +819,8 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			case .Meadow:
 				// Flower-carpeted grass, only the occasional tree.
 				if grass && site_ok && r < 5 {
-					place_tree(c, lx, surf_y, lz, 4 + th, oak_or_birch(hsh))
+					k := pick_tree(hsh, {.Oak, .Birch, .Bush})
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
 				} else if grass && r < 72 {
 					put_plant(
 						c,
@@ -757,7 +841,12 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				} else if surf == .Snow && r < 16 {
 					put_plant(c, lx, surf_y, lz, r < 12 ? .DeadBush : .FlowerWhite)
 				}
-			case .Mountains, .Ocean, .Beach:
+			case .Beach:
+				// the odd palm leaning over the sand
+				if surf == .Sand && site_ok && r < 5 {
+					place_tree(c, lx, surf_y, lz, tree_trunk_h(.Palm, 5 + th), .Palm)
+				}
+			case .Mountains, .Ocean:
 			// bare
 			}
 		}

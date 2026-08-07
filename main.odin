@@ -295,6 +295,32 @@ main :: proc() {
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
 	if os.get_env("MC_CRAFT", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Craft}
 	if os.get_env("MC_QUITUI", context.temp_allocator) != "" do g_show_quit_confirm = true
+	// MC_TPBIOME=<biome> teleports to the nearest chunk of that biome (reuses
+	// the dev-overlay teleport), for screenshotting biome flora.
+	if s := os.get_env("MC_TPBIOME", context.temp_allocator); s != "" {
+		b := Biome.Forest
+		switch s {
+		case "beach":
+			b = .Beach
+		case "swamp":
+			b = .Swamp
+		case "jungle":
+			b = .Jungle
+		case "plains":
+			b = .Plains
+		case "savanna":
+			b = .Savanna
+		case "meadow":
+			b = .Meadow
+		case "taiga":
+			b = .Taiga
+		}
+		dev_teleport_biome(&world, &player, b)
+		player.pos.y += 6
+		player.pitch = -0.25
+		player.fly = true
+	}
+
 	// MC_DEV=mobs|give|teleport|world opens the dev overlay on that tab.
 	if s := os.get_env("MC_DEV", context.temp_allocator); s != "" {
 		g_show_dev = true
