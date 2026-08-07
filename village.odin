@@ -144,11 +144,15 @@ generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y, var
 			}
 		}
 	}
+	rugs := [4]BlockId{.CarpetRed, .CarpetBlue, .CarpetYellow, .CarpetWhite}
+	rug := rugs[(lx + lz) & 3]
 	for dx in 1 ..< SIZE - 1 {
 		for dz in 1 ..< SIZE - 1 {
 			for dy in 0 ..< HEIGHT {
 				chunk_set(c, lx + dx, base_y + dy, lz + dz, .Air) // hollow interior
 			}
+			chunk_set(c, lx + dx, base_y, lz + dz, .Planks) // plank floor
+			chunk_set(c, lx + dx, base_y + 1, lz + dz, rug) // coloured rug over it
 		}
 	}
 
@@ -180,15 +184,18 @@ generate_house :: proc(w: ^World, c: ^Chunk, base_x, base_z, lx, lz, surf_y, var
 	chunk_set(c, door_lx, base_y + 1, door_lz, .Air)
 	w.doors[Ivec3{base_x + door_lx, base_y, base_z + door_lz}] = Door{facing = 0, open = false}
 
-	// A doorstep and a torch by the entrance (torch sits just outside the wall
-	// so it lights the door without punching a hole in it).
+	// A doorstep and a lamp post by the entrance (a fence stem topped with a
+	// glowstone lantern, just outside the wall so it lights the door).
 	place_stair(w, c, base_x, base_z, door_lx, base_y, door_lz - 1, 0)
-	chunk_set(c, door_lx + 1, base_y + 2, door_lz - 1, .Torch)
+	chunk_set(c, door_lx + 1, base_y, door_lz - 1, .Fence)
+	chunk_set(c, door_lx + 1, base_y + 1, door_lz - 1, .Fence)
+	chunk_set(c, door_lx + 1, base_y + 2, door_lz - 1, .Glowstone)
 
-	chunk_set(c, cx, base_y + 1, lz + SIZE - 1, .Glass) // window opposite the door
-	if variant == 1 {
-		chunk_set(c, lx, base_y + 1, cz, .Glass) // second window, side wall
-	}
+	// glass-pane windows (two panes wide) opposite the door and on the sides
+	chunk_set(c, cx, base_y + 1, lz + SIZE - 1, .GlassPane)
+	chunk_set(c, cx - 1, base_y + 1, lz + SIZE - 1, .GlassPane)
+	chunk_set(c, lx, base_y + 1, cz, .GlassPane)
+	chunk_set(c, lx + SIZE - 1, base_y + 1, cz, .GlassPane)
 
 	place_fence_ring(c, lx - 1, lz - 1, SIZE + 2, base_y, door_lx, lz - 1)
 }
