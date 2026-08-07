@@ -722,9 +722,10 @@ main :: proc() {
 		}
 		if len(world.villages) > 0 {
 			t := world.villages[0].center
-			player.pos = Vec3{f32(t.x) - 14, f32(t.y) + 9, f32(t.z) - 14}
+			// pulled-back aerial so the whole multi-chunk town fits in frame
+			player.pos = Vec3{f32(t.x) - 40, f32(t.y) + 44, f32(t.z) - 40}
 			player.yaw = 2.35
-			player.pitch = -0.35
+			player.pitch = -0.62
 			player.fly = true
 			fmt.println(
 				"MC_VILLAGE: found village at",
@@ -772,12 +773,14 @@ main :: proc() {
 				}
 			}
 		}
-		g_force_village = false
+		// NB: leave g_force_village set so the village's other chunks still
+		// recognise the forced anchor as they stream in around the camera;
+		// resetting it here would leave only the anchor chunk's slice drawn.
 		if len(world.villages) > 0 {
 			t := world.villages[len(world.villages) - 1].center
-			player.pos = Vec3{f32(t.x) - 14, f32(t.y) + 9, f32(t.z) - 14}
+			player.pos = Vec3{f32(t.x) - 24, f32(t.y) + 22, f32(t.z) - 24}
 			player.yaw = 2.35
-			player.pitch = -0.35
+			player.pitch = -0.5
 			player.fly = true
 			fmt.println("MC_SNOWVILLAGE:", want, "village at", t)
 		} else {
