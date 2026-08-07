@@ -259,9 +259,15 @@ ui_slot :: proc(
 	selected: bool,
 	num_label: string,
 ) {
-	border := selected ? Vec4{1, 1, 1, 0.95} : Vec4{0.10, 0.10, 0.13, 0.85}
-	hud_quad(x0 - 0.005, y0 - 0.005, x0 + w + 0.005, y0 + sz + 0.005, border)
-	hud_quad(x0, y0, x0 + w, y0 + sz, Vec4{0.17, 0.17, 0.21, 1})
+	// The selected slot gets a thick bright-gold frame and a brighter, warmer
+	// background so it clearly stands apart from every unselected slot.
+	if selected {
+		hud_quad(x0 - 0.014, y0 - 0.014, x0 + w + 0.014, y0 + sz + 0.014, Vec4{1.0, 0.82, 0.2, 1})
+		hud_quad(x0 - 0.006, y0 - 0.006, x0 + w + 0.006, y0 + sz + 0.006, Vec4{0.32, 0.26, 0.10, 1})
+	} else {
+		hud_quad(x0 - 0.005, y0 - 0.005, x0 + w + 0.005, y0 + sz + 0.005, Vec4{0.10, 0.10, 0.13, 0.85})
+	}
+	hud_quad(x0, y0, x0 + w, y0 + sz, selected ? Vec4{0.30, 0.28, 0.20, 1} : Vec4{0.17, 0.17, 0.21, 1})
 	if use_tex {
 		ui_block_icon(x0 + w * 0.10, y0 + sz * 0.10, x0 + w * 0.90, y0 + sz * 0.90, blk)
 	} else if count > 0 {
@@ -394,8 +400,62 @@ inventory_entries :: proc(p: ^Player) -> [dynamic]InvEntry {
 }
 
 // Cursor into the Items-tab grid (an index into inventory_entries' result),
-// navigated with the arrow keys and used to assign an item to a hotbar slot.
+// navigated with the arrow keys / mouse and used to assign an item to a hotbar
+// slot. It is the "selected" item, drawn with a strong highlight.
 g_inv_cursor: int
+
+INV_COLS :: 9
+
+// The Items-tab grid geometry, shared by the renderer and the mouse hit-tests
+// so a click always lands on the slot it looks like it should. Returns the slot
+// width/height, the gap, the grid's left edge, the grid's top edge, and the y
+// of the mirrored hotbar row.
+inv_grid_geom :: proc(aspect: f32) -> (sw, sz, gap, gx0, content_top, hotbar_y: f32) {
+	sz = 0.095
+	sw = sz / aspect
+	gap = 0.010
+	grid_w := f32(INV_COLS) * (sw + gap) - gap
+	gx0 = -grid_w * 0.5
+	content_top = 0.66
+	hotbar_y = -0.60
+	return
+}
+
+// Which grid slot (0..n-1) the NDC point is over, or -1.
+inv_hit_grid :: proc(aspect, nx, ny: f32, n: int) -> int {
+	sw, sz, gap, gx0, top, _ := inv_grid_geom(aspect)
+	for i in 0 ..< n {
+		x0 := gx0 + f32(i % INV_COLS) * (sw + gap)
+		y0 := top - f32(i / INV_COLS) * (sz + gap) - sz
+		if nx >= x0 && nx <= x0 + sw && ny >= y0 && ny <= y0 + sz do return i
+	}
+	return -1
+}
+
+// Which mirrored-hotbar slot (0..8) the NDC point is over, or -1.
+inv_hit_hotbar :: proc(aspect, nx, ny: f32) -> int {
+	sw, sz, gap, gx0, _, hy := inv_grid_geom(aspect)
+	for i in 0 ..< 9 {
+		x0 := gx0 + f32(i) * (sw + gap)
+		if nx >= x0 && nx <= x0 + sw && ny >= hy && ny <= hy + sz do return i
+	}
+	return -1
+}
+
+// Which Craft-tab recipe row the NDC point is over, or -1. Mirrors the row
+// layout in ui_draw_craft_tab (called with ch_h scaled by 0.95, from top).
+CRAFT_ROW_CH_H :: f32(0.045 * 0.95)
+inv_hit_craft_row :: proc(nx, ny: f32) -> int {
+	top := f32(0.66)
+	spacing := CRAFT_ROW_CH_H * 2.1
+	for i in 0 ..< len(RECIPES) {
+		y := top - f32(i) * spacing
+		if nx >= -0.88 && nx <= 0.78 && ny <= y + CRAFT_ROW_CH_H * 0.4 && ny >= y - CRAFT_ROW_CH_H * 1.3 {
+			return i
+		}
+	}
+	return -1
+}
 
 // Full-screen inventory: a tabbed Minecraft-style panel (ITEMS / CRAFT /
 // TOOLS, selected with E/T/X) with the hotbar mirrored at the bottom on
@@ -414,13 +474,8 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
 	ui_draw_tabs(fbw, fbh, ch_w * 1.05, ch_h * 1.05, 0.82)
 
-	cols :: 9
-	sz: f32 = 0.095
-	sw := sz / aspect
-	gap: f32 = 0.010
-	grid_w := f32(cols) * (sw + gap) - gap
-	gx0 := -grid_w * 0.5
-	content_top: f32 = 0.66
+	sw, sz, gap, gx0, content_top, hy0 := inv_grid_geom(aspect)
+	mnx, mny := cursor_ndc() // OS cursor released while a menu is open
 
 	switch g_inv_tab {
 	case .Items:
@@ -429,10 +484,8 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 			g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
 		}
 		for e, i in entries {
-			row := i / cols
-			col := i % cols
-			x0 := gx0 + f32(col) * (sw + gap)
-			y0 := content_top - f32(row) * (sz + gap) - sz
+			x0 := gx0 + f32(i % INV_COLS) * (sw + gap)
+			y0 := content_top - f32(i / INV_COLS) * (sz + gap) - sz
 			ui_slot(x0, y0, sw, sz, e.use_tex, e.blk, e.flat, e.count, ch_w, ch_h, i == g_inv_cursor, "")
 		}
 		if len(entries) == 0 {
@@ -452,20 +505,25 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	}
 
 	// Hotbar mirrored at a fixed position on every tab, same as Minecraft.
-	hy0: f32 = -0.60
 	text_draw("HOTBAR", gx0, hy0 + sz + 0.03, ch_w * 0.85, ch_h * 0.85, Vec4{0.7, 0.75, 0.82, 1})
+	hov_hb := inv_hit_hotbar(aspect, mnx, mny)
 	for i in 0 ..< 9 {
 		x0 := gx0 + f32(i) * (sw + gap)
 		b := p.hotbar[i]
+		// A cyan hover ring shows which slot a click would assign the selected
+		// item to.
+		if i == hov_hb && g_inv_tab == .Items {
+			hud_quad(x0 - 0.011, hy0 - 0.011, x0 + sw + 0.011, hy0 + sz + 0.011, Vec4{0.3, 0.85, 0.95, 1})
+		}
 		ui_slot(x0, hy0, sw, sz, true, b, Vec3{}, p.inventory[b], ch_w, ch_h, b == p.selected, fmt.tprintf("%d", i + 1))
 	}
 
 	action_hint: string
 	switch g_inv_tab {
 	case .Items:
-		action_hint = "ARROWS SELECT   1-9 PUT ON THAT HOTBAR SLOT"
+		action_hint = "HOVER/CLICK OR ARROWS TO SELECT   CLICK A HOTBAR SLOT OR 1-9 TO ASSIGN"
 	case .Craft:
-		action_hint = "1-8 TO CRAFT"
+		action_hint = "CLICK OR 1-9 TO CRAFT"
 	case .Tools:
 		action_hint = "1-4 TOOLS   5-8 ARMOR"
 	}

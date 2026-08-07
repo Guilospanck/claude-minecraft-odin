@@ -1358,6 +1358,24 @@ test_villages_and_materials_by_biome :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_inventory_slot_hit_tests :: proc(t: ^testing.T) {
+	aspect := f32(16.0) / 9.0
+	sw, sz, gap, gx0, top, hy := inv_grid_geom(aspect)
+
+	// The centre of grid slot i must hit-test back to i.
+	for i in ([?]int{0, 5, 10, 17}) {
+		cx := gx0 + f32(i % INV_COLS) * (sw + gap) + sw * 0.5
+		cy := top - f32(i / INV_COLS) * (sz + gap) - sz * 0.5
+		testing.expect(t, inv_hit_grid(aspect, cx, cy, 20) == i, "a slot's centre hits that slot")
+	}
+	// A point out in empty space hits nothing.
+	testing.expect(t, inv_hit_grid(aspect, 0.95, 0.95, 20) == -1, "empty space hits no grid slot")
+	// The centre of hotbar slot 3 hits slot 3.
+	hx := gx0 + 3 * (sw + gap) + sw * 0.5
+	testing.expect(t, inv_hit_hotbar(aspect, hx, hy + sz * 0.5) == 3, "a hotbar slot's centre hits that slot")
+}
+
+@(test)
 test_stairs_are_craftable :: proc(t: ^testing.T) {
 	found := false
 	for r in RECIPES do if r.out == .Stair {found = true}

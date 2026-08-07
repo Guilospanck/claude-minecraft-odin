@@ -272,7 +272,14 @@ main :: proc() {
 		if v, ok := strconv.parse_int(s); ok do max_frames = v
 	}
 	shot_path := os.get_env("MC_SHOT", context.allocator) // persists across per-frame temp resets
-	if os.get_env("MC_INV", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Items}
+	if os.get_env("MC_INV", context.temp_allocator) != "" {
+		g_show_inventory = true;g_inv_tab = .Items
+		// sample stock so the Items grid is populated for the screenshot
+		for b in ([?]BlockId{.Grass, .Dirt, .Stone, .Wood, .Sand, .Glass, .Stair, .CoalOre, .Iron, .Leaves, .Snow, .FlowerRed, .Cactus}) {
+			player.inventory[b] = 16
+		}
+		g_inv_cursor = 6
+	}
 	if os.get_env("MC_SETTINGS", context.temp_allocator) != "" do g_show_settings = true
 	if os.get_env("MC_CRAFT", context.temp_allocator) != "" {g_show_inventory = true;g_inv_tab = .Craft}
 	if os.get_env("MC_QUITUI", context.temp_allocator) != "" do g_show_quit_confirm = true
@@ -978,7 +985,18 @@ main :: proc() {
 		g_input.tools_toggle = false
 
 		paused := g_show_inventory || g_show_settings || g_show_chest || g_show_quit_confirm
+		// Release the OS cursor so menus are clickable; recapture it for
+		// gameplay. Clearing have_last stops the reacquired cursor from
+		// snapping the camera on the next move.
+		if paused != g_cursor_free {
+			if g_win != nil {
+				glfw.SetInputMode(g_win, glfw.CURSOR, paused ? glfw.CURSOR_NORMAL : glfw.CURSOR_DISABLED)
+			}
+			g_input.have_last = false
+			g_cursor_free = paused
+		}
 		if paused {
+			ui_click := g_input.break_req // left-click, captured before it's discarded below
 			// chest transfers: R takes everything, a hotbar number deposits it
 			if g_show_chest {
 				if g_input.interact do chest_withdraw_all(cur, &player)
@@ -1006,23 +1024,36 @@ main :: proc() {
 			if g_show_inventory {
 				switch g_inv_tab {
 				case .Items:
-					// Arrow keys move a cursor over a real selectable grid;
-					// a number key assigns the highlighted item to that
-					// hotbar slot (there's no mouse cursor to drag-drop with,
-					// so this is the keyboard equivalent).
+					// Select an item with the mouse (hover to highlight, click
+					// to lock it in) or the arrow keys, then assign it to a
+					// hotbar slot by clicking that slot or pressing 1-9.
 					entries := inventory_entries(&player)
 					if len(entries) > 0 {
-						cols := 9
+						cols := INV_COLS
 						if g_input.nav_left do g_inv_cursor -= 1
 						if g_input.nav_right do g_inv_cursor += 1
 						if g_input.nav_up do g_inv_cursor -= cols
 						if g_input.nav_down do g_inv_cursor += cols
 						g_inv_cursor = clamp(g_inv_cursor, 0, len(entries) - 1)
-						if g_input.select > 0 {
+
+						aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
+						mnx, mny := cursor_ndc()
+						if hov := inv_hit_grid(aspect, mnx, mny, len(entries)); hov >= 0 {
+							g_inv_cursor = hov // hovering highlights
+						}
+						assign_to := -1
+						if ui_click {
+							if inv_hit_grid(aspect, mnx, mny, len(entries)) < 0 {
+								if hb := inv_hit_hotbar(aspect, mnx, mny); hb >= 0 do assign_to = hb
+							}
+						}
+						if g_input.select > 0 do assign_to = g_input.select - 1
+						if assign_to >= 0 {
 							e := entries[g_inv_cursor]
 							if e.use_tex {
-								player.hotbar[g_input.select - 1] = e.blk
-								toast_show(fmt.tprintf("HOTBAR %d: %s", g_input.select, block_name(e.blk)))
+								player.hotbar[assign_to] = e.blk
+								player.selected = e.blk // equip it, ready to place
+								toast_show(fmt.tprintf("HOTBAR %d: %s", assign_to + 1, block_name(e.blk)))
 							} else {
 								toast_show("CANT PUT THAT ON THE HOTBAR")
 							}
@@ -1031,6 +1062,12 @@ main :: proc() {
 				case .Craft:
 					if g_input.select > 0 {
 						recipe_try(&player, cur, g_input.select - 1)
+					}
+					if ui_click {
+						mnx, mny := cursor_ndc()
+						if row := inv_hit_craft_row(mnx, mny); row >= 0 {
+							recipe_try(&player, cur, row)
+						}
 					}
 				case .Tools:
 					if g_input.select >= 1 && g_input.select <= TOOL_KIND_COUNT {

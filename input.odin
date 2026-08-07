@@ -10,6 +10,7 @@ InputState :: struct {
 	last_x, last_y:       f64,
 	have_last:            bool,
 	dx, dy:               f64, // accumulated mouse delta since last frame
+	mx, my:               f64, // absolute cursor position (window/screen coords)
 	break_req, place_req: bool, // one-shot mouse clicks
 	fly_toggle:           bool, // one-shot F press
 	craft:                bool, // one-shot C press
@@ -32,6 +33,7 @@ InputState :: struct {
 
 g_input: InputState
 g_win: glfw.WindowHandle
+g_cursor_free: bool // true while a menu has released the OS cursor for clicking
 
 cursor_cb :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 	if !g_input.have_last {
@@ -43,6 +45,19 @@ cursor_cb :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 	g_input.dy += y - g_input.last_y
 	g_input.last_x = x
 	g_input.last_y = y
+	g_input.mx = x
+	g_input.my = y
+}
+
+// Absolute cursor position in normalized device coords ([-1,1], y up), for
+// hit-testing menus while the OS cursor is released. Returns something far
+// off-screen if the window size isn't known yet.
+cursor_ndc :: proc() -> (f32, f32) {
+	ww, wh := glfw.GetWindowSize(g_win)
+	if ww <= 0 || wh <= 0 do return -2, -2
+	nx := f32(g_input.mx) / f32(ww) * 2 - 1
+	ny := 1 - f32(g_input.my) / f32(wh) * 2
+	return nx, ny
 }
 
 mouse_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: c.int) {
