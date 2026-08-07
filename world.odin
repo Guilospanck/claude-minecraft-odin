@@ -29,6 +29,7 @@ World :: struct {
 	flash:        f32, // lightning flash intensity (thunderstorms), decays to 0
 	weather_timer: f32, // seconds until the current weather state re-rolls
 	wind_x, wind_z: f32, // slowly drifting wind vector; blows precipitation sideways
+	cloud_time:    f32, // monotonic accumulator that scrolls the cloud layer
 }
 
 // Set before sorting chunk work lists; the comparators read it (single-threaded).

@@ -232,6 +232,46 @@ biome_atmosphere :: proc(b: Biome) -> Vec4 {
 	return {0, 0, 0, 0}
 }
 
+// Cloud deck look for the biome + active weather. Clear skies are white and
+// sparse (very sparse over deserts, overcast up north); storms turn the deck
+// grey/dark and dense; fog has no deck at all. `day_bright` darkens it at night.
+@(private = "file")
+cloud_params :: proc(b: Biome, precip: Precip, raining: bool, day_bright: f32) -> (col: Vec3, alpha, coverage: f32) {
+	coverage = 0.34
+	#partial switch b {
+	case .Desert, .Badlands:
+		coverage = 0.12 // clear arid skies
+	case .Savanna:
+		coverage = 0.20
+	case .Jungle, .Swamp:
+		coverage = 0.50 // humid, cloudier
+	case .Snow, .Taiga:
+		coverage = 0.55 // overcast north
+	case .Meadow:
+		coverage = 0.30
+	case .Mountains:
+		coverage = 0.28
+	}
+	col = Vec3{0.99, 1.0, 1.0}
+	alpha = 0.6
+	if raining {
+		#partial switch precip {
+		case .Drizzle, .Rain:
+			col = {0.60, 0.63, 0.68};coverage = 0.80;alpha = 0.85
+		case .Thunder:
+			col = {0.30, 0.32, 0.38};coverage = 0.92;alpha = 0.92 // dark thunderheads
+		case .Snow, .Hail:
+			col = {0.82, 0.84, 0.90};coverage = 0.88;alpha = 0.85
+		case .Sandstorm:
+			col = {0.72, 0.62, 0.42};coverage = 0.35;alpha = 0.5
+		case .Fog:
+			coverage = 0 // fog is a ground bank, no cloud deck
+		}
+	}
+	col *= clamp(day_bright, 0.22, 1.0) // clouds darken with the night
+	return
+}
+
 render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	sky, ambient, _ := daynight(w.time_of_day)
 
@@ -353,6 +393,20 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	}
 	gl.DepthMask(true)
 	gl.Disable(gl.BLEND)
+
+	// cloud deck: biome/weather-varied, drifting with the wind, occluded by
+	// terrain (mountains poke through) but not writing depth.
+	if !underwater && !nether {
+		_, cbiome, _ := world_height_and_biome(
+			w.seed,
+			int(math.floor(p.pos.x)),
+			int(math.floor(p.pos.z)),
+		)
+		ccol, calpha, ccov := cloud_params(cbiome, w.active_precip, w.raining, ambient)
+		dx := w.cloud_time * 1.4 + w.wind_x * 2.5
+		dz := w.cloud_time * 0.5 + w.wind_z * 2.5
+		clouds_render(eye, vp, ccol, calpha, ccov, dx, dz)
+	}
 
 	entity_render_frame(&w.mobs, vp, ambient)
 	villagers_render_frame(&w.villagers, vp, ambient)

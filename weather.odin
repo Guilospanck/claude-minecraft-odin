@@ -58,6 +58,7 @@ precip_is_wet :: proc(p: Precip) -> bool {
 }
 
 weather_tick :: proc(w: ^World, dt: f32) {
+	w.cloud_time += dt // clouds keep drifting regardless of dimension/weather
 	if w.dimension != .Overworld {
 		w.raining = false
 		w.storm_level = 0
