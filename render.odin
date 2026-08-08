@@ -30,6 +30,28 @@ lu_color: i32
 r_outline_vao: u32
 r_outline_vbo: u32
 
+// break-crack overlay buffers (progressive cracks on the block being mined)
+r_crack_vao: u32
+r_crack_vbo: u32
+CRACK_MAX_VERTS :: 64
+
+// A branching crack in unit-square (u,v) face space, centre-out order so the
+// first segments (revealed earliest) are the small central cracks and later
+// ones spread to the corners — mirrors how a block visibly fractures in MC.
+@(private = "file")
+CRACK_UV := [10][2][2]f32 {
+	{{0.50, 0.50}, {0.63, 0.36}},
+	{{0.50, 0.50}, {0.42, 0.31}},
+	{{0.50, 0.50}, {0.37, 0.61}},
+	{{0.50, 0.50}, {0.66, 0.63}},
+	{{0.63, 0.36}, {0.77, 0.31}},
+	{{0.42, 0.31}, {0.28, 0.22}},
+	{{0.37, 0.61}, {0.21, 0.66}},
+	{{0.66, 0.63}, {0.83, 0.71}},
+	{{0.63, 0.36}, {0.71, 0.19}},
+	{{0.37, 0.61}, {0.31, 0.80}},
+}
+
 @(private = "file")
 set_mat4 :: proc(loc: i32, m: Mat4) {
 	mm := m
@@ -75,6 +97,14 @@ render_init :: proc(atlas: u32) {
 	gl.BindVertexArray(r_outline_vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, r_outline_vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, 24 * size_of(Vec3), nil, gl.DYNAMIC_DRAW)
+	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vec3)), 0)
+
+	gl.GenVertexArrays(1, &r_crack_vao)
+	gl.GenBuffers(1, &r_crack_vbo)
+	gl.BindVertexArray(r_crack_vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, r_crack_vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, CRACK_MAX_VERTS * size_of(Vec3), nil, gl.DYNAMIC_DRAW)
 	gl.EnableVertexAttribArray(0)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vec3)), 0)
 	gl.BindVertexArray(0)
@@ -202,6 +232,43 @@ draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
 	gl.Uniform4f(lu_color, 0.05, 0.05, 0.05, 1.0)
 	gl.BindVertexArray(r_outline_vao)
 	gl.DrawArrays(gl.LINES, 0, 24)
+
+	// Break cracks: as mining progresses, reveal more of the crack pattern on the
+	// face the player is looking at (the ray-hit normal), so the block visibly
+	// fractures under the crosshair like it does in Minecraft.
+	if p.mine_frac > 0 {
+		reveal := clamp(int(math.ceil(p.mine_frac * len(CRACK_UV))), 1, len(CRACK_UV))
+		// Face frame from the hit normal: origin at the block's outer face, plus
+		// two in-plane axes to map (u,v) onto it. Nudged out by `co` so cracks sit
+		// just proud of the surface and never z-fight with the block texture.
+		co: f32 = 0.006
+		n := Vec3{f32(hit.nx), f32(hit.ny), f32(hit.nz)}
+		origin := Vec3{f32(hit.bx), f32(hit.by), f32(hit.bz)} + n * co
+		au, av: Vec3
+		if hit.nx != 0 {
+			if hit.nx > 0 do origin.x += 1
+			au = {0, 0, 1};av = {0, 1, 0}
+		} else if hit.ny != 0 {
+			if hit.ny > 0 do origin.y += 1
+			au = {1, 0, 0};av = {0, 0, 1}
+		} else {
+			if hit.nz > 0 do origin.z += 1
+			au = {1, 0, 0};av = {0, 1, 0}
+		}
+		cverts: [CRACK_MAX_VERTS]Vec3
+		nv := 0
+		for s in 0 ..< reveal {
+			a := CRACK_UV[s][0]
+			b := CRACK_UV[s][1]
+			cverts[nv] = origin + au * a[0] + av * a[1];nv += 1
+			cverts[nv] = origin + au * b[0] + av * b[1];nv += 1
+		}
+		gl.BindBuffer(gl.ARRAY_BUFFER, r_crack_vbo)
+		gl.BufferSubData(gl.ARRAY_BUFFER, 0, nv * size_of(Vec3), &cverts[0])
+		gl.Uniform4f(lu_color, 0.02, 0.02, 0.02, 1.0)
+		gl.BindVertexArray(r_crack_vao)
+		gl.DrawArrays(gl.LINES, 0, i32(nv))
+	}
 }
 
 // Clear-weather horizon haze per biome (rgb + blend strength), so standing in a
