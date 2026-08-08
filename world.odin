@@ -30,6 +30,13 @@ World :: struct {
 	weather_timer: f32, // seconds until the current weather state re-rolls
 	wind_x, wind_z: f32, // slowly drifting wind vector; blows precipitation sideways
 	cloud_time:    f32, // monotonic accumulator that scrolls the cloud layer
+	// Smoothed sky/cloud look: eased toward the local biome+weather target each
+	// frame so crossing a biome edge fades over a couple seconds, not instantly.
+	sky_tint:      Vec4, // horizon-haze tint (rgb + blend strength)
+	cloud_col:     Vec3,
+	cloud_cover:   f32,
+	cloud_alpha:   f32,
+	sky_inited:    bool, // false until the smoothing state is seeded (snap on first frame)
 }
 
 // Set before sorting chunk work lists; the comparators read it (single-threaded).

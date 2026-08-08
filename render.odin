@@ -207,7 +207,6 @@ draw_outline :: proc(w: ^World, p: ^Player, vp: Mat4) {
 // Clear-weather horizon haze per biome (rgb + blend strength), so standing in a
 // desert, swamp, jungle or snowfield each has its own air. Neutral (a=0) for
 // plains/forest/ocean/beach, which keep the plain sky.
-@(private = "file")
 biome_atmosphere :: proc(b: Biome) -> Vec4 {
 	#partial switch b {
 	case .Desert:
@@ -235,7 +234,6 @@ biome_atmosphere :: proc(b: Biome) -> Vec4 {
 // Cloud deck look for the biome + active weather. Clear skies are white and
 // sparse (very sparse over deserts, overcast up north); storms turn the deck
 // grey/dark and dense; fog has no deck at all. `day_bright` darkens it at night.
-@(private = "file")
 cloud_params :: proc(b: Biome, precip: Precip, raining: bool, day_bright: f32) -> (col: Vec3, alpha, coverage: f32) {
 	coverage = 0.34
 	#partial switch b {
@@ -327,16 +325,11 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 			ambient = min(1, ambient + w.flash * 0.6)
 		}
 	} else {
-		// clear weather: tint the horizon haze by the biome you're standing in,
-		// so each place has its own air (warm desert, cool snow, humid jungle,
-		// murky swamp) instead of the same blue sky everywhere.
-		_, pbiome, _ := world_height_and_biome(
-			w.seed,
-			int(math.floor(p.pos.x)),
-			int(math.floor(p.pos.z)),
-		)
-		at := biome_atmosphere(pbiome)
-		if at.a > 0 {
+		// clear weather: tint the horizon haze by the biome you're standing in
+		// (warm desert, cool snow, humid jungle, murky swamp). Uses the SMOOTHED
+		// tint (eased in the update loop) so a border fades rather than snaps.
+		at := w.sky_tint
+		if at.a > 0.001 {
 			fog_col = fog_col * (1 - at.a) + Vec3{at.r, at.g, at.b} * at.a
 		}
 	}
@@ -395,17 +388,12 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	gl.Disable(gl.BLEND)
 
 	// cloud deck: biome/weather-varied, drifting with the wind, occluded by
-	// terrain (mountains poke through) but not writing depth.
+	// terrain. Uses the SMOOTHED colour/coverage/alpha (eased in the update loop)
+	// so the deck fades between biomes rather than popping.
 	if !underwater && !nether {
-		_, cbiome, _ := world_height_and_biome(
-			w.seed,
-			int(math.floor(p.pos.x)),
-			int(math.floor(p.pos.z)),
-		)
-		ccol, calpha, ccov := cloud_params(cbiome, w.active_precip, w.raining, ambient)
 		dx := w.cloud_time * 1.4 + w.wind_x * 2.5
 		dz := w.cloud_time * 0.5 + w.wind_z * 2.5
-		clouds_render(eye, vp, ccol, calpha, ccov, dx, dz)
+		clouds_render(eye, vp, w.cloud_col, w.cloud_alpha, w.cloud_cover, dx, dz)
 	}
 
 	entity_render_frame(&w.mobs, vp, ambient)

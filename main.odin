@@ -1397,6 +1397,17 @@ main :: proc() {
 					// clear day: drifting biome ambience (dust/spores/pollen/petals)
 					biome_ambient_spawn(&cur.particles, player.pos, pbiome, cur.wind_x, cur.wind_z)
 				}
+				// Ease the sky haze + cloud deck toward this biome look so a biome
+				// border fades over ~2s instead of snapping. Snap on the first frame.
+				_, amb, _ := daynight(cur.time_of_day)
+				t_at := biome_atmosphere(pbiome)
+				t_col, t_alpha, t_cov := cloud_params(pbiome, precip, cur.raining, amb)
+				k := cur.sky_inited ? clamp(dt * 0.6, 0, 1) : 1.0
+				cur.sky_inited = true
+				cur.sky_tint += (t_at - cur.sky_tint) * k
+				cur.cloud_col += (t_col - cur.cloud_col) * k
+				cur.cloud_cover += (t_cov - cur.cloud_cover) * k
+				cur.cloud_alpha += (t_alpha - cur.cloud_alpha) * k
 			}
 			cur.active_precip = precip // render reads this for fog tint + flashes
 			audio_set_rain(precip_is_wet(precip)) // snow/hail/sand fall quietly
