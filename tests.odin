@@ -1688,6 +1688,25 @@ test_villager_avoids_water :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_farmer_drives_off_predator :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	for x in 0 ..< CHUNK_W do for z in 0 ..< CHUNK_D do chunk_set(c, x, 10, z, .Stone)
+	// a farmer with a wolf right beside it (within a swing)
+	v := Villager {
+		pos        = Vec3{5.5, 11, 5.5},
+		profession = .Farmer,
+		health     = 10,
+	}
+	append(&w.mobs, Mob{kind = .Wolf, pos = Vec3{6.6, 11, 5.5}, health = 12})
+	for _ in 0 ..< 30 {
+		villager_update(&w, &v, 1.0 / 60.0)
+	}
+	testing.expect(t, w.mobs[0].health < 12, "a farmer strikes a wolf that comes near")
+	testing.expect(t, w.mobs[0].flee_timer > 0, "the struck predator is sent fleeing")
+}
+
+@(test)
 test_villager_pick_finds_nearest_under_the_ray :: proc(t: ^testing.T) {
 	villagers := make([dynamic]Villager, 0, 2)
 	defer delete(villagers)

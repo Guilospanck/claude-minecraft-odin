@@ -39,6 +39,7 @@ Villager :: struct {
 	home_biome: Biome, // biome they live in; drives their clothing (see entity_render)
 	air:        f32, // breath left while submerged; refills on the surface
 	drown_accum: f32, // fractional drowning damage once air runs out
+	guard_cd:   f32, // cooldown between strikes when driving off a predator
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -140,6 +141,44 @@ villager_wander :: proc(v: ^Villager, dt: f32) {
 	}
 }
 
+VILLAGER_DEFEND_RADIUS :: f32(14.0)
+VILLAGER_GUARD_DMG :: 4
+
+// A caretaker villager (farmer or guard) drives off predators that come near the
+// homestead, so wolves/foxes/leopards can't pick off the penned animals: it
+// moves to intercept the nearest predator and strikes it, sending it fleeing —
+// and killing it if it keeps coming back. Returns true while actively defending.
+@(private = "file")
+villager_defend :: proc(w: ^World, v: ^Villager, dt: f32) -> bool {
+	if v.profession != .Farmer && v.profession != .Guard do return false
+	best := VILLAGER_DEFEND_RADIUS * VILLAGER_DEFEND_RADIUS
+	target := -1
+	for i in 0 ..< len(w.mobs) {
+		m := w.mobs[i]
+		if m.health <= 0 || !mob_is_predator(m.kind) do continue
+		dx := m.pos.x - v.pos.x
+		dz := m.pos.z - v.pos.z
+		d2 := dx * dx + dz * dz
+		if d2 < best {
+			best = d2
+			target = i
+		}
+	}
+	if target < 0 do return false
+	pred := &w.mobs[target]
+	dx := pred.pos.x - v.pos.x
+	dz := pred.pos.z - v.pos.z
+	v.yaw = math.atan2(dx, -dz)
+	v.moving = true
+	if dx * dx + dz * dz < 2.0 * 2.0 && v.guard_cd <= 0 { 	// within a swing
+		pred.health -= VILLAGER_GUARD_DMG
+		pred.flee_timer = 3.5 // send it bolting
+		pred.yaw = math.atan2(-dx, dz) // directly away from the villager
+		v.guard_cd = 0.8
+	}
+	return true
+}
+
 villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 	// Villagers can't breathe underwater any more than mobs can: a submerged
 	// villager swims for the nearest shore and drowns if it can't reach it.
@@ -163,7 +202,12 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 	}
 	v.air = CREATURE_AIR_MAX
 
-	villager_wander(v, dt)
+	if v.guard_cd > 0 do v.guard_cd -= dt
+	// farmers/guards break off wandering to run down and drive off any predator
+	// threatening the homestead; everyone else just wanders.
+	if !villager_defend(w, v, dt) {
+		villager_wander(v, dt)
+	}
 	if v.moving {
 		fwd := Vec3{math.sin(v.yaw), 0, -math.cos(v.yaw)}
 
