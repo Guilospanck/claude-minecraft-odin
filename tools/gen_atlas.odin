@@ -306,6 +306,36 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					mortar \
 					? shade(Color{180, 168, 156, 255}, jitter(gx, gy, 6)) \
 					: shade(base, jitter(gx, gy, 10))
+			case "podzol_top":
+				// dark forest litter with reddish-brown flecks
+				spec := ((jitter(gx * 3, gy * 3, 100) + 100) % 5) < 2
+				c = spec ? Color{110, 74, 36, 255} : shade(base, jitter(gx, gy, 14))
+			case "podzol_side":
+				// dirt body with a thin dark litter cap on top
+				if py < 3 {
+					c = shade(Color{74, 52, 26, 255}, jitter(gx, gy, 12))
+				} else {
+					c = shade(Color{124, 90, 58, 255}, jitter(gx, gy, 12))
+				}
+			case "coarse":
+				// dirt with scattered darker gravel grains
+				g := (jitter(gx * 2, gy * 2, 100) + 100) % 6
+				c = g < 2 ? shade(Color{86, 66, 44, 255}, jitter(gx, gy, 8)) : shade(base, jitter(gx, gy, 14))
+			case "mud":
+				// wet dark earth, faintly mottled
+				wet := ((jitter(gx, gy * 2, 100) + 100) % 7) < 2
+				c = wet ? Color{54, 46, 40, 255} : shade(base, jitter(gx, gy, 10))
+			case "gravel":
+				// grey pebbles of varying tone
+				g := (jitter(gx * 2, gy * 2, 100) + 100) % 5
+				c =
+					g < 1 \
+					? Color{92, 90, 90, 255} \
+					: (g < 2 ? Color{150, 148, 148, 255} : shade(base, jitter(gx, gy, 16)))
+			case "terracotta":
+				// smooth fired clay with faint horizontal grain
+				band := (py % 4 < 2)
+				c = shade(base, jitter(gx, gy, 8) + (band ? 6 : -6))
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -402,6 +432,14 @@ main :: proc() {
 	paint(ad.WOOL_RED, Color{190, 52, 56, 255}, "wool")
 	paint(ad.WOOL_YELLOW, Color{224, 198, 58, 255}, "wool")
 	paint(ad.WOOL_BLUE, Color{64, 90, 184, 255}, "wool")
+	paint(ad.PODZOL_TOP, Color{78, 54, 28, 255}, "podzol_top")
+	paint(ad.PODZOL_SIDE, Color{124, 90, 58, 255}, "podzol_side")
+	paint(ad.COARSE_DIRT, Color{124, 90, 58, 255}, "coarse")
+	paint(ad.MUD, Color{72, 60, 52, 255}, "mud")
+	paint(ad.GRAVEL, Color{128, 126, 126, 255}, "gravel")
+	paint(ad.TERRACOTTA, Color{160, 92, 56, 255}, "terracotta")
+	paint(ad.TERRACOTTA_WHITE, Color{202, 172, 142, 255}, "terracotta")
+	paint(ad.TERRACOTTA_BROWN, Color{100, 66, 40, 255}, "terracotta")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

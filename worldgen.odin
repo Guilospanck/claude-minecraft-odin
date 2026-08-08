@@ -123,22 +123,66 @@ classify_biome :: proc(continentalness, erosion_amp, pv, temp, moist: f32, h: in
 	return .Forest
 }
 
+// A 2D-noise patch test: true where the low-frequency surface noise (offset by
+// `salt` to decorrelate patch types) rises above `thresh`. Drives blobby,
+// natural ground-cover patches instead of uniform biome fills.
 @(private = "file")
-surface_block :: proc(biome: Biome, h: int) -> BlockId {
-	if h <= SEA_LEVEL + 1 do return .Sand // beach / seabed
+surface_patch :: proc(seed: u64, salt: u64, wx, wz: int, thresh: f32) -> bool {
+	return value_noise2(seed + salt, f32(wx) * 0.085, f32(wz) * 0.085) > thresh
+}
+
+// Horizontal terracotta strata for badlands mesas: repeating coloured bands by
+// altitude, the boundaries jittered per-column so they wobble like real mesa
+// walls instead of being dead-flat. Red sand fills the low ground.
+@(private = "file")
+badlands_stratum :: proc(seed: u64, wx, wz, y: int) -> BlockId {
+	jit := int(fbm2(seed + 606, f32(wx) * 0.06, f32(wz) * 0.06, 2) * 3.0)
+	switch (y + jit) %% 9 {
+	case 0:
+		return .TerracottaWhite
+	case 1, 2:
+		return .Terracotta
+	case 3:
+		return .TerracottaBrown
+	case 4, 5:
+		return .Terracotta
+	case 6:
+		return .TerracottaWhite
+	}
+	return .RedSand
+}
+
+// Top-of-column block for a biome, with biome-specific ground-cover patches:
+// podzol/coarse-dirt in taiga, mud in swamps, coarse dirt in savanna, gravel on
+// cold shores and rocky mountains. Not file-private: tests exercise it.
+surface_block :: proc(seed: u64, biome: Biome, wx, wz, h: int) -> BlockId {
+	if h <= SEA_LEVEL + 1 { 	// beach / seabed
+		cold := biome == .Snow || biome == .Taiga || biome == .Mountains
+		if cold && surface_patch(seed, 4001, wx, wz, 0.6) do return .Gravel
+		return .Sand
+	}
 	switch biome {
 	case .Ocean, .Beach, .Desert:
 		return .Sand
 	case .Badlands:
-		return .RedSand
+		return .RedSand // exposed column is stratified in the fill loop
 	case .Snow:
 		return .Snow
 	case .Mountains:
-		return h > SEA_LEVEL + 34 ? .Snow : .Stone
-	case .Plains, .Forest, .Savanna, .Swamp, .Jungle, .Meadow, .Taiga:
-		// Taiga is a cold conifer forest on grass, not a barren snowfield — a
-		// grass surface keeps it visually distinct from the Snow biome and lets
-		// its understory (ferns, tall grass) grow.
+		if h > SEA_LEVEL + 34 do return .Snow
+		return surface_patch(seed, 4002, wx, wz, 0.68) ? .Gravel : .Stone
+	case .Taiga:
+		// cold conifer floor: podzol blobs and the odd coarse-dirt scrape
+		if surface_patch(seed, 4003, wx, wz, 0.52) do return .Podzol
+		if surface_patch(seed, 4004, wx, wz, 0.72) do return .CoarseDirt
+		return .Grass
+	case .Swamp:
+		if surface_patch(seed, 4005, wx, wz, 0.5) do return .Mud
+		return .Grass
+	case .Savanna:
+		if surface_patch(seed, 4006, wx, wz, 0.7) do return .CoarseDirt
+		return .Grass
+	case .Plains, .Forest, .Jungle, .Meadow:
 		return .Grass
 	}
 	return .Grass
@@ -299,15 +343,20 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			rav_a := abs(ravine)
 			cave_mouth := value_noise2(seed + 888, fx * 0.05, fz * 0.05) > 0.80
 
-			surf := surface_block(biome, h)
+			surf := surface_block(seed, biome, wx, wz, h)
 			sub := subsurface_block(biome)
+			// badlands columns are stratified terracotta down to ~16 blocks,
+			// so cliff faces show horizontal mesa bands, not a plain surface.
+			mesa := biome == .Badlands && h > SEA_LEVEL + 2
 
 			for y in 0 ..< CHUNK_H {
 				b: BlockId = .Air
 				if y == 0 {
 					b = .Bedrock
 				} else if y < h {
-					if y == h - 1 {
+					if mesa && y >= h - 16 {
+						b = badlands_stratum(seed, wx, wz, y)
+					} else if y == h - 1 {
 						b = surf
 					} else if y >= h - 4 {
 						b = sub
@@ -752,7 +801,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			// Each vegetated biome gets its own tree(s) plus a distinct palette
 			// of ground cover (4+ flora types apiece), so biomes read as
 			// genuinely different places rather than the same trees everywhere.
-			grass := surf == .Grass
+			grass := surf == .Grass || surf == .Podzol || surf == .CoarseDirt
 			switch biome {
 			case .Desert:
 				// Cacti + dead bushes on the sand — sparse by nature.

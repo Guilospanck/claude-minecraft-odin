@@ -66,3 +66,11 @@ WOOL_WHITE   :: Tile{9, 3}
 WOOL_RED     :: Tile{10, 3}
 WOOL_YELLOW  :: Tile{11, 3}
 WOOL_BLUE    :: Tile{12, 3}
+PODZOL_TOP       :: Tile{13, 3}
+PODZOL_SIDE      :: Tile{14, 3}
+COARSE_DIRT      :: Tile{15, 3}
+MUD              :: Tile{0, 4}
+GRAVEL           :: Tile{1, 4}
+TERRACOTTA       :: Tile{2, 4}
+TERRACOTTA_WHITE :: Tile{3, 4}
+TERRACOTTA_BROWN :: Tile{4, 4}

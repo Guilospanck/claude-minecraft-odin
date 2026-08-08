@@ -324,8 +324,8 @@ main :: proc() {
 			b = .Mountains
 		}
 		dev_teleport_biome(&world, &player, b)
-		player.pos.y += 8
-		player.pitch = -0.3
+		player.pos.y += 6
+		player.pitch = -0.2
 		player.fly = true
 	}
 

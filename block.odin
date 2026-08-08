@@ -74,6 +74,14 @@ BlockId :: enum u8 {
 	CarpetRed,
 	CarpetYellow,
 	CarpetBlue,
+	// Surface-rule blocks: biome-specific ground cover / strata.
+	Podzol, // taiga forest floor
+	CoarseDirt, // rough dirt patches (savanna/taiga)
+	Mud, // swamp wet ground
+	Gravel, // shores + riverbeds
+	Terracotta, // badlands base band
+	TerracottaWhite, // badlands pale band
+	TerracottaBrown, // badlands dark band
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -337,6 +345,22 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.COBBLESTONE
 	case .FenceGate:
 		return ad.PLANKS
+	case .Podzol:
+		if f == .PosY do return ad.PODZOL_TOP
+		if f == .NegY do return ad.DIRT
+		return ad.PODZOL_SIDE
+	case .CoarseDirt:
+		return ad.COARSE_DIRT
+	case .Mud:
+		return ad.MUD
+	case .Gravel:
+		return ad.GRAVEL
+	case .Terracotta:
+		return ad.TERRACOTTA
+	case .TerracottaWhite:
+		return ad.TERRACOTTA_WHITE
+	case .TerracottaBrown:
+		return ad.TERRACOTTA_BROWN
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -466,6 +490,20 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.44, 0.44, 0.46}
 	case .FenceGate:
 		return {0.55, 0.40, 0.24}
+	case .Podzol:
+		return {0.36, 0.26, 0.13}
+	case .CoarseDirt:
+		return {0.42, 0.31, 0.20}
+	case .Mud:
+		return {0.28, 0.24, 0.20}
+	case .Gravel:
+		return {0.50, 0.48, 0.47}
+	case .Terracotta:
+		return {0.63, 0.36, 0.22}
+	case .TerracottaWhite:
+		return {0.80, 0.68, 0.56}
+	case .TerracottaBrown:
+		return {0.40, 0.26, 0.16}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -612,6 +650,20 @@ block_name :: proc(b: BlockId) -> string {
 		return "Yellow Carpet"
 	case .CarpetBlue:
 		return "Blue Carpet"
+	case .Podzol:
+		return "Podzol"
+	case .CoarseDirt:
+		return "Coarse Dirt"
+	case .Mud:
+		return "Mud"
+	case .Gravel:
+		return "Gravel"
+	case .Terracotta:
+		return "Terracotta"
+	case .TerracottaWhite:
+		return "White Terracotta"
+	case .TerracottaBrown:
+		return "Brown Terracotta"
 	}
 	return "?"
 }

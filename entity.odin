@@ -672,7 +672,12 @@ mob_try_spawn :: proc(w: ^World, mobs: ^[dynamic]Mob, player_pos: Vec3) {
 
 	sy, surf := surface_y(w, wx, wz)
 	if sy < 0 do return
-	if surf != .Grass && surf != .Sand && surf != .Snow do return
+	#partial switch surf {
+	case .Grass, .Sand, .Snow, .Podzol, .CoarseDirt, .Mud, .Gravel, .RedSand, .Terracotta, .TerracottaWhite, .TerracottaBrown:
+	// a natural ground surface: fine to spawn on
+	case:
+		return
+	}
 	if world_block(w, wx, sy + 1, wz) == .Water do return // don't spawn on seabed
 	if block_is_solid(world_block(w, wx, sy + 1, wz)) do return // needs headroom
 
