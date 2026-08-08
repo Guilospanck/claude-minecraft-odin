@@ -443,6 +443,18 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(knot ? Color{120, 156, 92, 255} : Color{150, 196, 120, 255}, jitter(gx, gy, 8))
 					c.a = 255
 				}
+			case "kelp":
+				// a wavy dark-green underwater frond on a transparent tile
+				c = Color{0, 0, 0, 0}
+				zig := [6]int{0, 1, 2, 1, 0, -1}
+				sway := zig[int(py) % 6] // stepped S-curve up the tile
+				cx := 8 + sway
+				frond := int(px) >= cx - 1 && int(px) <= cx + 1
+				leaf := (int(px) == cx - 2 || int(px) == cx + 2) && (py % 3 == 0)
+				if frond || leaf {
+					c = shade(Color{54, 108, 62, 255}, jitter(gx, gy, 10))
+					c.a = 255
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -557,6 +569,7 @@ main :: proc() {
 	paint(ad.LILY_PAD, Color{0, 0, 0, 0}, "lily")
 	paint(ad.BAMBOO, Color{0, 0, 0, 0}, "bamboo")
 	paint(ad.SUGAR_CANE, Color{0, 0, 0, 0}, "sugar_cane")
+	paint(ad.KELP, Color{0, 0, 0, 0}, "kelp")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

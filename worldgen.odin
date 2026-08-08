@@ -878,15 +878,30 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 		for lx in 2 ..< CHUNK_W - 2 {
 			biome := biomes[lx + lz * CHUNK_W]
 			surf_y := heights[lx + lz * CHUNK_W] - 1
-			if surf_y < SEA_LEVEL do continue
-			surf := chunk_get(c, lx, surf_y, lz)
-			site_ok := tree_site_clear(heights, lx, lz, surf_y)
-
 			wx := base_x + lx
 			wz := base_z + lz
 			hsh := hash_u64(seed ~ (u64(i64(wx)) * 0x9E3779B1) ~ (u64(i64(wz)) * 0x85EBCA77))
 			r := hsh % 1000
 			th := int((hsh >> 10) % 3)
+
+			// Underwater: grow kelp strands up from soft, deep-enough seabed so the
+			// ocean floor isn't a barren plain. The depth gate keeps it out of shallow
+			// river/pond water.
+			if surf_y < SEA_LEVEL {
+				sb := chunk_get(c, lx, surf_y, lz)
+				if (sb == .Sand || sb == .Gravel || sb == .Dirt || sb == .CoarseDirt) &&
+				   SEA_LEVEL - surf_y >= 3 &&
+				   r < 230 &&
+				   chunk_get(c, lx, surf_y + 1, lz) == .Water {
+					top := min(SEA_LEVEL - 1, surf_y + 2 + int((hsh >> 40) % 6))
+					for y in surf_y + 1 ..= top {
+						if chunk_get(c, lx, y, lz) == .Water do chunk_set(c, lx, y, lz, .Kelp)
+					}
+				}
+				continue
+			}
+			surf := chunk_get(c, lx, surf_y, lz)
+			site_ok := tree_site_clear(heights, lx, lz, surf_y)
 
 			// Each vegetated biome gets its own tree(s) plus a distinct palette
 			// of ground cover (4+ flora types apiece), so biomes read as
