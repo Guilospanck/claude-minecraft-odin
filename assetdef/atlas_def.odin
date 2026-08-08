@@ -77,3 +77,6 @@ TERRACOTTA_BROWN :: Tile{4, 4}
 ICE              :: Tile{5, 4}
 LILY_PAD         :: Tile{6, 4} // sprite/flat (transparent background)
 BAMBOO           :: Tile{7, 4} // sprite (transparent background)
+FEATHER          :: Tile{8, 4} // item icon
+LEATHER          :: Tile{9, 4} // item icon
+BONE             :: Tile{10, 4} // item icon

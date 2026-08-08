@@ -195,6 +195,47 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(Color{150, 168, 92, 255}, jitter(gx, gy, 12))
 					c.a = 255
 				}
+			case "feather":
+				c = Color{0, 0, 0, 0}
+				// a plume: a pale central shaft with barbs widening toward the tip
+				shaft := int(px) == 8 && py >= 2 && py <= 13
+				w := (int(py) - 2) / 3
+				barb :=
+					py >= 4 &&
+					py <= 12 &&
+					abs(int(px) - 8) <= w &&
+					abs(int(px) - 8) >= 1
+				if shaft {
+					c = Color{226, 230, 238, 255}
+				} else if barb {
+					c = shade(Color{198, 212, 226, 255}, jitter(gx, gy, 8));c.a = 255
+				}
+			case "leather":
+				c = Color{0, 0, 0, 0}
+				// a rounded tan hide with a darker stitched border
+				hide :=
+					px >= 3 &&
+					px <= 12 &&
+					py >= 3 &&
+					py <= 12 &&
+					!((px <= 4 || px >= 11) && (py <= 4 || py >= 11))
+				if hide {
+					stitch := px == 3 || px == 12 || py == 3 || py == 12
+					c = shade(
+						stitch ? Color{92, 60, 32, 255} : Color{150, 102, 58, 255},
+						jitter(gx, gy, 10),
+					);c.a = 255
+				}
+			case "bone":
+				c = Color{0, 0, 0, 0}
+				// a classic bone: a shaft with two knobbed ends
+				shaft := px >= 6 && px <= 9 && py >= 3 && py <= 12
+				knob :=
+					(py <= 4 || py >= 11) &&
+					((px >= 4 && px <= 6) || (px >= 9 && px <= 11))
+				if shaft || knob {
+					c = shade(Color{234, 232, 216, 255}, jitter(gx, gy, 6));c.a = 255
+				}
 			case "obsidian":
 				spec := ((jitter(gx * 2, gy * 2, 100) + 100) % 9) < 2
 				c = spec ? Color{80, 50, 110, 255} : shade(Color{28, 20, 40, 255}, jitter(gx, gy, 8))
@@ -447,6 +488,9 @@ main :: proc() {
 	paint(ad.BREAD, Color{0, 0, 0, 0}, "bread")
 	paint(ad.WHEAT_ITEM, Color{0, 0, 0, 0}, "wheat_item")
 	paint(ad.SEEDS, Color{0, 0, 0, 0}, "seeds")
+	paint(ad.FEATHER, Color{0, 0, 0, 0}, "feather")
+	paint(ad.LEATHER, Color{0, 0, 0, 0}, "leather")
+	paint(ad.BONE, Color{0, 0, 0, 0}, "bone")
 	paint(ad.PLANKS, Color{158, 118, 68, 255}, "planks")
 	paint(ad.STONE_BRICK, Color{118, 118, 124, 255}, "stone_brick")
 	paint(ad.BRICKS, Color{158, 78, 62, 255}, "bricks")

@@ -1289,11 +1289,42 @@ mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 	m.vel.y = 6.0
 	audio_play(.Hurt, 0.7)
 	if m.health <= 0 {
-		if !mob_is_hostile(m.kind) {
-			item_spawn_food(&w.items, m.pos)
-			item_spawn_food(&w.items, m.pos)
-		}
+		mob_loot(w, m.kind, m.pos)
 		w.mobs[idx] = w.mobs[len(w.mobs) - 1]
 		pop(&w.mobs)
+	}
+}
+
+// What a mob drops when the player kills it. Meat goes to the food counter (as
+// RawFood — cook it for more), materials land in the inventory. Mirrors the
+// familiar Minecraft drops: chickens give feathers, cows/deer give leather,
+// sheep give wool, skeletons give bones. Mobs not listed drop nothing.
+mob_loot :: proc(w: ^World, kind: MobKind, pos: Vec3) {
+	meat := 0
+	mat := BlockId.Air
+	mat_n := 0
+	#partial switch kind {
+	case .Chicken:
+		meat = 1;mat = .Feather;mat_n = 1
+	case .Cow:
+		meat = 2;mat = .Leather;mat_n = 1
+	case .Pig:
+		meat = 2
+	case .Sheep:
+		meat = 1;mat = .WoolWhite;mat_n = 1
+	case .Rabbit:
+		meat = 1
+	case .Goat, .Deer:
+		meat = 1;mat = .Leather;mat_n = 1
+	case .Horse, .Llama, .Camel:
+		mat = .Leather;mat_n = 1
+	case .Fish, .Pufferfish, .Dolphin:
+		meat = 1
+	case .Skeleton:
+		mat = .Bone;mat_n = 1 + int(rng_range(0, 1.99)) // 1..2 bones
+	}
+	for _ in 0 ..< meat do item_spawn_food(&w.items, pos)
+	if mat != .Air {
+		for _ in 0 ..< mat_n do item_spawn(&w.items, mat, pos)
 	}
 }

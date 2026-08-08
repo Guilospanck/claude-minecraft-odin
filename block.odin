@@ -86,13 +86,18 @@ BlockId :: enum u8 {
 	Ice, // frozen water in the cold biomes
 	LilyPad, // flat pad floating on swamp water
 	Bamboo, // tall jungle stalk (sprite)
+	// Mob-drop items (inventory-only, like the food items) — appended at the end
+	// so existing block ids stay stable across saves.
+	Feather, // dropped by chickens
+	Leather, // dropped by cows, horses, deer, ...
+	Bone, // dropped by skeletons
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
 // but can never be placed into the world.
 block_is_item :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .RawFood, .CookedFood, .Bread, .Wheat, .Seeds:
+	case .RawFood, .CookedFood, .Bread, .Wheat, .Seeds, .Feather, .Leather, .Bone:
 		return true
 	}
 	return false
@@ -341,6 +346,12 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.WHEAT_ITEM
 	case .Seeds:
 		return ad.SEEDS
+	case .Feather:
+		return ad.FEATHER
+	case .Leather:
+		return ad.LEATHER
+	case .Bone:
+		return ad.BONE
 	case .Planks:
 		return ad.PLANKS
 	case .StoneBrick:
@@ -492,6 +503,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.82, 0.70, 0.28}
 	case .Seeds:
 		return {0.55, 0.62, 0.30}
+	case .Feather:
+		return {0.92, 0.94, 0.96}
+	case .Leather:
+		return {0.62, 0.42, 0.24}
+	case .Bone:
+		return {0.90, 0.89, 0.80}
 	case .Planks:
 		return {0.62, 0.46, 0.26}
 	case .StoneBrick:
@@ -642,6 +659,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "Wheat"
 	case .Seeds:
 		return "Seeds"
+	case .Feather:
+		return "Feather"
+	case .Leather:
+		return "Leather"
+	case .Bone:
+		return "Bone"
 	case .Planks:
 		return "Planks"
 	case .StoneBrick:
