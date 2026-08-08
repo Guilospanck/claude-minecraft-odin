@@ -239,6 +239,55 @@ EROSION_SPLINE := []SplinePoint{{-1.0, 1.0}, {-0.3, 0.7}, {0.2, 0.35}, {1.0, 0.1
 @(private = "file")
 PV_SPLINE := []SplinePoint{{-1.0, -0.3}, {-0.3, -0.15}, {0.0, 0.0}, {0.3, 0.3}, {0.6, 0.9}, {1.0, 1.0}}
 
+// A biome-correlated height delta (blocks) added on top of the base terrain, so
+// biomes read in their SILHOUETTE, not just colour: warm-dry country ripples
+// into dunes, hot-dry-flat country rises into flat-topped badlands mesas, cool
+// humid country rolls into gentle hills, rugged peaks-and-valleys country turns
+// jagged, and wet lowland flattens/sinks toward a marsh level. All factors are
+// continuous functions of the climate/terrain noise, so the delta varies
+// smoothly and never cliffs at a biome edge.
+@(private = "file")
+biome_shape :: proc(seed: u64, fx, fz, temp, moist, erosion_amp, pv: f32, h: int) -> f32 {
+	dry := clamp(-moist, 0, 1)
+	wet := clamp(moist, 0, 1)
+	hot := clamp(temp, 0, 1)
+	cool := clamp(1 - abs(temp) * 2, 0, 1) // peaks at temperate (temp≈0)
+	flat := clamp((0.5 - erosion_amp) * 2.5, 0, 1) // 1 where erosion left the land flat
+	delta := f32(0)
+
+	// desert / savanna dunes: low ripples in warm dry country
+	arid := dry * (0.35 + 0.65 * hot)
+	if arid > 0.02 {
+		dune := fbm2(seed + 717, fx * 0.05, fz * 0.05, 2)
+		delta += dune * 3.5 * arid
+	}
+	// badlands mesas: raised, flat-topped plateaus in hot + dry + flat country
+	mesa_f := hot * clamp((dry - 0.2) * 1.4, 0, 1) * flat
+	if mesa_f > 0.02 {
+		m := clamp(fbm2(seed + 818, fx * 0.022, fz * 0.022, 2), 0, 1)
+		delta += m * m * 15.0 * mesa_f // squared -> flatter tops, steeper sides
+	}
+	// rolling hills in cool, humid temperate country (meadow/forest)
+	hilly := cool * clamp(moist + 0.6, 0, 1)
+	if hilly > 0.02 {
+		hills := fbm2(seed + 919, fx * 0.016, fz * 0.016, 2)
+		delta += hills * 4.0 * hilly
+	}
+	// jaggedness where peaks-and-valleys AND erosion are both high (mountains)
+	mtn := clamp((pv - 0.35) * 1.6, 0, 1) * clamp((erosion_amp - 0.45) * 2.2, 0, 1)
+	if mtn > 0.02 {
+		jag := fbm2(seed + 1020, fx * 0.065, fz * 0.065, 3)
+		delta += jag * 8.0 * mtn
+	}
+	// swamp: pull wet, mid-temperature lowland down toward a flat marsh level
+	swampy := wet * clamp(1 - abs(temp) * 3, 0, 1) * clamp(f32(SEA_LEVEL + 8 - h) / 8.0, 0, 1)
+	if swampy > 0.02 {
+		cur := f32(h - SEA_LEVEL)
+		delta += (1.0 - cur) * swampy * 0.6 // toward SEA_LEVEL+1
+	}
+	return delta
+}
+
 // The full noise -> height -> biome pipeline for one world column. Factored
 // out of worldgen_fill so entity.odin's spawn logic can ask "what biome is
 // this column" without recomputing (and risking drifting out of sync with)
@@ -271,7 +320,21 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome,
 	pv_h := spline_eval(PV_SPLINE, pv) * erosion_amp * 40.0
 	detail := fbm2(seed, fx * 0.02, fz * 0.02, 4) * erosion_amp * 6.0
 
-	h = SEA_LEVEL + int(base_h + pv_h + detail)
+	fh := base_h + pv_h + detail // height above sea level, before biome shaping
+	h_base := SEA_LEVEL + int(fh)
+
+	// Classify from the PRE-shape height so raising a mesa or lowering a marsh
+	// doesn't flip the biome (a tall badlands mesa stays badlands, not mountain).
+	biome = classify_biome(continentalness, erosion_amp, pv, temp, moist, h_base)
+
+	// Biome-correlated surface shaping, driven by the same continuous climate
+	// fields the biome is (dryness/heat/erosion/pv), so shapes blend smoothly
+	// across borders instead of cliffing. Land only.
+	if h_base > SEA_LEVEL {
+		fh += biome_shape(seed, fx, fz, temp, moist, erosion_amp, pv, h_base)
+	}
+	h = SEA_LEVEL + int(fh)
+	if h < SEA_LEVEL + 1 && h_base > SEA_LEVEL + 1 do h = SEA_LEVEL + 1 // keep shaped land above water
 
 	// Rivers: winding channels along a low-frequency zero-crossing, only in
 	// lowlands (so they don't gouge canyons through mountains). Both factors
@@ -309,9 +372,7 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome,
 
 	if h < 4 do h = 4
 	if h > CHUNK_H - 8 do h = CHUNK_H - 8
-
-	biome = classify_biome(continentalness, erosion_amp, pv, temp, moist, h)
-	return
+	return // biome was classified from the pre-shape height above
 }
 
 // A ravine never carves deeper than this below the surface — see the
