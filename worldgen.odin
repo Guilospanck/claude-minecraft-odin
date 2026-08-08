@@ -512,6 +512,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 	// tree placed on the same columns, instead of depending on call order
 	// luck for a clean building.
 	generate_village(w, c, seed, base_x, base_z, heights[:], biomes[:])
+	generate_structures(w, c, seed, base_x, base_z, heights[:], biomes[:])
 }
 
 // Make unsupported water fall. Rivers/oceans that were carved through by a
