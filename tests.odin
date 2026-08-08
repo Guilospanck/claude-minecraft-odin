@@ -70,6 +70,36 @@ test_chunk_index :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_sneak_wont_walk_off_ledge :: proc(t: ^testing.T) {
+	// A single 1x1 ledge block surrounded by a drop. Shoved east repeatedly, a
+	// sneaking body must stay grounded on it; a normal body walks off and falls.
+	shove :: proc(sneak: bool) -> (Vec3, bool) {
+		w, c := make_test_world()
+		defer free_test_world(&w)
+		chunk_set(c, 2, 39, 2, .Stone)
+		pos := Vec3{2.5, 40, 2.5}
+		vel := Vec3{6, 0, 0}
+		grounded := false
+		for _ in 0 ..< 12 {
+			if sneak {
+				grounded = body_physics_sneak(&w, &pos, &vel, PLAYER_HW, PLAYER_H, 0.1)
+			} else {
+				grounded = body_physics(&w, &pos, &vel, PLAYER_HW, PLAYER_H, 0.1)
+			}
+			vel.x = 6 // keep shoving east each step
+		}
+		return pos, grounded
+	}
+
+	spos, sground := shove(true)
+	testing.expect(t, sground, "sneaking body stays grounded on the ledge")
+	testing.expect(t, spos.y > 39.5, "sneaking body never falls off the ledge")
+
+	npos, nground := shove(false)
+	testing.expect(t, !nground && npos.y < 39.0, "a non-sneaking body walks off and falls")
+}
+
+@(test)
 test_raycast_hits_block :: proc(t: ^testing.T) {
 	w, c := make_test_world()
 	defer free_test_world(&w)

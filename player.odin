@@ -44,6 +44,8 @@ Player :: struct {
 	fov_kick:    f32, // 0..1 eased sprint FOV widen, for a smooth zoom in/out
 	bob_phase:   f32, // advances while walking; drives the camera head-bob
 	bob_amp:     f32, // 0..1 eased bob strength (fades in/out as you start/stop)
+	sneaking:    bool, // crouching (hold Shift on ground): slow, low, won't walk off ledges
+	crouch:      f32, // 0..1 eased crouch amount, for a smooth camera dip
 	w_was_down:  bool, // previous-frame W state, for double-tap detection
 	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
@@ -231,9 +233,19 @@ process_input :: proc(p: ^Player, dt: f32) {
 	p.w_was_down = w_down
 	if !w_down || p.hunger <= 6 do p.sprinting = false // can't sprint stopped or starving
 
-	sprint_active := p.sprinting && !p.fly && !p.in_water
+	// Sneak: crouch-walk while holding Shift on solid ground. Overrides sprint and
+	// caps the speed; the physics step below keeps you from stepping off ledges.
+	p.sneaking = key_down(glfw.KEY_LEFT_SHIFT) && !p.fly && !p.in_water && p.on_ground
+	crouch_target: f32 = p.sneaking ? 1 : 0
+	p.crouch += (crouch_target - p.crouch) * min(dt * 12, 1)
+
+	sprint_active := p.sprinting && !p.fly && !p.in_water && !p.sneaking
 	speed := p.fly ? f32(FLY_SPEED) : (p.in_water ? f32(WALK_SPEED) * 0.6 : f32(WALK_SPEED))
 	if sprint_active do speed *= SPRINT_MULT
+	if p.sneaking {
+		p.sprinting = false
+		speed = f32(WALK_SPEED) * SNEAK_MULT
+	}
 
 	// Ease the FOV toward its sprint target so the zoom is smooth, not a snap.
 	target: f32 = sprint_active ? 1 : 0

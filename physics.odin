@@ -80,6 +80,29 @@ body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32, gravity:
 	return grounded
 }
 
+// Like body_physics, but any horizontal step that would leave the feet hanging
+// over empty space is undone — Minecraft's sneak edge-guard. Only sensible to
+// call while the body is already grounded (the caller gates on on_ground).
+body_physics_sneak :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32) -> bool {
+	vel.y -= GRAVITY * dt
+	if vel.y < -TERMINAL_VEL do vel.y = -TERMINAL_VEL
+
+	floor_below :: proc(w: ^World, pos: Vec3, hw, h: f32) -> bool {
+		return body_collides(w, pos - Vec3{0, 2 * EPS, 0}, hw, h)
+	}
+	ox := pos.x
+	body_move_axis(w, pos, vel, vel.x * dt, 0, hw, h)
+	if !floor_below(w, pos^, hw, h) {pos.x = ox;vel.x = 0}
+	oz := pos.z
+	body_move_axis(w, pos, vel, vel.z * dt, 2, hw, h)
+	if !floor_below(w, pos^, hw, h) {pos.z = oz;vel.z = 0}
+	body_move_axis(w, pos, vel, vel.y * dt, 1, hw, h)
+
+	grounded := floor_below(w, pos^, hw, h)
+	if grounded && vel.y < 0 do vel.y = 0
+	return grounded
+}
+
 CREATURE_AIR_MAX :: f32(11.0) // seconds a land creature can hold its breath underwater
 
 // True when a land creature's feet AND head are in water (fully submerged, so it
@@ -211,7 +234,11 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	}
 	was_air := !p.on_ground
 
-	p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt)
+	if p.sneaking && p.on_ground {
+		p.on_ground = body_physics_sneak(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt)
+	} else {
+		p.on_ground = body_physics(w, &p.pos, &p.vel, PLAYER_HW, PLAYER_H, dt)
+	}
 
 	if p.on_ground {
 		if was_air && p.fall_speed > FALL_SAFE {
