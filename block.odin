@@ -82,6 +82,10 @@ BlockId :: enum u8 {
 	Terracotta, // badlands base band
 	TerracottaWhite, // badlands pale band
 	TerracottaBrown, // badlands dark band
+	// Biome-signature blocks/plants.
+	Ice, // frozen water in the cold biomes
+	LilyPad, // flat pad floating on swamp water
+	Bamboo, // tall jungle stalk (sprite)
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -124,7 +128,8 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	     .TallGrass,
 	     .Fern,
 	     .DeadBush,
-	     .Ladder:
+	     .Ladder,
+	     .Bamboo:
 		return true
 	}
 	return false
@@ -134,7 +139,7 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 // share the same non-solid, non-occluding, ray-stopping behaviour.
 block_is_plant :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush:
+	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo:
 		return true
 	}
 	return false
@@ -154,7 +159,13 @@ LOWBOX_HEIGHT :: f32(0.5625)
 // Carpets: a paper-thin floor cover (own low-box height, walked over freely).
 CARPET_HEIGHT :: f32(0.0625)
 block_is_carpet :: proc(b: BlockId) -> bool {
-	return b == .CarpetWhite || b == .CarpetRed || b == .CarpetYellow || b == .CarpetBlue
+	return(
+		b == .CarpetWhite ||
+		b == .CarpetRed ||
+		b == .CarpetYellow ||
+		b == .CarpetBlue ||
+		b == .LilyPad \
+	)
 }
 
 block_is_crop :: proc(b: BlockId) -> bool {
@@ -204,7 +215,8 @@ block_is_opaque :: proc(b: BlockId) -> bool {
 	     .GlassPane,
 	     .Ladder,
 	     .Wall,
-	     .FenceGate:
+	     .FenceGate,
+	     .Ice:
 		return false
 	}
 	if block_is_plant(b) || block_is_carpet(b) do return false
@@ -213,7 +225,7 @@ block_is_opaque :: proc(b: BlockId) -> bool {
 
 // Drawn in the translucent pass (blended, no depth write).
 block_is_translucent :: proc(b: BlockId) -> bool {
-	return b == .Water || b == .Glass || b == .Portal || b == .GlassPane
+	return b == .Water || b == .Glass || b == .Portal || b == .GlassPane || b == .Ice
 }
 
 // Should a face of `cur` against neighbour `nb` be emitted?
@@ -221,7 +233,7 @@ face_visible :: proc(cur, nb: BlockId) -> bool {
 	if cur == .Water || cur == .Lava {
 		return nb == .Air // fluids show their surface / edges
 	}
-	if cur == .Glass || cur == .Portal {
+	if cur == .Glass || cur == .Portal || cur == .Ice {
 		return !block_is_opaque(nb) && nb != cur // hide same-type seams
 	}
 	return !block_is_opaque(nb)
@@ -361,6 +373,12 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.TERRACOTTA_WHITE
 	case .TerracottaBrown:
 		return ad.TERRACOTTA_BROWN
+	case .Ice:
+		return ad.ICE
+	case .LilyPad:
+		return ad.LILY_PAD
+	case .Bamboo:
+		return ad.BAMBOO
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -504,6 +522,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.80, 0.68, 0.56}
 	case .TerracottaBrown:
 		return {0.40, 0.26, 0.16}
+	case .Ice:
+		return {0.68, 0.80, 0.95}
+	case .LilyPad:
+		return {0.28, 0.55, 0.28}
+	case .Bamboo:
+		return {0.48, 0.68, 0.28}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -664,6 +688,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "White Terracotta"
 	case .TerracottaBrown:
 		return "Brown Terracotta"
+	case .Ice:
+		return "Ice"
+	case .LilyPad:
+		return "Lily Pad"
+	case .Bamboo:
+		return "Bamboo"
 	}
 	return "?"
 }

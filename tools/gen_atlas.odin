@@ -336,6 +336,30 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				// smooth fired clay with faint horizontal grain
 				band := (py % 4 < 2)
 				c = shade(base, jitter(gx, gy, 8) + (band ? 6 : -6))
+			case "ice":
+				// pale blue with faint cracks
+				crack := (px % 7 == 3) || (py % 6 == 2) || ((px + py) % 9 == 0)
+				c = shade(base, jitter(gx, gy, 6) + (crack ? -22 : 4))
+			case "lily":
+				// a round green pad with a notch, on a transparent tile
+				c = Color{0, 0, 0, 0}
+				dx := px - 8
+				dy := py - 8
+				pad := dx * dx + dy * dy < 46
+				notch := px >= 8 && py >= 8 && (dx + dy) > 5
+				if pad && !notch {
+					c = shade(Color{52, 118, 52, 255}, jitter(gx, gy, 12))
+					c.a = 255
+				}
+			case "bamboo":
+				// two thin vertical green canes on a transparent tile
+				c = Color{0, 0, 0, 0}
+				cane := (px >= 5 && px <= 7) || (px >= 10 && px <= 12)
+				knot := cane && (py % 5 == 0)
+				if cane {
+					c = shade(knot ? Color{96, 128, 52, 255} : Color{120, 168, 66, 255}, jitter(gx, gy, 8))
+					c.a = 255
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -440,6 +464,9 @@ main :: proc() {
 	paint(ad.TERRACOTTA, Color{160, 92, 56, 255}, "terracotta")
 	paint(ad.TERRACOTTA_WHITE, Color{202, 172, 142, 255}, "terracotta")
 	paint(ad.TERRACOTTA_BROWN, Color{100, 66, 40, 255}, "terracotta")
+	paint(ad.ICE, Color{174, 204, 240, 255}, "ice")
+	paint(ad.LILY_PAD, Color{0, 0, 0, 0}, "lily")
+	paint(ad.BAMBOO, Color{0, 0, 0, 0}, "bamboo")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -74,3 +74,6 @@ GRAVEL           :: Tile{1, 4}
 TERRACOTTA       :: Tile{2, 4}
 TERRACOTTA_WHITE :: Tile{3, 4}
 TERRACOTTA_BROWN :: Tile{4, 4}
+ICE              :: Tile{5, 4}
+LILY_PAD         :: Tile{6, 4} // sprite/flat (transparent background)
+BAMBOO           :: Tile{7, 4} // sprite (transparent background)

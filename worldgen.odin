@@ -156,9 +156,14 @@ badlands_stratum :: proc(seed: u64, wx, wz, y: int) -> BlockId {
 // podzol/coarse-dirt in taiga, mud in swamps, coarse dirt in savanna, gravel on
 // cold shores and rocky mountains. Not file-private: tests exercise it.
 surface_block :: proc(seed: u64, biome: Biome, wx, wz, h: int) -> BlockId {
-	if h <= SEA_LEVEL + 1 { 	// beach / seabed
-		cold := biome == .Snow || biome == .Taiga || biome == .Mountains
-		if cold && surface_patch(seed, 4001, wx, wz, 0.6) do return .Gravel
+	if h <= SEA_LEVEL + 1 { 	// beach / seabed — varies with the local climate
+		temp, _ := world_climate(seed, wx, wz)
+		if temp < -0.3 { 	// snowy / frozen beach
+			return surface_patch(seed, 4001, wx, wz, 0.72) ? .Gravel : .Snow
+		}
+		if (biome == .Taiga || biome == .Mountains) && surface_patch(seed, 4008, wx, wz, 0.5) {
+			return .Gravel // stony shore below cold, rugged land
+		}
 		return .Sand
 	}
 	switch biome {
@@ -413,6 +418,8 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 			// badlands columns are stratified terracotta down to ~16 blocks,
 			// so cliff faces show horizontal mesa bands, not a plain surface.
 			mesa := biome == .Badlands && h > SEA_LEVEL + 2
+			ctemp, _ := world_climate(seed, wx, wz)
+			frozen := ctemp < -0.42 // frigid: cap open water with a skin of ice
 
 			for y in 0 ..< CHUNK_H {
 				b: BlockId = .Air
@@ -428,6 +435,8 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 					} else {
 						b = .Stone
 					}
+				} else if y == SEA_LEVEL && frozen {
+					b = .Ice // frozen surface of a cold lake / river / sea
 				} else if y <= SEA_LEVEL {
 					b = .Water
 				}
@@ -918,9 +927,10 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					put_plant(c, lx, surf_y, lz, pick_plant(hsh, pal))
 				}
 			case .Swamp:
-				// humid ground pools with standing marsh water on flat spots
+				// humid ground pools with standing marsh water + the odd lily pad
 				if grass && site_ok && (hsh >> 26) % 100 < 26 {
 					chunk_set(c, lx, surf_y, lz, .Water)
+					if (hsh >> 8) % 3 == 0 do chunk_set(c, lx, surf_y + 1, lz, .LilyPad)
 				} else if grass && site_ok && r < 16 {
 					k := pick_tree(hsh, {.Willow, .Willow, .Oak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th % 2), k)
@@ -967,13 +977,15 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					)
 				}
 			case .Jungle:
-				// Dense, tall canopy over a lush understorey, with the odd pool.
+				// Dense, tall canopy over a lush understorey, with pools + bamboo.
 				if grass && site_ok && (hsh >> 26) % 100 < 8 {
 					chunk_set(c, lx, surf_y, lz, .Water)
 				} else if grass && site_ok && r < 58 {
 					k := pick_tree(hsh, {.BigOak, .Oak, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 7 + th), k)
-				} else if grass && r < 90 {
+				} else if grass && r < 74 {
+					for i in 0 ..< 2 + th do chunk_set(c, lx, surf_y + 1 + i, lz, .Bamboo) // bamboo stalk
+				} else if grass && r < 96 {
 					put_plant(
 						c,
 						lx,
