@@ -3,6 +3,40 @@ package main
 import "core:fmt"
 import gl "vendor:OpenGL"
 
+// ---- Minecraft-style GUI palette + bevel helpers ----
+// A light "stone" panel with sunken slots and dark engraved text, matching the
+// classic Minecraft inventory chrome (rather than the old flat dark-navy panels).
+@(private = "file") MC_PANEL :: Vec4{0.78, 0.78, 0.78, 1.0}
+@(private = "file") MC_PANEL_HI :: Vec4{1.0, 1.0, 1.0, 1.0} // raised bevel: top-left highlight
+@(private = "file") MC_PANEL_LO :: Vec4{0.33, 0.33, 0.33, 1.0} // raised bevel: bottom-right shadow
+@(private = "file") MC_SLOT :: Vec4{0.545, 0.545, 0.545, 1.0}
+@(private = "file") MC_SLOT_HI :: Vec4{1.0, 1.0, 1.0, 1.0} // sunken slot: bottom-right highlight
+@(private = "file") MC_SLOT_LO :: Vec4{0.22, 0.22, 0.22, 1.0} // sunken slot: top-left shadow
+@(private = "file") MC_TEXT :: Vec4{0.24, 0.24, 0.24, 1.0} // dark engraved label text
+@(private = "file") MC_TEXT_DIM :: Vec4{0.40, 0.40, 0.42, 1.0}
+
+// A bevelled rectangle: `br` shows along the bottom+right edge, `tl` along the
+// top+left, with `face` filling the middle. Raised (light tl) reads as a panel
+// popping out; sunken (dark tl) reads as an inset slot. The x offset is divided
+// by aspect so the bevel is an even thickness in pixels on both axes.
+@(private = "file")
+ui_bevel :: proc(x0, y0, x1, y1, t, aspect: f32, face, tl, br: Vec4) {
+	tx := t / aspect
+	hud_quad(x0, y0, x1, y1, br)
+	hud_quad(x0, y0 + t, x1 - tx, y1, tl)
+	hud_quad(x0 + tx, y0 + t, x1 - tx, y1 - t, face)
+}
+
+// A raised stone panel (the window chrome behind an inventory/chest screen).
+@(private = "file")
+ui_panel :: proc(x0, y0, x1, y1, aspect: f32) {
+	ui_bevel(x0, y0, x1, y1, 0.014, aspect, MC_PANEL, MC_PANEL_HI, MC_PANEL_LO)
+}
+
+// Dim the world behind an open menu.
+@(private = "file")
+ui_dim :: proc() {hud_quad(-1, -1, 1, 1, Vec4{0, 0, 0, 0.6})}
+
 g_show_inventory: bool
 g_show_quit_confirm: bool
 
@@ -21,7 +55,7 @@ g_inv_tab: InvTab
 // Craft tab shows a scrollable window into RECIPES (the list outgrew the screen
 // once building blocks were added). g_craft_scroll is the index of the top
 // visible recipe; the mouse wheel moves it (see main loop).
-CRAFT_VISIBLE :: 11
+CRAFT_VISIBLE :: 7
 g_craft_scroll: int
 
 craft_scroll_clamp :: proc() {
@@ -48,20 +82,23 @@ inv_tab_name :: proc(t: InvTab) -> string {
 @(private = "file")
 ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	labels := [INV_TAB_COUNT]string{"E ITEMS", "T CRAFT", "X TOOLS"}
-	seg: f32 = 0.34
+	labels := [INV_TAB_COUNT]string{"ITEMS", "CRAFT", "GEAR"}
+	seg: f32 = 0.30
 	total := seg * f32(INV_TAB_COUNT)
 	x0 := -total * 0.5
 	for i in 0 ..< INV_TAB_COUNT {
 		active := InvTab(i) == g_inv_tab
 		cx := x0 + f32(i) * seg + seg * 0.5
-		w2 := seg * 0.42
-		col := active ? Vec4{0.95, 0.85, 0.4, 1} : Vec4{0.55, 0.58, 0.64, 1}
+		w2 := seg * 0.44
+		bx0, bx1 := cx - w2, cx + w2
+		by0, by1 := y - ch_h * 1.05, y + ch_h * 0.55
 		if active {
-			hud_quad(cx - w2, y - ch_h * 1.3, cx + w2, y + ch_h * 0.35, Vec4{0.16, 0.16, 0.2, 1})
+			ui_bevel(bx0, by0, bx1, by1, 0.008, aspect, Vec4{0.86, 0.86, 0.86, 1}, MC_PANEL_HI, MC_PANEL_LO)
+		} else {
+			ui_bevel(bx0, by0, bx1, by1, 0.006, aspect, Vec4{0.60, 0.60, 0.60, 1}, MC_SLOT_LO, MC_SLOT_HI)
 		}
 		lw := text_width(labels[i], ch_w)
-		text_draw(labels[i], cx - lw * 0.5, y, ch_w, ch_h, col)
+		text_draw(labels[i], cx - lw * 0.5, y, ch_w, ch_h, active ? MC_TEXT : MC_TEXT_DIM)
 	}
 }
 
@@ -69,59 +106,61 @@ ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 // and its next upgrade; press the number to craft/upgrade it.
 @(private = "file")
 ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
+	NUMCOL :: Vec4{0.45, 0.32, 0.08, 1} // engraved gold number
+	GOOD :: Vec4{0.13, 0.45, 0.13, 1} // affordable upgrade (green)
+	BAD :: Vec4{0.62, 0.22, 0.22, 1} // can't afford (red)
+	step := ch_h * 1.55
 	y := top
 	for k in ToolKind {
 		tier := p.tool_tier[k]
 		have := tier > 0 \
 			? fmt.tprintf("%s %s  DUR %d", TIER_NAMES[tier], tool_name(k), p.tool_dur[k]) \
 			: fmt.tprintf("%s: none", tool_name(k))
-		text_draw(fmt.tprintf("%d", int(k) + 1), -0.5, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
-		text_draw(have, -0.38, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
+		text_draw(fmt.tprintf("%d", int(k) + 1), -0.56, y, ch_w, ch_h, NUMCOL)
+		text_draw(have, -0.48, y, ch_w * 0.85, ch_h * 0.85, MC_TEXT)
 
 		next, block, count, ok := tool_next(p, k)
 		msg: string
-		col := Vec4{0.6, 0.7, 0.8, 1}
+		col := MC_TEXT_DIM
 		if ok {
-			afford := inv_has(p, block, count)
 			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
-			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
+			col = inv_has(p, block, count) ? GOOD : BAD
 		} else {
 			msg = "(max)"
 		}
-		text_draw(msg, 0.22, y, ch_w * 0.9, ch_h * 0.9, col)
-		y -= ch_h * 1.9
+		text_draw(msg, 0.16, y, ch_w * 0.85, ch_h * 0.85, col)
+		y -= step
 	}
 
-	y -= ch_h * 0.6
+	y -= ch_h * 0.5
 	text_draw(
-		fmt.tprintf("ARMOR: %d PTS - %d PCT REDUCTION", armor_points(p), int(armor_reduction(p) * 100)),
-		-0.5,
+		fmt.tprintf("ARMOR: %d PTS  -  %d%% DAMAGE REDUCTION", armor_points(p), int(armor_reduction(p) * 100)),
+		-0.56,
 		y,
-		ch_w,
-		ch_h,
-		Vec4{1, 0.88, 0.5, 1},
+		ch_w * 0.9,
+		ch_h * 0.9,
+		NUMCOL,
 	)
-	y -= ch_h * 1.9
+	y -= step
 	for s in ArmorSlot {
 		tier := p.armor_tier[s]
 		have := tier > 0 \
 			? fmt.tprintf("%s %s  DUR %d", TIER_NAMES[tier], armor_name(s), p.armor_dur[s]) \
 			: fmt.tprintf("%s: none", armor_name(s))
-		text_draw(fmt.tprintf("%d", TOOL_KIND_COUNT + int(s) + 1), -0.5, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, 1})
-		text_draw(have, -0.38, y, ch_w * 0.9, ch_h * 0.9, Vec4{0.9, 0.94, 0.98, 1})
+		text_draw(fmt.tprintf("%d", TOOL_KIND_COUNT + int(s) + 1), -0.56, y, ch_w, ch_h, NUMCOL)
+		text_draw(have, -0.48, y, ch_w * 0.85, ch_h * 0.85, MC_TEXT)
 
 		next, block, count, ok := armor_next(p, s)
 		msg: string
-		col := Vec4{0.6, 0.7, 0.8, 1}
+		col := MC_TEXT_DIM
 		if ok {
-			afford := inv_has(p, block, count)
 			msg = fmt.tprintf("-> %s (%d %s)", TIER_NAMES[next], count, block_name(block))
-			col = afford ? Vec4{0.6, 0.95, 0.6, 1} : Vec4{0.8, 0.5, 0.5, 1}
+			col = inv_has(p, block, count) ? GOOD : BAD
 		} else {
 			msg = "(max)"
 		}
-		text_draw(msg, 0.22, y, ch_w * 0.9, ch_h * 0.9, col)
-		y -= ch_h * 1.9
+		text_draw(msg, 0.16, y, ch_w * 0.85, ch_h * 0.85, col)
+		y -= step
 	}
 }
 
@@ -223,45 +262,54 @@ ui_draw_settings :: proc(fbw, fbh: int) {
 // press the number key to make it. Dimmed when you can't afford it yet.
 @(private = "file")
 ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
-	sw := ch_h / aspect * 1.3
+	bs := ch_h * 1.35 // mini-slot height
+	bw := bs / aspect
 	craft_scroll_clamp()
 	lo := g_craft_scroll
 	hi := min(len(RECIPES), lo + CRAFT_VISIBLE)
+	pitch := ch_h * 1.95
 	y := top
-	if lo > 0 do text_draw("^ scroll up", -0.86, top + ch_h * 1.6, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.8, 0.9, 1})
+	mnx, mny := cursor_ndc()
+	hovr := inv_hit_craft_row(mnx, mny)
+	if lo > 0 do text_center("^  more above", top + ch_h * 1.3, ch_w * 0.7, ch_h * 0.7, MC_TEXT_DIM)
 	for i in lo ..< hi {
 		r := RECIPES[i]
-		afford: f32 = recipe_can_make(p, w, r) ? 1.0 : 0.35
-		x: f32 = -0.86
-		// number label only for the first 9 visible rows (keys 1-9 map to them)
+		can := recipe_can_make(p, w, r)
+		txt := can ? MC_TEXT : MC_TEXT_DIM
+		if i == hovr do hud_quad(-0.58, y - pitch + ch_h * 0.6, 0.58, y + ch_h * 0.55, Vec4{1, 1, 1, 0.4})
+		sy := y - bs + ch_h * 0.35 // mini-slots aligned to the text line
+		x: f32 = -0.56
 		if i - lo < 9 {
-			text_draw(fmt.tprintf("%d", i - lo + 1), x, y, ch_w, ch_h, Vec4{1, 0.9, 0.5, afford})
+			text_draw(fmt.tprintf("%d", i - lo + 1), x, y, ch_w, ch_h, can ? Vec4{0.45, 0.32, 0.08, 1} : MC_TEXT_DIM)
 		}
-		x += ch_w * 2.2
+		x += ch_w * 1.7
 		for j in 0 ..< r.n_in {
 			ing := r.inputs[j]
-			hud_quad(x - 0.004, y - ch_h - 0.004, x + sw + 0.004, y + 0.004, Vec4{0.12, 0.12, 0.15, afford})
-			ui_block_icon(x, y - ch_h, x + sw, y, ing.block)
-			text_draw(fmt.tprintf("X%d", ing.count), x + sw + 0.008, y, ch_w * 0.85, ch_h * 0.85, Vec4{0.9, 0.9, 0.9, afford})
-			x += sw + ch_w * 2.8
+			ui_craft_slot(x, sy, bw, bs, aspect, ing.block, ing.count, ch_w, ch_h)
+			x += bw + ch_w * 1.1
 		}
-		text_draw(">", x, y, ch_w, ch_h, Vec4{1, 1, 1, afford})
-		x += ch_w * 2.2
-		hud_quad(x - 0.004, y - ch_h - 0.004, x + sw + 0.004, y + 0.004, Vec4{0.12, 0.12, 0.15, afford})
-		ui_block_icon(x, y - ch_h, x + sw, y, r.out)
-		x += sw + 0.01
-		note := r.needs_furnace ? " (FURNACE)" : ""
-		text_draw(
-			fmt.tprintf("%dX %s%s", r.out_count, block_name(r.out), note),
-			x,
-			y,
-			ch_w * 0.8,
-			ch_h * 0.8,
-			Vec4{0.9, 0.95, 1, afford},
-		)
-		y -= ch_h * 2.1
+		text_draw(">", x, y, ch_w, ch_h, txt)
+		x += ch_w * 2.0
+		ui_craft_slot(x, sy, bw, bs, aspect, r.out, r.out_count, ch_w, ch_h)
+		x += bw + ch_w * 1.2
+		note := r.needs_furnace ? "  (FURNACE)" : ""
+		text_draw(fmt.tprintf("%s%s", block_name(r.out), note), x, y, ch_w * 0.85, ch_h * 0.85, txt)
+		y -= pitch
 	}
-	if hi < len(RECIPES) do text_draw("v scroll down", -0.86, y + ch_h * 0.4, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.8, 0.9, 1})
+	if hi < len(RECIPES) do text_center("v  more below", y + ch_h * 0.1, ch_w * 0.7, ch_h * 0.7, MC_TEXT_DIM)
+}
+
+// A small sunken slot with a block icon and its count, for the craft rows.
+@(private = "file")
+ui_craft_slot :: proc(x0, y0, bw, bs, aspect: f32, blk: BlockId, count: int, ch_w, ch_h: f32) {
+	ui_bevel(x0, y0, x0 + bw, y0 + bs, 0.005, aspect, MC_SLOT, MC_SLOT_LO, MC_SLOT_HI)
+	if blk != .Air do ui_block_icon(x0 + bw * 0.12, y0 + bs * 0.12, x0 + bw * 0.88, y0 + bs * 0.88, blk)
+	if count > 1 {
+		s := fmt.tprintf("%d", count)
+		cw := ch_w * 0.62
+		ax := bw / bs
+		text_draw(s, x0 + bw - text_width(s, cw) - 0.004 * ax, y0 + ch_h * 0.62 + 0.006, cw, ch_h * 0.62, Vec4{1, 1, 1, 1})
+	}
 }
 
 // One Minecraft-style slot: bordered square, a real block texture (or a flat
@@ -284,20 +332,16 @@ ui_slot :: proc(
 	// 1/aspect); using the same NDC value on both axes is what made the old
 	// highlight look off-centre and squished.
 	ax := w / sz
-	frame :: proc(x0, y0, w, sz, ax, t: f32, col: Vec4) {
-		hud_quad(x0 - t * ax, y0 - t, x0 + w + t * ax, y0 + sz + t, col)
-	}
-	// The selected slot gets a thick bright-gold frame + a warmer background so
-	// it clearly stands apart from every unselected slot.
+	aspect := sz / w // w == sz/aspect, so aspect recovers from the two
+	// The selected/equipped slot gets a bright frame drawn behind it.
 	if selected {
-		frame(x0, y0, w, sz, ax, 0.013, Vec4{1.0, 0.82, 0.2, 1})
-		frame(x0, y0, w, sz, ax, 0.006, Vec4{0.34, 0.27, 0.10, 1})
-	} else {
-		frame(x0, y0, w, sz, ax, 0.005, Vec4{0.10, 0.10, 0.13, 0.9})
+		t := f32(0.011)
+		hud_quad(x0 - t * ax, y0 - t, x0 + w + t * ax, y0 + sz + t, Vec4{1.0, 0.98, 0.86, 1})
 	}
-	hud_quad(x0, y0, x0 + w, y0 + sz, selected ? Vec4{0.30, 0.28, 0.20, 1} : Vec4{0.17, 0.17, 0.21, 1})
+	// A sunken Minecraft slot: dark top-left edge, light bottom-right, grey face.
+	ui_bevel(x0, y0, x0 + w, y0 + sz, 0.006, aspect, MC_SLOT, MC_SLOT_LO, MC_SLOT_HI)
 	if use_tex {
-		if blk != .Air do ui_block_icon(x0 + w * 0.10, y0 + sz * 0.10, x0 + w * 0.90, y0 + sz * 0.90, blk)
+		if blk != .Air do ui_block_icon(x0 + w * 0.12, y0 + sz * 0.12, x0 + w * 0.88, y0 + sz * 0.88, blk)
 	} else if count > 0 {
 		hud_quad(x0 + w * 0.20, y0 + sz * 0.20, x0 + w * 0.80, y0 + sz * 0.80, Vec4{flat.r, flat.g, flat.b, 1})
 	}
@@ -312,7 +356,9 @@ ui_slot :: proc(
 	if count > 0 {
 		s := fmt.tprintf("%d", count)
 		cw2 := ch_w * 0.8
-		shadowed(s, x0 + w - text_width(s, cw2) - 0.006 * ax, y0 + 0.006, cw2, ch_h * 0.8, ax, Vec4{1, 1, 1, 1})
+		// text_draw grows downward from its y, so sit the count a text-height up
+		// from the slot floor to keep it inside the slot (over the grey face).
+		shadowed(s, x0 + w - text_width(s, cw2) - 0.006 * ax, y0 + ch_h * 0.8 + 0.008, cw2, ch_h * 0.8, ax, Vec4{1, 1, 1, 1})
 	}
 }
 
@@ -330,6 +376,21 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 	ch_h: f32 = 0.032
 	cw := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
 
+	// Dark chrome bar behind the slots (Minecraft hotbar look). Kept flush with
+	// the slot tops so it doesn't ride up over the XP bar drawn just above.
+	m := gap
+	ui_bevel(
+		x0 - m,
+		y0 - m,
+		x0 + total + m,
+		y0 + sz,
+		0.007,
+		aspect,
+		Vec4{0.11, 0.11, 0.12, 0.86},
+		Vec4{0.52, 0.52, 0.55, 0.9},
+		Vec4{0.02, 0.02, 0.02, 0.9},
+	)
+
 	for i in 0 ..< 9 {
 		bx := x0 + f32(i) * (w + gap)
 		s := p.slots[i]
@@ -342,10 +403,11 @@ ui_draw_hotbar :: proc(p: ^Player, fbw, fbh: int) {
 // right = split/one); R empties the chest into your inventory.
 ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	hud_quad(-0.99, -0.99, 0.99, 0.90, Vec4{0.05, 0.05, 0.08, 0.97})
+	ui_dim()
+	ui_panel(-0.82, -0.30, 0.82, 0.92, aspect)
 	ch_h: f32 = 0.045
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	text_center("CHEST", 0.86, ch_w * 1.2, ch_h * 1.2, Vec4{1, 0.88, 0.5, 1})
+	text_center("CHEST", 0.85, ch_w * 1.2, ch_h * 1.2, MC_TEXT)
 
 	ch := w.chests[g_chest_pos] // a copy is fine for drawing
 	mnx, mny := cursor_ndc()
@@ -355,8 +417,8 @@ ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	_, cy, _, csz := chest_view_rect(aspect, 0)
 	_, py, _, _ := chest_view_rect(aspect, CHEST_SLOTS)
 	lx := gx0chest(aspect)
-	text_draw("CHEST", lx, cy + csz + 0.02, ch_w * 0.8, ch_h * 0.8, Vec4{0.9, 0.82, 0.6, 1})
-	text_draw("YOUR INVENTORY", lx, py + csz + 0.02, ch_w * 0.8, ch_h * 0.8, Vec4{0.9, 0.82, 0.6, 1})
+	text_draw("CHEST", lx, cy + csz + 0.02, ch_w * 0.8, ch_h * 0.8, MC_TEXT)
+	text_draw("YOUR INVENTORY", lx, py + csz + 0.02, ch_w * 0.8, ch_h * 0.8, MC_TEXT)
 
 	for vi in 0 ..< CHEST_VIEW_N {
 		x0, y0, sw, sz := chest_view_rect(aspect, vi)
@@ -371,16 +433,15 @@ ui_draw_chest :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 
 	text_center(
 		"DRAG TO MOVE STACKS   RIGHT-CLICK SPLIT   R TAKE ALL   E CLOSE",
-		-0.90,
+		-0.25,
 		ch_w * 0.6,
 		ch_h * 0.6,
-		Vec4{0.72, 0.82, 0.92, 1},
+		MC_TEXT,
 	)
 
 	// held stack rides the cursor
 	if g_cursor_stack.id != .Air {
 		_, _, sw, sz := chest_view_rect(aspect, 0)
-		hud_quad(mnx - sw * 0.55, mny - sz * 0.55, mnx + sw * 0.55, mny + sz * 0.55, Vec4{0.10, 0.10, 0.13, 0.7})
 		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_cursor_stack.id)
 		if g_cursor_stack.count > 1 {
 			cs := fmt.tprintf("%d", g_cursor_stack.count)
@@ -405,19 +466,19 @@ g_cursor_stack: ItemStack
 // along the bottom, 9..35 are the 3x9 storage grid above it. Shared by the
 // renderer and the mouse hit-test so a click always lands where it looks.
 inv_slot_rect :: proc(aspect: f32, slot: int) -> (x0, y0, sw, sz: f32) {
-	sz = 0.095
+	sz = 0.105
 	sw = sz / aspect
-	gap := f32(0.010)
-	row_pitch := sz + 0.05 // extra vertical room so count badges don't collide
+	gap := f32(0.008)
+	row_pitch := sz + gap // tight rows, like Minecraft's inventory grid
 	gx0 := -(f32(INV_COLS) * (sw + gap) - gap) * 0.5
-	storage_top := f32(0.62)
+	storage_top := f32(0.27) // top edge of the first storage row (grid is vertically centred)
 	if slot >= HOTBAR_SLOTS {
 		s := slot - HOTBAR_SLOTS // 0..26
 		x0 = gx0 + f32(s % 9) * (sw + gap)
 		y0 = storage_top - f32(s / 9) * row_pitch - sz
 	} else {
 		x0 = gx0 + f32(slot) * (sw + gap)
-		y0 = storage_top - 3 * row_pitch - 0.05 - sz // hotbar row, below the 3 storage rows
+		y0 = storage_top - 3 * row_pitch - 0.03 - sz // hotbar row, a small gap below the 3 storage rows
 	}
 	return
 }
@@ -525,16 +586,17 @@ inv_rclick_slot :: proc(p: ^Player, slot: int) {stack_rclick(&p.slots[slot])}
 // (ch_h = 0.045, rows pitched 1.9*ch_h from top=0.66).
 inv_hit_tools_row :: proc(nx, ny: f32) -> int {
 	ch_h := f32(0.045)
-	top := f32(0.66)
-	if nx < -0.55 || nx > 0.7 do return -1
+	step := ch_h * 1.55
+	top := f32(0.30)
+	if nx < -0.58 || nx > 0.60 do return -1
 	for k in 0 ..< 4 { 	// tools
-		y := top - f32(k) * ch_h * 1.9
-		if ny <= y + ch_h * 0.5 && ny >= y - ch_h * 1.4 do return k + 1
+		y := top - f32(k) * step
+		if ny <= y + ch_h * 0.5 && ny >= y - step + ch_h * 0.5 do return k + 1
 	}
-	armor0 := top - 4 * ch_h * 1.9 - ch_h * 0.6 - ch_h * 1.9 // first armor row
+	armor0 := top - 4 * step - ch_h * 0.5 - step // first armor row (after the ARMOR header)
 	for s in 0 ..< 4 {
-		y := armor0 - f32(s) * ch_h * 1.9
-		if ny <= y + ch_h * 0.5 && ny >= y - ch_h * 1.4 do return 5 + s
+		y := armor0 - f32(s) * step
+		if ny <= y + ch_h * 0.5 && ny >= y - step + ch_h * 0.5 do return 5 + s
 	}
 	return -1
 }
@@ -543,13 +605,13 @@ inv_hit_tools_row :: proc(nx, ny: f32) -> int {
 // layout in ui_draw_craft_tab (called with ch_h scaled by 0.95, from top).
 CRAFT_ROW_CH_H :: f32(0.045 * 0.95)
 inv_hit_craft_row :: proc(nx, ny: f32) -> int {
-	top := f32(0.66)
-	spacing := CRAFT_ROW_CH_H * 2.1
+	top := f32(0.30)
+	spacing := CRAFT_ROW_CH_H * 1.95
 	craft_scroll_clamp()
 	hi := min(len(RECIPES), g_craft_scroll + CRAFT_VISIBLE)
 	for i in g_craft_scroll ..< hi {
 		y := top - f32(i - g_craft_scroll) * spacing
-		if nx >= -0.88 && nx <= 0.78 && ny <= y + CRAFT_ROW_CH_H * 0.4 && ny >= y - CRAFT_ROW_CH_H * 1.3 {
+		if nx >= -0.58 && nx <= 0.58 && ny <= y + CRAFT_ROW_CH_H * 0.55 && ny >= y - spacing + CRAFT_ROW_CH_H * 0.6 {
 			return i
 		}
 	}
@@ -564,14 +626,16 @@ inv_hit_craft_row :: proc(nx, ny: f32) -> int {
 ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
 
-	// Reaches all the way to ~-0.99/0.99 so it fully covers the world's own
-	// hotbar/health/hunger/oxygen HUD sitting underneath (health hearts start
-	// as far out as x=-0.97) instead of leaving slivers of it peeking out.
-	hud_quad(-0.99, -0.99, 0.99, 0.90, Vec4{0.05, 0.05, 0.08, 0.97})
+	ui_dim() // darken the world behind
+	ui_panel(-0.62, -0.50, 0.62, 0.66, aspect) // centred stone window
 
 	ch_h: f32 = 0.045
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
-	ui_draw_tabs(fbw, fbh, ch_w * 1.05, ch_h * 1.05, 0.82)
+
+	// Title for the current tab, then the tab buttons under it.
+	title := g_inv_tab == .Items ? "INVENTORY" : (g_inv_tab == .Craft ? "CRAFTING" : "EQUIPMENT")
+	text_center(title, 0.54, ch_w * 1.1, ch_h * 1.1, MC_TEXT)
+	ui_draw_tabs(fbw, fbh, ch_w * 0.9, ch_h * 0.9, 0.44)
 
 	mnx, mny := cursor_ndc() // OS cursor released while a menu is open
 	_, hotbar_y, sw, sz := inv_slot_rect(aspect, 0)
@@ -583,49 +647,38 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		for slot in 0 ..< INV_SLOTS {
 			x0, y0, _, _ := inv_slot_rect(aspect, slot)
 			s := p.slots[slot]
-			// highlight the equipped hotbar slot; ring the hovered slot in cyan
 			if slot == hov {
-				hud_quad(x0 - 0.011, y0 - 0.011, x0 + sw + 0.011, y0 + sz + 0.011, Vec4{0.3, 0.85, 0.95, 1})
+				hud_quad(x0 - 0.010, y0 - 0.010, x0 + sw + 0.010, y0 + sz + 0.010, Vec4{1, 1, 1, 0.85})
 			}
 			num := slot < HOTBAR_SLOTS ? fmt.tprintf("%d", slot + 1) : ""
 			ui_slot(x0, y0, sw, sz, true, s.id, Vec3{}, s.count, ch_w, ch_h, slot == p.selected_slot, num)
 		}
-		text_draw("STORAGE", gx0inv(aspect), 0.66, ch_w * 0.8, ch_h * 0.8, Vec4{0.7, 0.75, 0.82, 1})
-		text_draw(
-			"HOTBAR",
-			gx0inv(aspect),
-			hotbar_y + sz + 0.02,
-			ch_w * 0.8,
-			ch_h * 0.8,
-			Vec4{0.7, 0.75, 0.82, 1},
-		)
 	case .Craft:
-		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.66)
+		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.30)
 	case .Tools:
-		ui_draw_tools_tab(p, ch_w, ch_h, 0.66)
+		ui_draw_tools_tab(p, ch_w, ch_h, 0.30)
 	}
 
 	action_hint: string
 	switch g_inv_tab {
 	case .Items:
-		action_hint = "LEFT-CLICK PICK UP/DROP/SWAP   RIGHT-CLICK SPLIT/DROP ONE   1-9 EQUIP"
+		action_hint = "LEFT-CLICK PICK UP/DROP/SWAP    RIGHT-CLICK SPLIT/DROP ONE    1-9 EQUIP"
 	case .Craft:
-		action_hint = "CLICK OR 1-9 TO CRAFT"
+		action_hint = "CLICK OR PRESS 1-9 TO CRAFT"
 	case .Tools:
-		action_hint = "1-4 TOOLS   5-8 ARMOR"
+		action_hint = "PRESS 1-4 TOOLS    5-8 ARMOR"
 	}
-	text_center(action_hint, hotbar_y - sz - 0.10, ch_w * 0.62, ch_h * 0.62, Vec4{0.75, 0.82, 0.92, 1})
+	text_center(action_hint, -0.38, ch_w * 0.6, ch_h * 0.6, MC_TEXT)
 	text_center(
-		"E ITEMS   T CRAFT   X TOOLS   R USE/FARM/SLEEP/CHEST   G EAT",
-		hotbar_y - sz - 0.16,
+		"E INVENTORY    T CRAFT    X EQUIP    R USE/CHEST    G EAT",
+		-0.44,
 		ch_w * 0.55,
 		ch_h * 0.55,
-		Vec4{0.65, 0.7, 0.76, 1},
+		MC_TEXT_DIM,
 	)
 
 	// The held stack rides the cursor, drawn last so it's on top of everything.
 	if g_cursor_stack.id != .Air && g_inv_tab == .Items {
-		hud_quad(mnx - sw * 0.55, mny - sz * 0.55, mnx + sw * 0.55, mny + sz * 0.55, Vec4{0.10, 0.10, 0.13, 0.7})
 		ui_block_icon(mnx - sw * 0.5, mny - sz * 0.5, mnx + sw * 0.5, mny + sz * 0.5, g_cursor_stack.id)
 		if g_cursor_stack.count > 1 {
 			s := fmt.tprintf("%d", g_cursor_stack.count)
