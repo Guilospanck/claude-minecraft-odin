@@ -27,10 +27,19 @@ chunk_path :: proc(coord: Ivec2, dim: Dimension) -> string {
 // Run-length encode the block array: [id u8][run u16 little-endian] records.
 // Returns false (and logs) if the write failed, so callers can avoid dropping
 // the chunk's edits.
+// A stamp written at the head of every chunk file. Bump it whenever a worldgen
+// change should force already-saved chunks to REGENERATE (they no longer match
+// the current generator) — old files lack the current stamp and are rejected on
+// load, so the world rebuilds them. Bumped to 2 to flush pre-fix chunks that
+// held half-drowned villages / stale terrain.
+CHUNK_SAVE_MAGIC :: u8(0xC0)
+CHUNK_SAVE_VERSION :: u8(2)
+
 save_chunk :: proc(c: ^Chunk, dim: Dimension) -> bool {
 	save_ensure_dir(dim)
 	buf := make([dynamic]u8, 0, 4096)
 	defer delete(buf)
+	append(&buf, CHUNK_SAVE_MAGIC, CHUNK_SAVE_VERSION) // format stamp (see above)
 
 	i := 0
 	for i < CHUNK_BLOCKS {
@@ -56,8 +65,14 @@ load_chunk :: proc(coord: Ivec2, dim: Dimension) -> (^Chunk, bool) {
 	if err != nil do return nil, false
 	defer delete(data)
 
+	// Reject any file that doesn't carry the current format stamp (including
+	// pre-stamp saves, whose first bytes won't match) so it regenerates.
+	if len(data) < 2 || data[0] != CHUNK_SAVE_MAGIC || data[1] != CHUNK_SAVE_VERSION {
+		return nil, false
+	}
+
 	c := chunk_make(coord)
-	i := 0
+	i := 2
 	idx := 0
 	for i + 3 <= len(data) && idx < CHUNK_BLOCKS {
 		b := BlockId(data[i])

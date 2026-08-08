@@ -274,7 +274,11 @@ dev_teleport_biome :: proc(w: ^World, p: ^Player, target: Biome) {
 				h, b, _ := world_height_and_biome(w.seed, ccx, ccz)
 				if b != target do continue
 				world_ensure_chunk(w, Ivec2{pc.x + dx, pc.y + dz})
-				p.pos = Vec3{f32(ccx) + 0.5, f32(h) + 2, f32(ccz) + 0.5}
+				// Drop in ABOVE whatever actually tops the column — terrain OR a
+				// tree — so teleporting never lands you buried inside a canopy.
+				sy, _ := surface_y(w, ccx, ccz)
+				ty := max(h, sy) + 2
+				p.pos = Vec3{f32(ccx) + 0.5, f32(ty), f32(ccz) + 0.5}
 				p.vel = Vec3{0, 0, 0}
 				toast_show(fmt.tprintf("TELEPORTED TO %s", biome_dev_name(target)))
 				return
