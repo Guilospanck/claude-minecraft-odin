@@ -47,6 +47,8 @@ Player :: struct {
 	bob_amp:     f32, // 0..1 eased bob strength (fades in/out as you start/stop)
 	sneaking:    bool, // crouching (hold Shift on ground): slow, low, won't walk off ledges
 	crouch:      f32, // 0..1 eased crouch amount, for a smooth camera dip
+	xp_level:    int, // current experience level (from absorbed XP orbs)
+	xp_points:   int, // experience banked toward the next level (see xp_need)
 	w_was_down:  bool, // previous-frame W state, for double-tap detection
 	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)

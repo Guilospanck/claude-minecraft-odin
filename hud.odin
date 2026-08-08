@@ -89,6 +89,28 @@ hud_draw_hunger :: proc(hunger, fbw, fbh: int) {
 	}
 }
 
+// Experience bar just above the hotbar: a green fill that grows toward the next
+// level, with the current level number floating above it (hidden at level 0),
+// exactly like Minecraft.
+hud_draw_xp :: proc(p: ^Player, fbw, fbh: int) {
+	aspect := f32(fbw) / f32(max(fbh, 1))
+	sz: f32 = 0.11
+	w := sz / aspect
+	gap: f32 = 0.012
+	total := f32(9) * (w + gap) - gap
+	x0 := -total * 0.5
+	x1 := x0 + total
+	by0, by1 := f32(-0.857), f32(-0.842)
+	hud_quad(x0 - 0.004, by0 - 0.004, x1 + 0.004, by1 + 0.004, Vec4{0.06, 0.06, 0.06, 0.85})
+	prog := xp_progress(p)
+	if prog > 0 do hud_quad(x0, by0, x0 + total * prog, by1, Vec4{0.40, 0.86, 0.28, 0.98})
+	if p.xp_level > 0 {
+		ch_h: f32 = 0.036
+		ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+		text_center(fmt.tprintf("%d", p.xp_level), -0.812, ch_w, ch_h, Vec4{0.45, 1.0, 0.35, 1})
+	}
+}
+
 // Air bubbles above the hunger bar, shown only while underwater / refilling.
 hud_draw_oxygen :: proc(oxygen: f32, fbw, fbh: int) {
 	if oxygen >= OXYGEN_MAX do return

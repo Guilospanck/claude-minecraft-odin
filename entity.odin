@@ -1290,9 +1290,21 @@ mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 	audio_play(.Hurt, 0.7)
 	if m.health <= 0 {
 		mob_loot(w, m.kind, m.pos)
+		xp_orb_spawn(&w.xp_orbs, m.pos, mob_xp(m.kind))
 		w.mobs[idx] = w.mobs[len(w.mobs) - 1]
 		pop(&w.mobs)
 	}
+}
+
+// Experience a kill is worth. Hostiles give the most (as in Minecraft), animals
+// a little, trivial critters almost nothing.
+mob_xp :: proc(kind: MobKind) -> int {
+	if mob_is_hostile(kind) do return 5
+	#partial switch kind {
+	case .Bee, .Fish, .Squid, .Pufferfish, .Jellyfish:
+		return 1
+	}
+	return 3
 }
 
 // What a mob drops when the player kills it. Meat goes to the food counter (as

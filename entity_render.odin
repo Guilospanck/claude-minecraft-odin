@@ -1141,6 +1141,29 @@ particles_render_frame :: proc(ps: ^[dynamic]Particle, vp: Mat4, ambient: f32) {
 }
 
 // Dropped items as small bobbing, spinning cubes coloured by their block.
+// Draw XP orbs as small emissive green-gold motes that bob and spin, like the
+// dropped-item entities but brighter so they read as "glowing".
+xp_orbs_render_frame :: proc(orbs: ^[dynamic]XpOrb, vp: Mat4, ambient: f32) {
+	if len(orbs^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0)
+	gl.Uniform1f(e_ambient, clamp(ambient + 0.6, 0, 1)) // glow brighter than the world
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(orbs^) {
+		o := &orbs^[i]
+		bob := 0.18 + math.sin(o.age * 5) * 0.05
+		model :=
+			linalg.matrix4_translate_f32(o.pos + Vec3{0, bob, 0}) *
+			linalg.matrix4_rotate_f32(o.age * 3, Vec3{0, 1, 0}) *
+			linalg.matrix4_scale_f32(Vec3{0.18, 0.18, 0.18})
+		ent_set_mat4(e_mvp, vp * model)
+		g := 0.85 + 0.15 * math.sin(o.age * 8) // shimmer between green and gold
+		gl.Uniform3f(e_color, 0.55, g, 0.25)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+	}
+	gl.BindVertexArray(0)
+}
+
 items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
 	if len(items^) == 0 do return
 	gl.UseProgram(e_prog)

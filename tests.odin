@@ -23,6 +23,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.chunks)
 	delete(w.mobs)
 	delete(w.items)
+	delete(w.xp_orbs)
 	delete(w.arrows)
 	delete(w.particles)
 	delete(w.crops)
@@ -67,6 +68,19 @@ test_chunk_index :: proc(t: ^testing.T) {
 	chunk_set(c, 3, 4, 5, .Stone)
 	testing.expect(t, chunk_get(c, 3, 4, 5) == .Stone)
 	testing.expect(t, chunk_get(c, -1, 0, 0) == .Air, "out of bounds reads as air")
+}
+
+@(test)
+test_xp_levels_roll_over :: proc(t: ^testing.T) {
+	p: Player
+	// level 0 needs 10; exactly 10 advances to level 1 with nothing left over
+	xp_add(&p, 10)
+	testing.expect(t, p.xp_level == 1 && p.xp_points == 0, "10 xp reaches level 1")
+	// level 1 needs 14; adding 20 rolls to level 2 and carries the remaining 6
+	xp_add(&p, 20)
+	testing.expect(t, p.xp_level == 2 && p.xp_points == 6, "surplus xp carries into the next level")
+	prog := xp_progress(&p)
+	testing.expect(t, prog > 0 && prog < 1, "mid-level progress is a fraction")
 }
 
 @(test)
