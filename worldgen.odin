@@ -165,6 +165,10 @@ surface_block :: proc(seed: u64, biome: Biome, wx, wz, h: int) -> BlockId {
 	case .Ocean, .Beach, .Desert:
 		return .Sand
 	case .Badlands:
+		// wooded-badlands variant: grassy coarse-dirt cap on the high plateaus
+		if biome_variant(seed, wx, wz) > 0.4 && h > SEA_LEVEL + 9 {
+			return surface_patch(seed, 4007, wx, wz, 0.5) ? .CoarseDirt : .Grass
+		}
 		return .RedSand // exposed column is stratified in the fill loop
 	case .Snow:
 		return .Snow
@@ -415,10 +419,10 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 				if y == 0 {
 					b = .Bedrock
 				} else if y < h {
-					if mesa && y >= h - 16 {
+					if y == h - 1 {
+						b = surf // top block (surface rule; grass on wooded badlands)
+					} else if mesa && y >= h - 16 {
 						b = badlands_stratum(seed, wx, wz, y)
-					} else if y == h - 1 {
-						b = surf
 					} else if y >= h - 4 {
 						b = sub
 					} else {
@@ -843,6 +847,14 @@ tree_site_clear :: proc(heights: []int, lx, lz, surf_y: int) -> bool {
 	return true
 }
 
+// A low-frequency field carving each biome into large sub-region VARIANTS
+// (birch vs flower forest, sunflower plains, snowy vs old-growth taiga, wooded
+// badlands). Big wavelength so a variant is a whole tract you walk across.
+// Not file-private: tests exercise it.
+biome_variant :: proc(seed: u64, wx, wz: int) -> f32 {
+	return fbm2(seed + 2718, f32(wx) * 0.005, f32(wz) * 0.005, 2)
+}
+
 // Per-biome surface decoration: trees (density/type varies) and desert cacti.
 generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
 	for lz in 2 ..< CHUNK_D - 2 {
@@ -863,6 +875,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			// of ground cover (4+ flora types apiece), so biomes read as
 			// genuinely different places rather than the same trees everywhere.
 			grass := surf == .Grass || surf == .Podzol || surf == .CoarseDirt
+			variant := biome_variant(seed, wx, wz)
 			switch biome {
 			case .Desert:
 				// Cacti + dead bushes on the sand — sparse by nature.
@@ -872,24 +885,37 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					put_plant(c, lx, surf_y, lz, .DeadBush)
 				}
 			case .Badlands:
-				// Dead bushes and the occasional cactus on red sand.
-				if surf == .RedSand && r < 6 {
+				// wooded-badlands variant: scattered oaks on the grassy plateau
+				if grass && site_ok && r < 20 {
+					place_tree(c, lx, surf_y, lz, 4 + th % 2, .Oak)
+				} else if grass && r < 55 {
+					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .DeadBush, .FlowerYellow}))
+				} else if surf == .RedSand && r < 6 {
 					for i in 0 ..< 1 + th % 2 do chunk_set(c, lx, surf_y + 1 + i, lz, .Cactus)
 				} else if surf == .RedSand && r < 24 {
 					put_plant(c, lx, surf_y, lz, .DeadBush)
 				}
 			case .Forest:
-				if grass && site_ok && r < 42 {
-					k := pick_tree(hsh, {.Oak, .Oak, .Birch, .BigOak})
+				// variants: a birch grove (variant high) or a flower forest
+				// (variant low: sparser trees, a carpet of mixed blooms).
+				birch := variant > 0.32
+				flower := variant < -0.32
+				if grass && site_ok && r < (flower ? 20 : 42) {
+					k := birch ? TreeKind.Birch : pick_tree(hsh, {.Oak, .Oak, .Birch, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
-				} else if grass && r < 78 {
-					put_plant(
-						c,
-						lx,
-						surf_y,
-						lz,
-						pick_plant(hsh, {.TallGrass, .Fern, .TallGrass, .FlowerRed, .FlowerBlue}),
-					)
+				} else if grass && r < (flower ? 94 : 78) {
+					pal :=
+						flower \
+						? []BlockId {
+							.FlowerRed,
+							.FlowerYellow,
+							.FlowerBlue,
+							.FlowerPink,
+							.FlowerWhite,
+							.TallGrass,
+						} \
+						: []BlockId{.TallGrass, .Fern, .TallGrass, .FlowerRed, .FlowerBlue}
+					put_plant(c, lx, surf_y, lz, pick_plant(hsh, pal))
 				}
 			case .Swamp:
 				// humid ground pools with standing marsh water on flat spots
@@ -902,17 +928,16 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .Fern, .FlowerBlue, .DeadBush}))
 				}
 			case .Plains:
+				sunflower := variant > 0.34 // a sea of yellow blooms
 				if grass && site_ok && r < 8 {
 					k := pick_tree(hsh, {.Oak, .Birch, .Bush, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
-				} else if grass && r < 60 {
-					put_plant(
-						c,
-						lx,
-						surf_y,
-						lz,
-						pick_plant(hsh, {.TallGrass, .TallGrass, .FlowerRed, .FlowerYellow, .FlowerBlue}),
-					)
+				} else if grass && r < (sunflower ? 78 : 60) {
+					pal :=
+						sunflower \
+						? []BlockId{.FlowerYellow, .FlowerYellow, .FlowerYellow, .TallGrass} \
+						: []BlockId{.TallGrass, .TallGrass, .FlowerRed, .FlowerYellow, .FlowerBlue}
+					put_plant(c, lx, surf_y, lz, pick_plant(hsh, pal))
 				}
 			case .Savanna:
 				if grass && site_ok && r < 6 {
@@ -927,10 +952,11 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					)
 				}
 			case .Taiga:
-				if grass && site_ok && r < 34 {
-					// snow-dusted conifers, spruce and the taller pine mixed
+				// old-growth variant: taller, denser conifers
+				old_growth := variant > 0.32
+				if grass && site_ok && r < (old_growth ? 46 : 34) {
 					kind := (hsh >> 18) % 3 == 0 ? TreeKind.Pine : TreeKind.Spruce
-					place_snowy_tree(c, lx, surf_y, lz, 6 + th, kind)
+					place_snowy_tree(c, lx, surf_y, lz, (old_growth ? 8 : 6) + th, kind)
 				} else if grass && r < 66 {
 					put_plant(
 						c,
