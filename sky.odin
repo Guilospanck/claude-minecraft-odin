@@ -17,15 +17,26 @@ disk_vao: u32
 disk_vbo: u32
 
 // --- clouds ---
-CLOUD_Y :: f32(125)
-CLOUD_CELL :: f32(7)
-CLOUD_RANGE :: 46 // cells each way around the camera
+CLOUD_Y :: f32(122)
+CLOUD_THICK :: f32(5) // vertical thickness — clouds are 3D puffs, not a sheet
+CLOUD_CELL :: f32(8)
+CLOUD_RANGE :: 42 // cells each way around the camera
 
+cloud_prog: u32
+cloud_mvp: i32
+cloud_color: i32
 cloud_vao: u32
 cloud_vbo: u32
 @(private = "file")
-cloud_buf: [dynamic]Vec3
+CloudVert :: struct {
+	pos:   Vec3,
+	shade: f32,
+}
+@(private = "file")
+cloud_buf: [dynamic]CloudVert
 
+// Coverage value for a cloud cell: two hash octaves plus a smooth low-frequency
+// term so puffs clump into rounded masses with soft, non-gridlike outlines.
 @(private = "file")
 cloud_val :: proc(gx, gz: int) -> f32 {
 	hh :: proc(x, z: int) -> f32 {
@@ -34,50 +45,64 @@ cloud_val :: proc(gx, gz: int) -> f32 {
 		h ~= h >> 16
 		return f32(h & 0xffff) / 65535.0
 	}
-	// blend a coarse + fine hash so cloud cells clump into puffs, not confetti
-	return 0.6 * hh(gx >> 1, gz >> 1) + 0.4 * hh(gx, gz)
+	return 0.45 * hh(gx >> 2, gz >> 2) + 0.35 * hh(gx >> 1, gz >> 1) + 0.20 * hh(gx, gz)
 }
 
-// A drifting layer of flat cloud quads at CLOUD_Y. `coverage` is the fraction of
-// cells that are cloudy; `color`+`alpha` set the look (white on a clear day,
-// grey/dark under storms). `drift` scrolls the whole field with the wind. Drawn
-// with depth-test on (mountains poke through) but no depth write.
+@(private = "file")
+cloud_quad :: proc(a, b, c, d: Vec3, shade: f32) {
+	append(
+		&cloud_buf,
+		CloudVert{a, shade},
+		CloudVert{b, shade},
+		CloudVert{c, shade},
+		CloudVert{a, shade},
+		CloudVert{c, shade},
+		CloudVert{d, shade},
+	)
+}
+
+// A drifting deck of volumetric cloud boxes at CLOUD_Y. Each cloudy cell is a
+// shaded box (bright top, dim underside, mid sides) with interior faces culled
+// against neighbouring cloud cells, so clusters read as solid fluffy masses.
+// `coverage`/`color`/`alpha` set density and look; `drift` scrolls with the
+// wind. Depth-test on (mountains poke through), no depth write.
 clouds_render :: proc(cam: Vec3, vp: Mat4, color: Vec3, alpha, coverage, drift_x, drift_z: f32) {
 	if alpha <= 0.02 || coverage <= 0.001 do return
 	clear(&cloud_buf)
 	base_gx := int(math.floor((cam.x - drift_x) / CLOUD_CELL))
 	base_gz := int(math.floor((cam.z - drift_z) / CLOUD_CELL))
+	cloudy :: proc(gx, gz: int, cov: f32) -> bool {return cloud_val(gx, gz) <= cov}
 	for gz in base_gz - CLOUD_RANGE ..= base_gz + CLOUD_RANGE {
 		for gx in base_gx - CLOUD_RANGE ..= base_gx + CLOUD_RANGE {
-			if cloud_val(gx, gz) > coverage do continue
+			if !cloudy(gx, gz, coverage) do continue
 			x0 := f32(gx) * CLOUD_CELL + drift_x
 			z0 := f32(gz) * CLOUD_CELL + drift_z
 			x1 := x0 + CLOUD_CELL
 			z1 := z0 + CLOUD_CELL
-			y := CLOUD_Y
-			append(
-				&cloud_buf,
-				Vec3{x0, y, z0},
-				Vec3{x1, y, z0},
-				Vec3{x1, y, z1},
-				Vec3{x0, y, z0},
-				Vec3{x1, y, z1},
-				Vec3{x0, y, z1},
-			)
+			y0 := CLOUD_Y
+			y1 := CLOUD_Y + CLOUD_THICK
+			// top (always) + bottom (always, seen from below)
+			cloud_quad(Vec3{x0, y1, z0}, Vec3{x1, y1, z0}, Vec3{x1, y1, z1}, Vec3{x0, y1, z1}, 1.0)
+			cloud_quad(Vec3{x0, y0, z1}, Vec3{x1, y0, z1}, Vec3{x1, y0, z0}, Vec3{x0, y0, z0}, 0.55)
+			// sides only where the neighbouring cell is clear (outer shell)
+			if !cloudy(gx - 1, gz, coverage) do cloud_quad(Vec3{x0, y0, z0}, Vec3{x0, y0, z1}, Vec3{x0, y1, z1}, Vec3{x0, y1, z0}, 0.72)
+			if !cloudy(gx + 1, gz, coverage) do cloud_quad(Vec3{x1, y0, z1}, Vec3{x1, y0, z0}, Vec3{x1, y1, z0}, Vec3{x1, y1, z1}, 0.72)
+			if !cloudy(gx, gz - 1, coverage) do cloud_quad(Vec3{x1, y0, z0}, Vec3{x0, y0, z0}, Vec3{x0, y1, z0}, Vec3{x1, y1, z0}, 0.66)
+			if !cloudy(gx, gz + 1, coverage) do cloud_quad(Vec3{x0, y0, z1}, Vec3{x1, y0, z1}, Vec3{x1, y1, z1}, Vec3{x0, y1, z1}, 0.66)
 		}
 	}
 	n := len(cloud_buf)
 	if n == 0 do return
-	gl.UseProgram(sky_prog)
-	sky_set_mat4(sky_mvp, vp)
-	gl.Uniform4f(sky_color, color.r, color.g, color.b, alpha)
+	gl.UseProgram(cloud_prog)
+	sky_set_mat4(cloud_mvp, vp)
+	gl.Uniform4f(cloud_color, color.r, color.g, color.b, alpha)
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-	gl.Disable(gl.CULL_FACE) // clouds seen from below
+	gl.Disable(gl.CULL_FACE)
 	gl.DepthMask(false)
 	gl.BindVertexArray(cloud_vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, cloud_vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, n * size_of(Vec3), &cloud_buf[0], gl.DYNAMIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, n * size_of(CloudVert), &cloud_buf[0], gl.DYNAMIC_DRAW)
 	gl.DrawArrays(gl.TRIANGLES, 0, i32(n))
 	gl.DepthMask(true)
 	gl.Disable(gl.BLEND)
@@ -139,13 +164,19 @@ sky_init :: proc() {
 	gl.EnableVertexAttribArray(0)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vec3)), 0)
 
+	if cloud_prog, ok = gl.load_shaders_source(CLOUD_VERT, CLOUD_FRAG); ok {
+		cloud_mvp = gl.GetUniformLocation(cloud_prog, "uMVP")
+		cloud_color = gl.GetUniformLocation(cloud_prog, "uColor")
+	}
 	gl.GenVertexArrays(1, &cloud_vao)
 	gl.GenBuffers(1, &cloud_vbo)
 	gl.BindVertexArray(cloud_vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, cloud_vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, 0, nil, gl.DYNAMIC_DRAW)
 	gl.EnableVertexAttribArray(0)
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(Vec3)), 0)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(size_of(CloudVert)), 0)
+	gl.EnableVertexAttribArray(1)
+	gl.VertexAttribPointer(1, 1, gl.FLOAT, false, i32(size_of(CloudVert)), uintptr(size_of(Vec3)))
 
 	gl.GenVertexArrays(1, &disk_vao)
 	gl.GenBuffers(1, &disk_vbo)
