@@ -44,6 +44,34 @@ mob_is_hostile :: proc(k: MobKind) -> bool {
 	return k == .Zombie || k == .Skeleton || k == .Piglin || k == .Ghast
 }
 
+// Passive-animal food chain: predators hunt prey, prey bolt from predators.
+mob_is_predator :: proc(k: MobKind) -> bool {
+	return k == .Wolf || k == .Fox || k == .SnowLeopard
+}
+mob_is_prey :: proc(k: MobKind) -> bool {
+	return k == .Rabbit || k == .Chicken || k == .Sheep || k == .Goat || k == .Deer
+}
+
+// Which prey a given predator actually chases (foxes take the small stuff,
+// wolves add sheep, snow leopards hunt anything that runs).
+mob_hunts :: proc(pred, prey: MobKind) -> bool {
+	if !mob_is_prey(prey) do return false
+	#partial switch pred {
+	case .Fox:
+		return prey == .Rabbit || prey == .Chicken
+	case .Wolf:
+		return prey == .Rabbit || prey == .Chicken || prey == .Sheep
+	case .SnowLeopard:
+		return true
+	}
+	return false
+}
+
+HUNT_RADIUS :: f32(16.0)
+FLEE_RADIUS :: f32(9.0)
+PREDATOR_DMG :: 3
+PREDATOR_REACH :: f32(1.4)
+
 // Nether mobs don't burn in daylight (the overworld undead do).
 mob_burns_in_day :: proc(k: MobKind) -> bool {
 	return k == .Zombie || k == .Skeleton
@@ -372,6 +400,65 @@ ai_seek_mate :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
 	return found
 }
 
+// Predator hunt: home in on the nearest prey it eats and bite when in reach.
+// Returns false (fall back to wandering) if no prey is near.
+@(private = "file")
+ai_predator :: proc(w: ^World, m: ^Mob, self_idx: int, dt: f32) -> bool {
+	if m.attack_timer > 0 do m.attack_timer -= dt
+	best := HUNT_RADIUS * HUNT_RADIUS
+	target := -1
+	for i in 0 ..< len(w.mobs) {
+		if i == self_idx do continue
+		o := w.mobs[i]
+		if o.health <= 0 || !mob_hunts(m.kind, o.kind) do continue
+		dx := o.pos.x - m.pos.x
+		dz := o.pos.z - m.pos.z
+		d2 := dx * dx + dz * dz
+		if d2 < best {
+			best = d2
+			target = i
+		}
+	}
+	if target < 0 do return false
+	prey := &w.mobs[target]
+	dx := prey.pos.x - m.pos.x
+	dz := prey.pos.z - m.pos.z
+	m.yaw = math.atan2(dx, -dz)
+	m.moving = true
+	if dx * dx + dz * dz < PREDATOR_REACH * PREDATOR_REACH && m.attack_timer <= 0 {
+		prey.health -= PREDATOR_DMG
+		m.attack_timer = 0.9
+		if prey.health <= 0 do prey.death_cause = .Predator
+	}
+	return true
+}
+
+// Prey flee: bolt directly away from the nearest predator and hold the panic for
+// a moment (flee_timer) so it clears the area rather than stopping the instant
+// the predator dips out of range. Returns false if no predator is near.
+@(private = "file")
+ai_flee :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
+	best := FLEE_RADIUS * FLEE_RADIUS
+	pred := -1
+	for i in 0 ..< len(w.mobs) {
+		if i == self_idx do continue
+		o := w.mobs[i]
+		if o.health <= 0 || !mob_hunts(o.kind, m.kind) do continue
+		dx := o.pos.x - m.pos.x
+		dz := o.pos.z - m.pos.z
+		d2 := dx * dx + dz * dz
+		if d2 < best {
+			best = d2
+			pred = i
+		}
+	}
+	if pred < 0 do return false
+	m.yaw = math.atan2(m.pos.x - w.mobs[pred].pos.x, -(m.pos.z - w.mobs[pred].pos.z)) // away
+	m.moving = true
+	m.flee_timer = 2.0
+	return true
+}
+
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	dims := MOB_DIMS[m.kind]
 	if m.is_baby {
@@ -461,8 +548,15 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	}
 	m.air = CREATURE_AIR_MAX // breathing freely at the surface / on land
 
+	if m.flee_timer > 0 do m.flee_timer -= dt
 	if mob_is_hostile(m.kind) {
 		ai_hostile(w, p, m, self_idx, dt)
+	} else if mob_is_prey(m.kind) && ai_flee(w, m, self_idx) {
+		// bolting from a predator
+	} else if m.flee_timer > 0 {
+		m.moving = true // keep running the last panic heading
+	} else if mob_is_predator(m.kind) && ai_predator(w, m, self_idx, dt) {
+		// stalking prey
 	} else if m.love_timer <= 0 || !ai_seek_mate(w, m, self_idx) {
 		ai_wander(m, dt, 0.6)
 	}
@@ -481,8 +575,14 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 			m.vel.x = 0
 			m.vel.z = 0
 		} else {
-			m.vel.x = fwd.x * dims.speed
-			m.vel.z = fwd.z * dims.speed
+			spd := dims.speed
+			if m.flee_timer > 0 {
+				spd *= 1.7 // panicked sprint
+			} else if mob_is_predator(m.kind) {
+				spd *= 1.2 // hunting lunge
+			}
+			m.vel.x = fwd.x * spd
+			m.vel.z = fwd.z * spd
 			m.walk_phase += dt * 9.0
 
 			// Hop over a one-block step, but only if it's genuinely climbable
