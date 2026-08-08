@@ -94,3 +94,4 @@ SEAGRASS         :: Tile{5, 5} // sprite (transparent background)
 CORAL_PINK       :: Tile{6, 5}
 CORAL_BLUE       :: Tile{7, 5}
 CORAL_PURPLE     :: Tile{8, 5}
+SPAWNER          :: Tile{9, 5}

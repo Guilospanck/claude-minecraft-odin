@@ -33,7 +33,7 @@ chunk_path :: proc(coord: Ivec2, dim: Dimension) -> string {
 // load, so the world rebuilds them. Bumped to 2 to flush pre-fix chunks that
 // held half-drowned villages / stale terrain.
 CHUNK_SAVE_MAGIC :: u8(0xC0)
-CHUNK_SAVE_VERSION :: u8(8)
+CHUNK_SAVE_VERSION :: u8(9)
 
 save_chunk :: proc(c: ^Chunk, dim: Dimension) -> bool {
 	save_ensure_dir(dim)

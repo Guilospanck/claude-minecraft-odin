@@ -501,6 +501,12 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				// a knobbly reef surface: base colour with brighter/darker specks
 				sp := (jitter(gx, gy, 100) + 100) % 5
 				c = shade(base, jitter(gx, gy, 10) + (sp < 1 ? 26 : (sp > 3 ? -22 : 0)))
+			case "spawner":
+				// a dark iron cage: a lattice of bars over a black interior, with a
+				// dull ember glow at the centre
+				bar := (px % 4 == 0) || (py % 4 == 0)
+				c = bar ? shade(Color{74, 78, 86, 255}, jitter(gx, gy, 8)) : Color{18, 18, 22, 255}
+				if (px - 8) * (px - 8) + (py - 8) * (py - 8) < 6 do c = Color{120, 70, 40, 255} // ember
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -634,6 +640,7 @@ main :: proc() {
 	paint(ad.CORAL_PINK, Color{228, 102, 158, 255}, "coral")
 	paint(ad.CORAL_BLUE, Color{82, 140, 234, 255}, "coral")
 	paint(ad.CORAL_PURPLE, Color{168, 92, 220, 255}, "coral")
+	paint(ad.SPAWNER, Color{40, 42, 48, 255}, "spawner")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -520,6 +520,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 	// luck for a clean building.
 	generate_village(w, c, seed, base_x, base_z, heights[:], biomes[:])
 	generate_structures(w, c, seed, base_x, base_z, heights[:], biomes[:])
+	generate_dungeon(w, c, seed, base_x, base_z, heights[:])
 }
 
 // Make unsupported water fall. Rivers/oceans that were carved through by a

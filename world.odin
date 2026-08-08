@@ -15,6 +15,7 @@ World :: struct {
 	mobs:        [dynamic]Mob,
 	items:       [dynamic]Item,
 	xp_orbs:     [dynamic]XpOrb, // floating experience orbs dropped by kills
+	spawners:    map[Ivec3]f32, // dungeon mob-spawner positions → spawn cooldown
 	arrows:      [dynamic]Arrow,
 	particles:   [dynamic]Particle,
 	crops:       [dynamic]Crop, // growing wheat being ticked toward ripeness
@@ -50,6 +51,7 @@ world_init :: proc(w: ^World, seed: u64, dim: Dimension = .Overworld) {
 	w.mobs = make([dynamic]Mob, 0, 32)
 	w.items = make([dynamic]Item, 0, 64)
 	w.xp_orbs = make([dynamic]XpOrb, 0, 32)
+	w.spawners = make(map[Ivec3]f32)
 	w.arrows = make([dynamic]Arrow, 0, 32)
 	w.particles = make([dynamic]Particle, 0, 128)
 	w.crops = make([dynamic]Crop, 0, 32)
@@ -149,6 +151,7 @@ world_ensure_chunk :: proc(w: ^World, coord: Ivec2) -> ^Chunk {
 	c.generated = true
 	c.dirty = true
 	w.chunks[coord] = c
+	if !net_is_client() do spawners_register_chunk(w, c) // pick up dungeon spawners
 	mark_neighbors_dirty(w, coord)
 	return c
 }

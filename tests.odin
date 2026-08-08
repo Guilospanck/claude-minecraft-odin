@@ -24,6 +24,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.mobs)
 	delete(w.items)
 	delete(w.xp_orbs)
+	delete(w.spawners)
 	delete(w.arrows)
 	delete(w.particles)
 	delete(w.crops)
@@ -68,6 +69,38 @@ test_chunk_index :: proc(t: ^testing.T) {
 	chunk_set(c, 3, 4, 5, .Stone)
 	testing.expect(t, chunk_get(c, 3, 4, 5) == .Stone)
 	testing.expect(t, chunk_get(c, -1, 0, 0) == .Air, "out of bounds reads as air")
+}
+
+@(test)
+test_spawner_spawns_hostiles_when_player_near :: proc(t: ^testing.T) {
+	w, c := make_test_world()
+	defer free_test_world(&w)
+	// a stone floor with air above, a spawner sitting on it
+	for dx in 5 ..= 11 do for dz in 5 ..= 11 {
+		chunk_set(c, dx, 40, dz, .Stone)
+	}
+	chunk_set(c, 8, 41, 8, .Spawner)
+	w.spawners[Ivec3{8, 41, 8}] = 0 // ready to fire
+
+	p: Player
+	p.pos = Vec3{8.5, 42, 8.5} // well within SPAWNER_ACTIVATE
+
+	before := len(w.mobs)
+	spawners_update(&w, &p, 0.1)
+	testing.expect(t, len(w.mobs) > before, "a nearby spawner spawns a hostile when ready")
+	if len(w.mobs) > before {
+		testing.expect(t, mob_is_hostile(w.mobs[len(w.mobs) - 1].kind), "the spawned mob is hostile")
+	}
+
+	// far away: the same spawner must stay dormant
+	w2, c2 := make_test_world()
+	defer free_test_world(&w2)
+	chunk_set(c2, 8, 41, 8, .Spawner)
+	w2.spawners[Ivec3{8, 41, 8}] = 0
+	pf: Player
+	pf.pos = Vec3{200, 42, 200}
+	spawners_update(&w2, &pf, 0.1)
+	testing.expect(t, len(w2.mobs) == 0, "a distant spawner does not spawn")
 }
 
 @(test)

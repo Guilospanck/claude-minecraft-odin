@@ -1406,6 +1406,7 @@ main :: proc() {
 			villagers_update(cur, &player, &cur.villagers, dt)
 			items_update(cur, &player, &cur.items, dt)
 			xp_orbs_update(cur, &player, dt)
+			spawners_update(cur, &player, dt)
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)
 			// Precipitation type follows the biome the player is in: rain in

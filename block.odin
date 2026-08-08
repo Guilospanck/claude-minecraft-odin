@@ -105,6 +105,7 @@ BlockId :: enum u8 {
 	CoralPink, // reef coral cube (warm oceans)
 	CoralBlue,
 	CoralPurple,
+	Spawner, // dungeon mob spawner cage (spawns hostiles when the player is near)
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -132,6 +133,8 @@ block_emission :: proc(b: BlockId) -> u8 {
 	#partial switch b {
 	case .Glowstone:
 		return 15
+	case .Spawner:
+		return 4 // faint glow from the caged flame
 	case .Torch:
 		return 13
 	case .Lava:
@@ -446,6 +449,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.CORAL_BLUE
 	case .CoralPurple:
 		return ad.CORAL_PURPLE
+	case .Spawner:
+		return ad.SPAWNER
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -627,6 +632,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.32, 0.55, 0.92}
 	case .CoralPurple:
 		return {0.66, 0.36, 0.86}
+	case .Spawner:
+		return {0.20, 0.22, 0.26}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -825,6 +832,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Blue Coral"
 	case .CoralPurple:
 		return "Purple Coral"
+	case .Spawner:
+		return "Mob Spawner"
 	}
 	return "?"
 }
