@@ -236,6 +236,39 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				if shaft || knob {
 					c = shade(Color{234, 232, 216, 255}, jitter(gx, gy, 6));c.a = 255
 				}
+			case "rotten_flesh":
+				c = Color{0, 0, 0, 0}
+				// a ragged chunk of decayed, greenish-brown meat
+				blob :=
+					(px - 8) * (px - 8) + (py - 8) * (py - 8) < 26 &&
+					((px + py) % 2 == 0 || (px * py) % 3 != 0)
+				if blob {
+					c = shade(Color{104, 96, 58, 255}, jitter(gx, gy, 20));c.a = 255
+				}
+			case "arrow":
+				c = Color{0, 0, 0, 0}
+				// a diagonal arrow: wood shaft, metal tip (top-right), red fletching
+				shaft := abs(int(px) - int(py)) <= 1 && px >= 2 && px <= 13 && py >= 2 && py <= 13
+				head := (int(px) + int(py) >= 23) && px >= 11 && py >= 11
+				fletch := (int(px) + int(py) <= 7) && px <= 6 && py <= 6
+				if head {
+					c = Color{200, 200, 206, 255}
+				} else if fletch {
+					c = Color{198, 62, 62, 255}
+				} else if shaft {
+					c = shade(Color{120, 86, 50, 255}, jitter(gx, gy, 8));c.a = 255
+				}
+			case "gunpowder":
+				c = Color{0, 0, 0, 0}
+				// a small heap of dark grey grains with the odd lighter fleck
+				heap := (px - 8) * (px - 8) + (py - 9) * (py - 9) < 24
+				if heap {
+					spark := (px * 3 + py * 7) % 5 == 0
+					c = shade(
+						spark ? Color{92, 92, 98, 255} : Color{48, 48, 54, 255},
+						jitter(gx, gy, 12),
+					);c.a = 255
+				}
 			case "obsidian":
 				spec := ((jitter(gx * 2, gy * 2, 100) + 100) % 9) < 2
 				c = spec ? Color{80, 50, 110, 255} : shade(Color{28, 20, 40, 255}, jitter(gx, gy, 8))
@@ -491,6 +524,9 @@ main :: proc() {
 	paint(ad.FEATHER, Color{0, 0, 0, 0}, "feather")
 	paint(ad.LEATHER, Color{0, 0, 0, 0}, "leather")
 	paint(ad.BONE, Color{0, 0, 0, 0}, "bone")
+	paint(ad.ROTTEN_FLESH, Color{0, 0, 0, 0}, "rotten_flesh")
+	paint(ad.ARROW, Color{0, 0, 0, 0}, "arrow")
+	paint(ad.GUNPOWDER, Color{0, 0, 0, 0}, "gunpowder")
 	paint(ad.PLANKS, Color{158, 118, 68, 255}, "planks")
 	paint(ad.STONE_BRICK, Color{118, 118, 124, 255}, "stone_brick")
 	paint(ad.BRICKS, Color{158, 78, 62, 255}, "bricks")

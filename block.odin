@@ -91,13 +91,26 @@ BlockId :: enum u8 {
 	Feather, // dropped by chickens
 	Leather, // dropped by cows, horses, deer, ...
 	Bone, // dropped by skeletons
+	RottenFlesh, // dropped by zombies
+	Arrow, // dropped by skeletons
+	Gunpowder, // dropped by ghasts
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
 // but can never be placed into the world.
 block_is_item :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .RawFood, .CookedFood, .Bread, .Wheat, .Seeds, .Feather, .Leather, .Bone:
+	case .RawFood,
+	     .CookedFood,
+	     .Bread,
+	     .Wheat,
+	     .Seeds,
+	     .Feather,
+	     .Leather,
+	     .Bone,
+	     .RottenFlesh,
+	     .Arrow,
+	     .Gunpowder:
 		return true
 	}
 	return false
@@ -352,6 +365,12 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.LEATHER
 	case .Bone:
 		return ad.BONE
+	case .RottenFlesh:
+		return ad.ROTTEN_FLESH
+	case .Arrow:
+		return ad.ARROW
+	case .Gunpowder:
+		return ad.GUNPOWDER
 	case .Planks:
 		return ad.PLANKS
 	case .StoneBrick:
@@ -509,6 +528,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.62, 0.42, 0.24}
 	case .Bone:
 		return {0.90, 0.89, 0.80}
+	case .RottenFlesh:
+		return {0.46, 0.34, 0.28}
+	case .Arrow:
+		return {0.70, 0.66, 0.58}
+	case .Gunpowder:
+		return {0.30, 0.30, 0.32}
 	case .Planks:
 		return {0.62, 0.46, 0.26}
 	case .StoneBrick:
@@ -665,6 +690,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "Leather"
 	case .Bone:
 		return "Bone"
+	case .RottenFlesh:
+		return "Rotten Flesh"
+	case .Arrow:
+		return "Arrow"
+	case .Gunpowder:
+		return "Gunpowder"
 	case .Planks:
 		return "Planks"
 	case .StoneBrick:

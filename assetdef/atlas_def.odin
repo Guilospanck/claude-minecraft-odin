@@ -80,3 +80,6 @@ BAMBOO           :: Tile{7, 4} // sprite (transparent background)
 FEATHER          :: Tile{8, 4} // item icon
 LEATHER          :: Tile{9, 4} // item icon
 BONE             :: Tile{10, 4} // item icon
+ROTTEN_FLESH     :: Tile{11, 4} // item icon
+ARROW            :: Tile{12, 4} // item icon
+GUNPOWDER        :: Tile{13, 4} // item icon

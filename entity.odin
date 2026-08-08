@@ -1301,30 +1301,35 @@ mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 // sheep give wool, skeletons give bones. Mobs not listed drop nothing.
 mob_loot :: proc(w: ^World, kind: MobKind, pos: Vec3) {
 	meat := 0
-	mat := BlockId.Air
-	mat_n := 0
 	#partial switch kind {
 	case .Chicken:
-		meat = 1;mat = .Feather;mat_n = 1
+		meat = 1;loot_drop(w, pos, .Feather, 1)
 	case .Cow:
-		meat = 2;mat = .Leather;mat_n = 1
+		meat = 2;loot_drop(w, pos, .Leather, 1)
 	case .Pig:
 		meat = 2
 	case .Sheep:
-		meat = 1;mat = .WoolWhite;mat_n = 1
+		meat = 1;loot_drop(w, pos, .WoolWhite, 1)
 	case .Rabbit:
 		meat = 1
 	case .Goat, .Deer:
-		meat = 1;mat = .Leather;mat_n = 1
+		meat = 1;loot_drop(w, pos, .Leather, 1)
 	case .Horse, .Llama, .Camel:
-		mat = .Leather;mat_n = 1
+		loot_drop(w, pos, .Leather, 1)
 	case .Fish, .Pufferfish, .Dolphin:
 		meat = 1
+	case .Zombie:
+		loot_drop(w, pos, .RottenFlesh, 1 + int(rng_range(0, 1.99))) // 1..2
 	case .Skeleton:
-		mat = .Bone;mat_n = 1 + int(rng_range(0, 1.99)) // 1..2 bones
+		loot_drop(w, pos, .Bone, 1 + int(rng_range(0, 1.99))) // 1..2 bones
+		loot_drop(w, pos, .Arrow, int(rng_range(0, 1.99))) // 0..1 arrows
+	case .Ghast:
+		loot_drop(w, pos, .Gunpowder, int(rng_range(0, 1.99))) // 0..1
 	}
 	for _ in 0 ..< meat do item_spawn_food(&w.items, pos)
-	if mat != .Air {
-		for _ in 0 ..< mat_n do item_spawn(&w.items, mat, pos)
-	}
+}
+
+@(private = "file")
+loot_drop :: proc(w: ^World, pos: Vec3, b: BlockId, n: int) {
+	for _ in 0 ..< n do item_spawn(&w.items, b, pos)
 }
