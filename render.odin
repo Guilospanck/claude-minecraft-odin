@@ -498,6 +498,15 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		hud_quad(-0.11, -0.125, 0.11, -0.09, Vec4{0.1, 0.1, 0.1, 0.7})
 		hud_quad(-0.10, -0.118, -0.10 + 0.20 * p.mine_frac, -0.097, Vec4{0.9, 0.9, 0.95, 0.95})
 	}
+	// Attack-charge meter: shows while a melee swing is recharging, filling back to
+	// full so you can time full-strength blows (brightens white at 100%).
+	if p.attack_cd > 0 {
+		charge := clamp(1 - p.attack_cd / ATTACK_CD_MAX, 0, 1)
+		hud_quad(-0.11, -0.165, 0.11, -0.14, Vec4{0.1, 0.1, 0.1, 0.7})
+		full := charge >= 0.999
+		fill := full ? Vec4{1.0, 1.0, 0.85, 0.98} : Vec4{0.72, 0.74, 0.80, 0.95}
+		hud_quad(-0.10, -0.158, -0.10 + 0.20 * charge, -0.147, fill)
+	}
 	hud_draw_health(p.health, int(fbw), int(fbh))
 	hud_draw_hunger(int(p.hunger), int(fbw), int(fbh))
 	hud_draw_oxygen(p.oxygen, int(fbw), int(fbh))

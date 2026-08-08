@@ -40,6 +40,7 @@ Player :: struct {
 	place_cd:    f32, // throttle for held-right-button drag-placing
 	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
 	swing_timer: f32, // counts down from SWING_DURATION; drives the held-item swing
+	attack_cd:   f32, // counts down from ATTACK_CD_MAX; a fresh swing hits weak until it recharges
 	sprinting:   bool, // running (Ctrl or double-tap W); faster + widens FOV
 	fov_kick:    f32, // 0..1 eased sprint FOV widen, for a smooth zoom in/out
 	bob_phase:   f32, // advances while walking; drives the camera head-bob
@@ -292,6 +293,7 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 		if p.eat_timer < 0 do p.eat_timer = 0
 	}
 	if p.swing_timer > 0 do p.swing_timer -= dt
+	if p.attack_cd > 0 do p.attack_cd -= dt
 
 	// Hunger drains slowly over a play session (~20min idle, ~7min walking
 	// nonstop), faster while walking. Previously drained fully in under a
@@ -424,7 +426,14 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 	if g_input.break_req {
 		mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
 		if mob_idx >= 0 && mob_t <= block_dist {
-			mob_hit(w, mob_idx, dir, 3 + held_attack_bonus(p))
+			// Charged attacks: swinging before the cooldown refills lands a weak hit.
+			// Charge ramps the damage up on a curve (0.2..1.0 of the full value), so
+			// spamming clicks is worse than timing full-strength blows, as in MC 1.9+.
+			charge := clamp(1 - p.attack_cd / ATTACK_CD_MAX, 0, 1)
+			base := f32(3 + held_attack_bonus(p))
+			dmg := max(1, int(base * (0.2 + 0.8 * charge * charge) + 0.5))
+			mob_hit(w, mob_idx, dir, dmg)
+			p.attack_cd = ATTACK_CD_MAX
 			tool_wear(p, p.held_tool)
 			mine_reset(p)
 			p.swing_timer = SWING_DURATION
