@@ -1,7 +1,9 @@
 # Odin Minecraft Clone — Design
 
 Date: 2026-08-01
-Status: approved
+Status: approved — historical record of the *initial* scope. The game has grown
+well past it (dimensions, villages, mobs, weather, tools, multiplayer, …); see
+the README for the current feature set.
 
 ## Goal
 A voxel sandbox in pure Odin: chunked world, textured blocks, first-person
