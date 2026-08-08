@@ -1034,8 +1034,12 @@ held_item_render :: proc(p: ^Player, proj: Mat4, ambient: f32) {
 	gl.BindVertexArray(e_vao)
 	gl.Clear(gl.DEPTH_BUFFER_BIT)
 
+	// Walk-bob: the held item sways with the same phase as the camera head-bob so
+	// it feels attached to the moving body, not floating.
+	hb := 0.014 * math.sin(p.bob_phase) * p.bob_amp
+	vb := 0.014 * abs(math.sin(p.bob_phase)) * p.bob_amp
 	base :=
-		linalg.matrix4_translate_f32(Vec3{0.52, -0.52 - sw * 0.14, -1.0}) *
+		linalg.matrix4_translate_f32(Vec3{0.52 + hb, -0.52 - sw * 0.14 - vb, -1.0}) *
 		linalg.matrix4_rotate_f32(-0.35 + sw * 1.1, Vec3{1, 0, 0}) * // swing pitches it down
 		linalg.matrix4_rotate_f32(0.5, Vec3{0, 1, 0})
 
