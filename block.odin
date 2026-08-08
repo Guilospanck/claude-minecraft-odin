@@ -100,6 +100,7 @@ BlockId :: enum u8 {
 	RedMushroom, // shaded-forest/swamp floor sprite
 	BrownMushroom, // shaded-forest/taiga floor sprite
 	Pumpkin, // orange gourd cube, patches in grassy biomes
+	MossyCobble, // mossy cobblestone; boulders in taiga/mountains
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -430,6 +431,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 	case .Pumpkin:
 		if f == .PosY do return ad.PUMPKIN_TOP
 		return ad.PUMPKIN
+	case .MossyCobble:
+		return ad.MOSSY_COBBLE
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -601,6 +604,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.60, 0.44, 0.30}
 	case .Pumpkin:
 		return {0.85, 0.52, 0.14}
+	case .MossyCobble:
+		return {0.42, 0.50, 0.36}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -789,6 +794,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Brown Mushroom"
 	case .Pumpkin:
 		return "Pumpkin"
+	case .MossyCobble:
+		return "Mossy Cobblestone"
 	}
 	return "?"
 }

@@ -508,6 +508,15 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					h < 3 \
 					? shade(Color{70, 70, 74, 255}, jitter(gx, gy, 8)) \
 					: shade(base, jitter(gx, gy, 14))
+			case "mossy_cobble":
+				// cobble with green moss patches filling the low-hash cells
+				h := (jitter(gx / 2 * 2, gy / 2 * 2, 100) + 100) % 10
+				moss := (jitter(gx, gy, 100) + 100) % 3 < 1
+				if h < 3 {
+					c = shade(Color{62, 78, 52, 255}, jitter(gx, gy, 8)) // mossy mortar
+				} else {
+					c = shade(moss ? Color{74, 104, 62, 255} : base, jitter(gx, gy, 12))
+				}
 			case:
 				// plain grain (already applied)
 			}
@@ -608,6 +617,7 @@ main :: proc() {
 	paint(ad.BROWN_MUSHROOM, Color{0, 0, 0, 0}, "brown_mushroom")
 	paint(ad.PUMPKIN, Color{216, 132, 34, 255}, "pumpkin")
 	paint(ad.PUMPKIN_TOP, Color{176, 142, 60, 255}, "pumpkin_top")
+	paint(ad.MOSSY_COBBLE, Color{104, 112, 100, 255}, "mossy_cobble")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

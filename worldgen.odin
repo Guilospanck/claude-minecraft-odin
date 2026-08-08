@@ -872,6 +872,22 @@ biome_variant :: proc(seed: u64, wx, wz: int) -> f32 {
 	return fbm2(seed + 2718, f32(wx) * 0.005, f32(wz) * 0.005, 2)
 }
 
+// A squat mound of cobblestone, mossy on a quarter of its blocks, sitting on the
+// surface — the mossy boulders strewn across taiga, mountains and meadows in MC.
+@(private = "file")
+place_boulder :: proc(c: ^Chunk, lx, surf_y, lz: int, hsh: u64) {
+	bt :: proc(hsh: u64, k: uint) -> BlockId {
+		return ((hsh >> k) & 3) == 0 ? .MossyCobble : .Cobblestone
+	}
+	for dx in -1 ..= 1 do for dz in -1 ..= 1 {
+		chunk_set(c, lx + dx, surf_y + 1, lz + dz, bt(hsh, uint((dx + 1) * 3 + (dz + 1))))
+	}
+	chunk_set(c, lx, surf_y + 2, lz, bt(hsh, 9))
+	if (hsh >> 20) & 1 == 0 do chunk_set(c, lx + 1, surf_y + 2, lz, bt(hsh, 10))
+	if (hsh >> 21) & 1 == 0 do chunk_set(c, lx - 1, surf_y + 2, lz, bt(hsh, 11))
+	if (hsh >> 22) & 1 == 0 do chunk_set(c, lx, surf_y + 2, lz + 1, bt(hsh, 12))
+}
+
 // Per-biome surface decoration: trees (density/type varies) and desert cacti.
 generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int, biomes: []Biome) {
 	for lz in 2 ..< CHUNK_D - 2 {
@@ -891,7 +907,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				sb := chunk_get(c, lx, surf_y, lz)
 				if (sb == .Sand || sb == .Gravel || sb == .Dirt || sb == .CoarseDirt) &&
 				   SEA_LEVEL - surf_y >= 3 &&
-				   r < 230 &&
+				   r < 95 &&
 				   chunk_get(c, lx, surf_y + 1, lz) == .Water {
 					top := min(SEA_LEVEL - 1, surf_y + 2 + int((hsh >> 40) % 6))
 					for y in surf_y + 1 ..= top {
@@ -926,6 +942,15 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					for i in 0 ..< n do chunk_set(c, lx, surf_y + 1 + i, lz, .SugarCane)
 					continue
 				}
+			}
+
+			// Boulders: mossy cobble mounds strewn across the cold, rocky biomes.
+			if (biome == .Taiga || biome == .Mountains || biome == .Meadow || biome == .Snow) &&
+			   site_ok &&
+			   (surf == .Grass || surf == .Podzol || surf == .CoarseDirt || surf == .Snow || surf == .Stone || surf == .Gravel) &&
+			   (hsh >> 46) % 340 == 0 {
+				place_boulder(c, lx, surf_y, lz, hsh)
+				continue
 			}
 
 			switch biome {

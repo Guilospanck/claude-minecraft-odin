@@ -89,3 +89,4 @@ RED_MUSHROOM     :: Tile{0, 5} // sprite (transparent background)
 BROWN_MUSHROOM   :: Tile{1, 5} // sprite (transparent background)
 PUMPKIN          :: Tile{2, 5} // side (carved face)
 PUMPKIN_TOP      :: Tile{3, 5} // top (ribbed stem)
+MOSSY_COBBLE     :: Tile{4, 5}
