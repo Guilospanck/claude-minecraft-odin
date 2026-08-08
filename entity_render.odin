@@ -110,13 +110,19 @@ horse_parts := [9]MobPart {
 }
 
 @(private = "file")
-chicken_parts := [6]MobPart {
-	{{0, 0.34, 0}, {0.36, 0.4, 0.5}, WHITE, 0}, // body
-	{{0, 0.56, -0.22}, {0.3, 0.32, 0.3}, WHITE, 0}, // head
-	{{0, 0.53, -0.42}, {0.14, 0.1, 0.16}, ORANGE, 0}, // beak
-	{{-0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, 1}, // left leg
-	{{0.1, 0.12, 0.05}, {0.09, 0.24, 0.09}, ORANGE, -1}, // right leg
-	{{0, 0.46, 0.3}, {0.08, 0.24, 0.06}, WHITE, 0}, // tail feathers
+CHICKENRED :: Vec3{0.86, 0.20, 0.20}
+CHICKENBEAK :: Vec3{0.95, 0.72, 0.20}
+chicken_parts := [10]MobPart {
+	{{0, 0.34, 0}, {0.34, 0.4, 0.5}, WHITE, 0}, // plump body
+	{{0, 0.58, -0.2}, {0.26, 0.28, 0.26}, WHITE, 0}, // head
+	{{0, 0.74, -0.18}, {0.05, 0.1, 0.16}, CHICKENRED, 0}, // comb (red crest)
+	{{0, 0.52, -0.35}, {0.11, 0.08, 0.14}, CHICKENBEAK, 0}, // pointed beak
+	{{0, 0.45, -0.28}, {0.05, 0.08, 0.06}, CHICKENRED, 0}, // wattle
+	{{-0.18, 0.36, 0.02}, {0.05, 0.26, 0.34}, WHITE, -1}, // left wing (flaps)
+	{{0.18, 0.36, 0.02}, {0.05, 0.26, 0.34}, WHITE, -1}, // right wing
+	{{-0.1, 0.12, 0.05}, {0.07, 0.24, 0.07}, ORANGE, 1}, // left leg
+	{{0.1, 0.12, 0.05}, {0.07, 0.24, 0.07}, ORANGE, -1}, // right leg
+	{{0, 0.52, 0.28}, {0.1, 0.3, 0.06}, WHITE, 0}, // upright tail feathers
 }
 
 @(private = "file")
@@ -869,7 +875,7 @@ face_def_for_mob :: proc(k: MobKind) -> MobFace {
 	case .Cow:
 		return {{0, 0.98, -0.72}, {0.5, 0.5, 0.45}, .Animal, {}, {}, EYE_DARK}
 	case .Chicken:
-		return {{0, 0.56, -0.22}, {0.3, 0.32, 0.3}, .Animal, {}, {}, EYE_DARK}
+		return {{0, 0.58, -0.2}, {0.26, 0.28, 0.26}, .Animal, {}, {}, EYE_DARK}
 	case .Rabbit:
 		return {{0, 0.30, -0.18}, {0.22, 0.22, 0.20}, .Animal, {}, {}, EYE_DARK}
 	case .Horse:
