@@ -90,3 +90,7 @@ BROWN_MUSHROOM   :: Tile{1, 5} // sprite (transparent background)
 PUMPKIN          :: Tile{2, 5} // side (carved face)
 PUMPKIN_TOP      :: Tile{3, 5} // top (ribbed stem)
 MOSSY_COBBLE     :: Tile{4, 5}
+SEAGRASS         :: Tile{5, 5} // sprite (transparent background)
+CORAL_PINK       :: Tile{6, 5}
+CORAL_BLUE       :: Tile{7, 5}
+CORAL_PURPLE     :: Tile{8, 5}

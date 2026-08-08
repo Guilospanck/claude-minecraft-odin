@@ -101,6 +101,10 @@ BlockId :: enum u8 {
 	BrownMushroom, // shaded-forest/taiga floor sprite
 	Pumpkin, // orange gourd cube, patches in grassy biomes
 	MossyCobble, // mossy cobblestone; boulders in taiga/mountains
+	Seagrass, // short underwater sprite on the seabed
+	CoralPink, // reef coral cube (warm oceans)
+	CoralBlue,
+	CoralPurple,
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -158,7 +162,8 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	     .SugarCane,
 	     .Kelp,
 	     .RedMushroom,
-	     .BrownMushroom:
+	     .BrownMushroom,
+	     .Seagrass:
 		return true
 	}
 	return false
@@ -168,7 +173,7 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 // share the same non-solid, non-occluding, ray-stopping behaviour.
 block_is_plant :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo, .SugarCane, .Kelp, .RedMushroom, .BrownMushroom:
+	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo, .SugarCane, .Kelp, .RedMushroom, .BrownMushroom, .Seagrass:
 		return true
 	}
 	return false
@@ -433,6 +438,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.PUMPKIN
 	case .MossyCobble:
 		return ad.MOSSY_COBBLE
+	case .Seagrass:
+		return ad.SEAGRASS
+	case .CoralPink:
+		return ad.CORAL_PINK
+	case .CoralBlue:
+		return ad.CORAL_BLUE
+	case .CoralPurple:
+		return ad.CORAL_PURPLE
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -606,6 +619,14 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.85, 0.52, 0.14}
 	case .MossyCobble:
 		return {0.42, 0.50, 0.36}
+	case .Seagrass:
+		return {0.24, 0.56, 0.30}
+	case .CoralPink:
+		return {0.90, 0.40, 0.62}
+	case .CoralBlue:
+		return {0.32, 0.55, 0.92}
+	case .CoralPurple:
+		return {0.66, 0.36, 0.86}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -796,6 +817,14 @@ block_name :: proc(b: BlockId) -> string {
 		return "Pumpkin"
 	case .MossyCobble:
 		return "Mossy Cobblestone"
+	case .Seagrass:
+		return "Seagrass"
+	case .CoralPink:
+		return "Pink Coral"
+	case .CoralBlue:
+		return "Blue Coral"
+	case .CoralPurple:
+		return "Purple Coral"
 	}
 	return "?"
 }

@@ -489,6 +489,18 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				rib := (px % 4 == 0)
 				c = shade(rib ? Color{150, 120, 50, 255} : Color{176, 142, 60, 255}, jitter(gx, gy, 10))
 				if px >= 7 && px <= 9 && py >= 6 && py <= 9 do c = Color{110, 84, 40, 255} // stem
+			case "seagrass":
+				// short green blades rising from the bottom of the tile
+				c = Color{0, 0, 0, 0}
+				blade := (px == 5 || px == 8 || px == 11) && py >= 7
+				tip := ((px == 4 || px == 9) && py >= 10)
+				if blade || tip {
+					c = shade(Color{58, 132, 72, 255}, jitter(gx, gy, 10));c.a = 255
+				}
+			case "coral":
+				// a knobbly reef surface: base colour with brighter/darker specks
+				sp := (jitter(gx, gy, 100) + 100) % 5
+				c = shade(base, jitter(gx, gy, 10) + (sp < 1 ? 26 : (sp > 3 ? -22 : 0)))
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -618,6 +630,10 @@ main :: proc() {
 	paint(ad.PUMPKIN, Color{216, 132, 34, 255}, "pumpkin")
 	paint(ad.PUMPKIN_TOP, Color{176, 142, 60, 255}, "pumpkin_top")
 	paint(ad.MOSSY_COBBLE, Color{104, 112, 100, 255}, "mossy_cobble")
+	paint(ad.SEAGRASS, Color{0, 0, 0, 0}, "seagrass")
+	paint(ad.CORAL_PINK, Color{228, 102, 158, 255}, "coral")
+	paint(ad.CORAL_BLUE, Color{82, 140, 234, 255}, "coral")
+	paint(ad.CORAL_PURPLE, Color{168, 92, 220, 255}, "coral")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

@@ -905,13 +905,33 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			// river/pond water.
 			if surf_y < SEA_LEVEL {
 				sb := chunk_get(c, lx, surf_y, lz)
-				if (sb == .Sand || sb == .Gravel || sb == .Dirt || sb == .CoarseDirt) &&
-				   SEA_LEVEL - surf_y >= 3 &&
-				   r < 95 &&
-				   chunk_get(c, lx, surf_y + 1, lz) == .Water {
-					top := min(SEA_LEVEL - 1, surf_y + 2 + int((hsh >> 40) % 6))
-					for y in surf_y + 1 ..= top {
-						if chunk_get(c, lx, y, lz) == .Water do chunk_set(c, lx, y, lz, .Kelp)
+				soft := sb == .Sand || sb == .Gravel || sb == .Dirt || sb == .CoarseDirt
+				water_above := chunk_get(c, lx, surf_y + 1, lz) == .Water
+				if soft && water_above && SEA_LEVEL - surf_y >= 2 {
+					temp, _ := world_climate(seed, wx, wz)
+					if temp > 0.25 {
+						// Warm water: a colourful reef of coral heads + seagrass
+						// tufts instead of cold kelp forests.
+						pick := (hsh >> 38) % 100
+						if pick < 24 {
+							col := (hsh >> 41) % 3
+							cb := col == 0 ? BlockId.CoralPink : (col == 1 ? BlockId.CoralBlue : BlockId.CoralPurple)
+							chunk_set(c, lx, surf_y + 1, lz, cb)
+							if SEA_LEVEL - surf_y >= 3 && (hsh >> 44) % 2 == 0 && chunk_get(c, lx, surf_y + 2, lz) == .Water {
+								chunk_set(c, lx, surf_y + 2, lz, .Seagrass)
+							}
+						} else if pick < 60 {
+							chunk_set(c, lx, surf_y + 1, lz, .Seagrass)
+						}
+					} else if SEA_LEVEL - surf_y >= 3 && r < 95 {
+						// Cool/temperate deep water: kelp forest.
+						top := min(SEA_LEVEL - 1, surf_y + 2 + int((hsh >> 40) % 6))
+						for y in surf_y + 1 ..= top {
+							if chunk_get(c, lx, y, lz) == .Water do chunk_set(c, lx, y, lz, .Kelp)
+						}
+					} else if r < 40 {
+						// otherwise the odd seagrass tuft so no seabed is wholly bare
+						chunk_set(c, lx, surf_y + 1, lz, .Seagrass)
 					}
 				}
 				continue
