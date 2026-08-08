@@ -136,7 +136,11 @@ Mob :: struct {
 	air:            f32, // breath left while submerged (land mobs); refills on the surface
 	drown_accum:    f32, // fractional drowning damage once air runs out
 	flee_timer:     f32, // >0 while a prey animal is bolting from a predator
+	hurt_flash:     f32, // >0 briefly after taking a hit; drives the red damage blink
 }
+
+// How long a mob/villager stays tinted red after taking damage.
+HURT_FLASH_TIME :: f32(0.35)
 
 BREED_LOVE_DURATION :: f32(30.0) // how long a fed mob stays in love mode
 BREED_RADIUS :: f32(3.0) // mates must be within this many blocks
@@ -318,6 +322,7 @@ ai_predation :: proc(w: ^World, m: ^Mob, self_idx: int, dt: f32) -> bool {
 	m.attack_timer -= dt
 	if best_d2 < PREDATION_REACH * PREDATION_REACH && m.attack_timer <= 0 {
 		w.mobs[best_idx].health -= PREDATION_DMG
+		w.mobs[best_idx].hurt_flash = HURT_FLASH_TIME
 		w.mobs[best_idx].death_cause = .Predator
 		m.attack_timer = 1.2
 	}
@@ -427,6 +432,7 @@ ai_predator :: proc(w: ^World, m: ^Mob, self_idx: int, dt: f32) -> bool {
 	m.moving = true
 	if dx * dx + dz * dz < PREDATOR_REACH * PREDATOR_REACH && m.attack_timer <= 0 {
 		prey.health -= PREDATOR_DMG
+		prey.hurt_flash = HURT_FLASH_TIME
 		m.attack_timer = 0.9
 		if prey.health <= 0 do prey.death_cause = .Predator
 	}
@@ -460,6 +466,7 @@ ai_flee :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
 }
 
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
+	if m.hurt_flash > 0 do m.hurt_flash -= dt
 	dims := MOB_DIMS[m.kind]
 	if m.is_baby {
 		dims.hw *= 0.6
@@ -1276,6 +1283,7 @@ try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 	m := &w.mobs[idx]
 	m.health -= dmg
+	m.hurt_flash = HURT_FLASH_TIME
 	m.vel.x += dir.x * 6.0
 	m.vel.z += dir.z * 6.0
 	m.vel.y = 6.0

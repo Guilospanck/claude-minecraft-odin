@@ -24,6 +24,7 @@ e_prog: u32
 e_mvp: i32
 e_color: i32
 e_ambient: i32
+e_flash: i32
 e_vao: u32
 e_vbo: u32
 
@@ -491,6 +492,7 @@ villagers_render_frame :: proc(villagers: ^[dynamic]Villager, vp: Mat4, ambient:
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(villagers^) {
 		v := &villagers^[i]
+		gl.Uniform1f(e_flash, clamp(v.hurt_flash / HURT_FLASH_TIME, 0, 1))
 		build := villager_build_scale(v)
 		base :=
 			linalg.matrix4_translate_f32(v.pos) *
@@ -529,6 +531,7 @@ remotes_render_frame :: proc(vp: Mat4, ambient: f32) {
 	net_remotes_snapshot(&remotes_buf)
 	if len(remotes_buf) == 0 do return
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0) // these view models never flash
 	gl.Uniform1f(e_ambient, ambient)
 	gl.BindVertexArray(e_vao)
 	for rp in remotes_buf {
@@ -944,6 +947,7 @@ entity_render_init :: proc() {
 	e_mvp = gl.GetUniformLocation(e_prog, "uMVP")
 	e_color = gl.GetUniformLocation(e_prog, "uColor")
 	e_ambient = gl.GetUniformLocation(e_prog, "uAmbient")
+	e_flash = gl.GetUniformLocation(e_prog, "uFlash")
 
 	// Unit cube centred at the origin (-0.5..0.5), reusing the world face
 	// tables for correct CCW winding and per-face shading.
@@ -983,6 +987,8 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(mobs^) {
 		m := &mobs^[i]
+		// Red "just hit" blink: full for the first instant, fading over the window.
+		gl.Uniform1f(e_flash, clamp(m.hurt_flash / HURT_FLASH_TIME, 0, 1))
 		// -yaw so the model's local -Z (its face) points along the heading.
 		base := linalg.matrix4_translate_f32(m.pos) * linalg.matrix4_rotate_f32(-m.yaw, Vec3{0, 1, 0})
 		if m.is_baby {
@@ -1023,6 +1029,7 @@ held_item_render :: proc(p: ^Player, proj: Mat4, ambient: f32) {
 	if p.swing_timer > 0 do sw = math.sin((1 - p.swing_timer / SWING_DURATION) * math.PI)
 
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0) // these view models never flash
 	gl.Uniform1f(e_ambient, clamp(ambient + 0.4, 0, 1))
 	gl.BindVertexArray(e_vao)
 	gl.Clear(gl.DEPTH_BUFFER_BIT)
@@ -1087,6 +1094,7 @@ mat_from_forward :: proc(fwd: Vec3) -> Mat4 {
 arrows_render_frame :: proc(arrows: ^[dynamic]Arrow, vp: Mat4, ambient: f32) {
 	if len(arrows^) == 0 do return
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0) // these view models never flash
 	gl.Uniform1f(e_ambient, ambient)
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(arrows^) {
@@ -1113,6 +1121,7 @@ arrows_render_frame :: proc(arrows: ^[dynamic]Arrow, vp: Mat4, ambient: f32) {
 particles_render_frame :: proc(ps: ^[dynamic]Particle, vp: Mat4, ambient: f32) {
 	if len(ps^) == 0 do return
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0) // these view models never flash
 	gl.Uniform1f(e_ambient, ambient)
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(ps^) {
@@ -1131,6 +1140,7 @@ particles_render_frame :: proc(ps: ^[dynamic]Particle, vp: Mat4, ambient: f32) {
 items_render_frame :: proc(items: ^[dynamic]Item, vp: Mat4, ambient: f32) {
 	if len(items^) == 0 do return
 	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0) // these view models never flash
 	gl.Uniform1f(e_ambient, ambient)
 	gl.BindVertexArray(e_vao)
 	for i in 0 ..< len(items^) {

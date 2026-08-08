@@ -40,6 +40,7 @@ Villager :: struct {
 	air:        f32, // breath left while submerged; refills on the surface
 	drown_accum: f32, // fractional drowning damage once air runs out
 	guard_cd:   f32, // cooldown between strikes when driving off a predator
+	hurt_flash: f32, // >0 briefly after taking a hit; drives the red damage blink
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -172,6 +173,7 @@ villager_defend :: proc(w: ^World, v: ^Villager, dt: f32) -> bool {
 	v.moving = true
 	if dx * dx + dz * dz < 2.0 * 2.0 && v.guard_cd <= 0 { 	// within a swing
 		pred.health -= VILLAGER_GUARD_DMG
+		pred.hurt_flash = HURT_FLASH_TIME
 		pred.flee_timer = 3.5 // send it bolting
 		pred.yaw = math.atan2(-dx, dz) // directly away from the villager
 		v.guard_cd = 0.8
@@ -202,6 +204,7 @@ villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
 	}
 	v.air = CREATURE_AIR_MAX
 
+	if v.hurt_flash > 0 do v.hurt_flash -= dt
 	if v.guard_cd > 0 do v.guard_cd -= dt
 	// farmers/guards break off wandering to run down and drive off any predator
 	// threatening the homestead; everyone else just wanders.

@@ -411,6 +411,13 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		hud_quad(-1, -1, 1, 1, Vec4{0.12, 0.30, 0.55, 0.38}) // submerged tint
 	}
 
+	// Red "took damage" flash: strongest at the instant of the hit, fading out
+	// over the invulnerability window — the same feedback MC gives on the screen.
+	if p.hurt_timer > 0 {
+		a := clamp(p.hurt_timer / 0.5, 0, 1) * 0.32
+		hud_quad(-1, -1, 1, 1, Vec4{0.62, 0.02, 0.02, a})
+	}
+
 	hud_draw(fbw, fbh)
 	if p.mine_frac > 0 { 	// break-progress bar under the crosshair
 		hud_quad(-0.11, -0.125, 0.11, -0.09, Vec4{0.1, 0.1, 0.1, 0.7})
