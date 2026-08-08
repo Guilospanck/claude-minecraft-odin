@@ -29,6 +29,8 @@ Player :: struct {
 	drown_timer: f32, // drowning-damage tick once oxygen is empty
 	tool_tier:   [ToolKind]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
 	tool_dur:    [ToolKind]int, // remaining durability for each tool
+	held_tool:   ToolKind, // which tool is in hand (cycle with H): drives mining + melee
+	tool_mode:   bool, // true = brandishing the tool (shown in hand, no block placing); false = holding the hotbar block
 	armor_tier:  [ArmorSlot]int, // 0 = not owned, 1=Wood 2=Stone 3=Iron
 	armor_dur:   [ArmorSlot]int, // remaining durability for each armor piece
 	mine_active: bool, // currently mining a block (LMB held)
@@ -192,6 +194,7 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 	if g_input.select > 0 {
 		p.selected_slot = g_input.select - 1 // 1-9 equips that hotbar slot
+		p.tool_mode = false // picking a hotbar block puts the tool away
 		if b := inv_selected(p); b != .Air {
 			label := block_is_item(b) ? fmt.tprintf("%s (ITEM)", block_name(b)) : block_name(b)
 			toast_show(label, 0.9)
@@ -360,7 +363,7 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 	audio_play(.Break)
 	item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.3, f32(bz) + 0.5})
 	if broken == .Grass && rng_int(4) == 0 do inv_add(p, .Seeds, 1) // seeds hide in grass
-	if kind, applies := mine_tool(broken); applies do tool_wear(p, kind)
+	if kind, applies := mine_tool(broken); applies && p.held_tool == kind do tool_wear(p, kind)
 }
 
 // Mine (hold left) / punch mobs (left click) / place (right click) against the
@@ -375,8 +378,8 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 	if g_input.break_req {
 		mob_idx, mob_t := mob_pick(&w.mobs, eye, dir, REACH)
 		if mob_idx >= 0 && mob_t <= block_dist {
-			mob_hit(w, mob_idx, dir, 3 + sword_bonus(p))
-			tool_wear(p, .Sword)
+			mob_hit(w, mob_idx, dir, 3 + held_attack_bonus(p))
+			tool_wear(p, p.held_tool)
 			mine_reset(p)
 			p.swing_timer = SWING_DURATION
 		}
@@ -426,7 +429,7 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 	right_held :=
 		g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
 	want_place := g_input.place_req || (right_held && p.place_cd <= 0)
-	if want_place && hit.hit {
+	if want_place && hit.hit && !p.tool_mode { 	// no block-placing while a tool is drawn
 		tx := hit.bx + hit.nx
 		ty := hit.by + hit.ny
 		tz := hit.bz + hit.nz

@@ -92,7 +92,8 @@ block_min_tier :: proc(b: BlockId) -> (kind: ToolKind, tier: int) {
 
 can_mine :: proc(p: ^Player, b: BlockId) -> bool {
 	kind, tier := block_min_tier(b)
-	if tier > 0 && p.tool_tier[kind] < tier do return false
+	// a tier-gated block (obsidian etc.) needs the RIGHT tool of that tier in hand
+	if tier > 0 && (p.held_tool != kind || p.tool_tier[kind] < tier) do return false
 	return true
 }
 
@@ -100,9 +101,11 @@ can_mine :: proc(p: ^Player, b: BlockId) -> bool {
 mining_time :: proc(p: ^Player, b: BlockId) -> f32 {
 	h := block_hardness(b)
 	kind, applies := mine_tool(b)
-	if applies {
+	// only the correct tool held in hand speeds mining; a wrong tool (or bare
+	// hand) just chips at the block's raw hardness.
+	if applies && p.held_tool == kind {
 		tier := p.tool_tier[kind]
-		if tier > 0 do h /= f32(1 + tier) // wood /2, stone /3, iron /4
+		if tier > 0 do h /= f32(1 + tier) // wood /2, stone /3, iron /4, diamond /5
 	}
 	return h
 }
@@ -110,6 +113,26 @@ mining_time :: proc(p: ^Player, b: BlockId) -> f32 {
 sword_bonus :: proc(p: ^Player) -> int {
 	bonus := [5]int{0, 1, 2, 4, 7}
 	return bonus[p.tool_tier[.Sword]]
+}
+
+// Melee damage bonus of whatever tool is currently in hand: a sword hits hardest,
+// another tool does a little, a not-owned/bare hand adds nothing.
+held_attack_bonus :: proc(p: ^Player) -> int {
+	if p.held_tool == .Sword do return sword_bonus(p)
+	if p.tool_tier[p.held_tool] > 0 do return 1 // a pick/axe/shovel is a poor weapon
+	return 0
+}
+
+// Cycle the held tool to the next OWNED tool, skipping ones not yet crafted.
+tool_cycle_held :: proc(p: ^Player) {
+	for step in 1 ..= TOOL_KIND_COUNT {
+		k := ToolKind((int(p.held_tool) + step) % TOOL_KIND_COUNT)
+		if p.tool_tier[k] > 0 {
+			p.held_tool = k
+			toast_show(fmt.tprintf("EQUIPPED %s %s", TIER_NAMES[p.tool_tier[k]], tool_name(k)))
+			return
+		}
+	}
 }
 
 // Spend one point of durability on a tool; it breaks (reverts to None) at zero.

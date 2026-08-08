@@ -329,6 +329,22 @@ main :: proc() {
 		player.fly = true
 	}
 
+	// MC_TOOL=<name> equips a tool and selects an empty hotbar slot so the
+	// first-person held tool is visible for a screenshot.
+	if s := os.get_env("MC_TOOL", context.temp_allocator); s != "" {
+		switch s {
+		case "sword":
+			player.held_tool = .Sword
+		case "axe":
+			player.held_tool = .Axe
+		case "shovel":
+			player.held_tool = .Shovel
+		case:
+			player.held_tool = .Pickaxe
+		}
+		player.tool_mode = true
+	}
+
 	// MC_DEV=mobs|give|teleport|world opens the dev overlay on that tab.
 	if s := os.get_env("MC_DEV", context.temp_allocator); s != "" {
 		g_show_dev = true
@@ -1317,6 +1333,7 @@ main :: proc() {
 				if g_input.scroll != 0 {
 					step := g_input.scroll > 0 ? -1 : 1
 					player.selected_slot = (player.selected_slot + step + HOTBAR_SLOTS) % HOTBAR_SLOTS
+					player.tool_mode = false // scrolling to a block puts the tool away
 					g_input.scroll = 0
 				}
 			physics_update(cur, &player, dt)
@@ -1327,6 +1344,12 @@ main :: proc() {
 			if g_input.interact {
 				try_interact(cur, &player)
 				g_input.interact = false
+			}
+			// H: cycle the held tool (pickaxe / sword / ...)
+			if g_input.tool_cycle {
+				tool_cycle_held(&player)
+				player.tool_mode = true
+				g_input.tool_cycle = false
 			}
 			crops_tick(cur, dt)
 

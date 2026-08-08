@@ -1011,7 +1011,7 @@ held_box :: proc(proj, base: Mat4, off, size, col: Vec3) {
 // world and self-occludes correctly.
 held_item_render :: proc(p: ^Player, proj: Mat4, ambient: f32) {
 	sel := inv_selected(p)
-	show_tool := p.mine_active || sel == .Air
+	show_tool := p.tool_mode || p.mine_active || sel == .Air
 
 	sw := f32(0)
 	if p.swing_timer > 0 do sw = math.sin((1 - p.swing_timer / SWING_DURATION) * math.PI)
@@ -1027,22 +1027,37 @@ held_item_render :: proc(p: ^Player, proj: Mat4, ambient: f32) {
 		linalg.matrix4_rotate_f32(0.5, Vec3{0, 1, 0})
 
 	if show_tool {
-		tier := p.tool_tier[ToolKind.Pickaxe]
-		head: Vec3
+		kind := p.held_tool
+		tier := p.tool_tier[kind]
+		metal: Vec3
 		switch tier {
 		case 1:
-			head = {0.52, 0.38, 0.22}
+			metal = {0.52, 0.38, 0.22}
 		case 2:
-			head = {0.55, 0.55, 0.58}
+			metal = {0.55, 0.55, 0.58}
 		case 3:
-			head = {0.82, 0.82, 0.86}
+			metal = {0.82, 0.82, 0.86}
 		case 4:
-			head = {0.45, 0.86, 0.86}
+			metal = {0.45, 0.86, 0.86}
 		case:
-			head = {0.72, 0.58, 0.46}
+			metal = {0.72, 0.58, 0.46}
 		}
-		held_box(proj, base, Vec3{0, -0.05, 0}, Vec3{0.07, 0.5, 0.07}, Vec3{0.42, 0.28, 0.16}) // handle
-		if tier > 0 do held_box(proj, base, Vec3{0, 0.24, 0}, Vec3{0.3, 0.1, 0.09}, head) // head
+		handle := Vec3{0.42, 0.28, 0.16}
+		switch kind {
+		case .Sword:
+			held_box(proj, base, Vec3{0, -0.12, 0}, Vec3{0.06, 0.3, 0.06}, handle) // grip
+			held_box(proj, base, Vec3{0, 0.05, 0}, Vec3{0.24, 0.06, 0.06}, metal) // crossguard
+			held_box(proj, base, Vec3{0, 0.42, 0}, Vec3{0.05, 0.62, 0.05}, metal) // long blade
+		case .Shovel:
+			held_box(proj, base, Vec3{0, -0.05, 0}, Vec3{0.07, 0.5, 0.07}, handle)
+			held_box(proj, base, Vec3{0, 0.26, 0}, Vec3{0.16, 0.16, 0.06}, metal) // flat blade
+		case .Axe:
+			held_box(proj, base, Vec3{0, -0.05, 0}, Vec3{0.07, 0.5, 0.07}, handle)
+			held_box(proj, base, Vec3{0.12, 0.22, 0}, Vec3{0.16, 0.2, 0.08}, metal) // side head
+		case .Pickaxe:
+			held_box(proj, base, Vec3{0, -0.05, 0}, Vec3{0.07, 0.5, 0.07}, handle)
+			held_box(proj, base, Vec3{0, 0.24, 0}, Vec3{0.3, 0.1, 0.09}, metal) // wide head
+		}
 	} else {
 		held_box(proj, base, Vec3{0, 0, 0}, Vec3{0.34, 0.34, 0.34}, block_color(sel))
 	}
