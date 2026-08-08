@@ -94,6 +94,8 @@ BlockId :: enum u8 {
 	RottenFlesh, // dropped by zombies
 	Arrow, // dropped by skeletons
 	Gunpowder, // dropped by ghasts
+	// Extra flora.
+	SugarCane, // tall reed sprite growing on sand/grass beside water
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -147,7 +149,8 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	     .Fern,
 	     .DeadBush,
 	     .Ladder,
-	     .Bamboo:
+	     .Bamboo,
+	     .SugarCane:
 		return true
 	}
 	return false
@@ -157,7 +160,7 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 // share the same non-solid, non-occluding, ray-stopping behaviour.
 block_is_plant :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo:
+	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo, .SugarCane:
 		return true
 	}
 	return false
@@ -409,6 +412,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.LILY_PAD
 	case .Bamboo:
 		return ad.BAMBOO
+	case .SugarCane:
+		return ad.SUGAR_CANE
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -570,6 +575,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.28, 0.55, 0.28}
 	case .Bamboo:
 		return {0.48, 0.68, 0.28}
+	case .SugarCane:
+		return {0.55, 0.76, 0.44}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -748,6 +755,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Lily Pad"
 	case .Bamboo:
 		return "Bamboo"
+	case .SugarCane:
+		return "Sugar Cane"
 	}
 	return "?"
 }

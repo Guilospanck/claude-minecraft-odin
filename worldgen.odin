@@ -496,7 +496,7 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 				// chance at gold/iron/coal instead of nothing.
 				if b == .Stone {
 					ov := fbm3(seed + 777, fx * 0.08, f32(y) * 0.08, fz * 0.08, 2)
-					if y < 14 && ov > 0.84 {
+					if y < 16 && ov > 0.85 {
 						b = .DiamondOre
 					} else if y < 24 && ov > 0.80 {
 						b = .GoldOre
@@ -893,6 +893,26 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 			// genuinely different places rather than the same trees everywhere.
 			grass := surf == .Grass || surf == .Podzol || surf == .CoarseDirt
 			variant := biome_variant(seed, wx, wz)
+
+			// Sugar cane: on grass or sand right at the water's edge, a clump of
+			// 1-3 reeds - the waterside reeds Minecraft grows along rivers, lakes
+			// and coasts. Checked for every biome before its own flora so any
+			// riverbank gets them.
+			if (surf == .Grass || surf == .Sand) && surf_y <= SEA_LEVEL + 1 && r < 190 {
+				near_water := false
+				for d in ([4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+					if chunk_get(c, lx + d[0], surf_y, lz + d[1]) == .Water {
+						near_water = true
+						break
+					}
+				}
+				if near_water {
+					n := 1 + int((hsh >> 30) % 3) // 1..3 tall
+					for i in 0 ..< n do chunk_set(c, lx, surf_y + 1 + i, lz, .SugarCane)
+					continue
+				}
+			}
+
 			switch biome {
 			case .Desert:
 				// Cacti + dead bushes on the sand — sparse by nature.

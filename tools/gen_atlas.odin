@@ -434,6 +434,15 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(knot ? Color{96, 128, 52, 255} : Color{120, 168, 66, 255}, jitter(gx, gy, 8))
 					c.a = 255
 				}
+			case "sugar_cane":
+				// a single pale-green jointed reed on a transparent tile
+				c = Color{0, 0, 0, 0}
+				stalk := px >= 7 && px <= 9
+				knot := stalk && (py % 4 == 0)
+				if stalk {
+					c = shade(knot ? Color{120, 156, 92, 255} : Color{150, 196, 120, 255}, jitter(gx, gy, 8))
+					c.a = 255
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -547,6 +556,7 @@ main :: proc() {
 	paint(ad.ICE, Color{174, 204, 240, 255}, "ice")
 	paint(ad.LILY_PAD, Color{0, 0, 0, 0}, "lily")
 	paint(ad.BAMBOO, Color{0, 0, 0, 0}, "bamboo")
+	paint(ad.SUGAR_CANE, Color{0, 0, 0, 0}, "sugar_cane")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
