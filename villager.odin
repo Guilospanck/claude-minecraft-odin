@@ -37,6 +37,8 @@ Villager :: struct {
 	is_nomad:   bool,
 	profession: Profession,
 	home_biome: Biome, // biome they live in; drives their clothing (see entity_render)
+	air:        f32, // breath left while submerged; refills on the surface
+	drown_accum: f32, // fractional drowning damage once air runs out
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -139,6 +141,28 @@ villager_wander :: proc(v: ^Villager, dt: f32) {
 }
 
 villager_update :: proc(w: ^World, v: ^Villager, dt: f32) {
+	// Villagers can't breathe underwater any more than mobs can: a submerged
+	// villager swims for the nearest shore and drowns if it can't reach it.
+	if body_submerged(w, v.pos, VILLAGER_H) {
+		v.air -= dt
+		dir := body_land_dir(w, v.pos)
+		v.vel.x = dir.x * VILLAGER_SPEED * 1.3
+		v.vel.z = dir.z * VILLAGER_SPEED * 1.3
+		v.vel.y = 2.2
+		if dir.x != 0 || dir.z != 0 do v.yaw = math.atan2(dir.x, -dir.z)
+		v.walk_phase += dt * 12
+		v.on_ground = body_physics(w, &v.pos, &v.vel, VILLAGER_HW, VILLAGER_H, dt, 3.0)
+		if v.air < 0 {
+			v.drown_accum += dt
+			if v.drown_accum >= 1.0 {
+				v.drown_accum = 0
+				v.health -= 2
+			}
+		}
+		return
+	}
+	v.air = CREATURE_AIR_MAX
+
 	villager_wander(v, dt)
 	if v.moving {
 		fwd := Vec3{math.sin(v.yaw), 0, -math.cos(v.yaw)}

@@ -616,6 +616,9 @@ village_valid :: proc(w: ^World, seed: u64, anchor: Ivec2) -> (surf: int, biome:
 	// Require fairly flat ground so the town beds cleanly instead of perching
 	// its buildings on tall terraced pedestals (which read as "floating").
 	if hi - lo > 6 do return
+	// Keep the whole town on DRY LAND: the lowest plot must sit clear above the
+	// waterline, so a village never generates half-drowned in a coastal dip.
+	if lo <= SEA_LEVEL + 2 do return
 	return ch, cb, true
 }
 

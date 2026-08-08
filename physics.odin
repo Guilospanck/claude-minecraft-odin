@@ -80,6 +80,52 @@ body_physics :: proc(w: ^World, pos: ^Vec3, vel: ^Vec3, hw, h, dt: f32, gravity:
 	return grounded
 }
 
+CREATURE_AIR_MAX :: f32(11.0) // seconds a land creature can hold its breath underwater
+
+// True when a land creature's feet AND head are in water (fully submerged, so it
+// can't just wade — it has to swim for it).
+body_submerged :: proc(w: ^World, pos: Vec3, h: f32) -> bool {
+	x := int(math.floor(pos.x))
+	z := int(math.floor(pos.z))
+	feet := world_block(w, x, int(math.floor(pos.y + 0.2)), z) == .Water
+	head := world_block(w, x, int(math.floor(pos.y + h * 0.7)), z) == .Water
+	return feet && head
+}
+
+// A unit direction toward the nearest dry land (a column whose surface sits at
+// or above sea level), scanning the 8 compass directions outward. Zero if no
+// land is within reach — the creature then just treads toward the surface.
+body_land_dir :: proc(w: ^World, pos: Vec3) -> Vec3 {
+	dirs := [8][2]f32 {
+		{1, 0},
+		{-1, 0},
+		{0, 1},
+		{0, -1},
+		{0.7, 0.7},
+		{-0.7, 0.7},
+		{0.7, -0.7},
+		{-0.7, -0.7},
+	}
+	best := f32(999)
+	bx, bz := f32(0), f32(0)
+	for d in dirs {
+		for dist in ([?]f32{2, 4, 6, 9, 13, 18}) {
+			x := int(math.floor(pos.x + d[0] * dist))
+			z := int(math.floor(pos.z + d[1] * dist))
+			sy, _ := surface_y(w, x, z)
+			if sy >= SEA_LEVEL { 	// dry ground at/above the waterline
+				if dist < best {
+					best = dist
+					bx, bz = d[0], d[1]
+				}
+				break
+			}
+		}
+	}
+	if best < 999 do return Vec3{bx, 0, bz}
+	return Vec3{0, 0, 0}
+}
+
 // Walking-critter step logic, shared by mobs and villagers. Given feet `pos`,
 // heading `fwd` and body dims, look at the block directly ahead:
 //   - clear         -> (0, false): keep walking.

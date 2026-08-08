@@ -80,6 +80,7 @@ MobDeathCause :: enum {
 	Predator,
 	Burned,
 	Fall,
+	Drowned,
 }
 
 Mob :: struct {
@@ -104,6 +105,9 @@ Mob :: struct {
 	starve_accum:   f32, // fractional starvation damage
 	death_cause:    MobDeathCause, // why health last reached zero (see above)
 	fall_speed:     f32, // peak downward speed since last on_ground, for fall damage
+	air:            f32, // breath left while submerged (land mobs); refills on the surface
+	drown_accum:    f32, // fractional drowning damage once air runs out
+	flee_timer:     f32, // >0 while a prey animal is bolting from a predator
 }
 
 BREED_LOVE_DURATION :: f32(30.0) // how long a fed mob stays in love mode
@@ -432,6 +436,30 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 		m.on_ground = false
 		return
 	}
+
+	// A land creature that has fallen into deep water: it can't breathe down
+	// there, so it swims for the nearest shore and paddles upward, losing breath
+	// as it goes — and drowns if it can't reach land in time.
+	if body_submerged(w, m.pos, dims.h) {
+		m.air -= dt
+		dir := body_land_dir(w, m.pos)
+		m.vel.x = dir.x * dims.speed * 1.3
+		m.vel.z = dir.z * dims.speed * 1.3
+		m.vel.y = 2.2 // paddle toward the surface
+		if dir.x != 0 || dir.z != 0 do m.yaw = math.atan2(dir.x, -dir.z)
+		m.walk_phase += dt * 12
+		m.on_ground = body_physics(w, &m.pos, &m.vel, dims.hw, dims.h, dt, 3.0)
+		if m.air < 0 { 	// out of breath — taking on water
+			m.drown_accum += dt
+			if m.drown_accum >= 1.0 {
+				m.drown_accum = 0
+				m.health -= 2
+				if m.health <= 0 do m.death_cause = .Drowned
+			}
+		}
+		return
+	}
+	m.air = CREATURE_AIR_MAX // breathing freely at the surface / on land
 
 	if mob_is_hostile(m.kind) {
 		ai_hostile(w, p, m, self_idx, dt)
@@ -926,6 +954,8 @@ mob_death_label :: proc(cause: MobDeathCause) -> string {
 		return "BURNED UP"
 	case .Fall:
 		return "FELL TO ITS DEATH"
+	case .Drowned:
+		return "DROWNED"
 	}
 	return ""
 }
