@@ -955,6 +955,8 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 				if grass && site_ok && r < (flower ? 20 : 42) {
 					k := birch ? TreeKind.Birch : pick_tree(hsh, {.Oak, .Oak, .Birch, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
+				} else if grass && site_ok && (hsh >> 44) % 220 == 0 {
+					chunk_set(c, lx, surf_y + 1, lz, .Pumpkin) // rare pumpkin
 				} else if grass && r < (flower ? 94 : 78) {
 					pal :=
 						flower \
@@ -966,7 +968,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 							.FlowerWhite,
 							.TallGrass,
 						} \
-						: []BlockId{.TallGrass, .Fern, .TallGrass, .FlowerRed, .FlowerBlue}
+						: []BlockId{.TallGrass, .Fern, .TallGrass, .FlowerRed, .FlowerBlue, .BrownMushroom, .RedMushroom}
 					put_plant(c, lx, surf_y, lz, pick_plant(hsh, pal))
 				}
 			case .Swamp:
@@ -978,13 +980,15 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 					k := pick_tree(hsh, {.Willow, .Willow, .Oak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th % 2), k)
 				} else if grass && r < 70 {
-					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .Fern, .FlowerBlue, .DeadBush}))
+					put_plant(c, lx, surf_y, lz, pick_plant(hsh, {.TallGrass, .Fern, .FlowerBlue, .DeadBush, .RedMushroom, .BrownMushroom}))
 				}
 			case .Plains:
 				sunflower := variant > 0.34 // a sea of yellow blooms
 				if grass && site_ok && r < 8 {
 					k := pick_tree(hsh, {.Oak, .Birch, .Bush, .BigOak})
 					place_tree(c, lx, surf_y, lz, tree_trunk_h(k, 4 + th), k)
+				} else if grass && site_ok && (hsh >> 44) % 220 == 0 {
+					chunk_set(c, lx, surf_y + 1, lz, .Pumpkin) // rare pumpkin
 				} else if grass && r < (sunflower ? 78 : 60) {
 					pal :=
 						sunflower \
@@ -1016,7 +1020,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 						lx,
 						surf_y,
 						lz,
-						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerWhite}),
+						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerWhite, .BrownMushroom}),
 					)
 				}
 			case .Jungle:
@@ -1034,7 +1038,7 @@ generate_trees :: proc(c: ^Chunk, seed: u64, base_x, base_z: int, heights: []int
 						lx,
 						surf_y,
 						lz,
-						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerPink, .TallGrass}),
+						pick_plant(hsh, {.Fern, .TallGrass, .Fern, .FlowerPink, .TallGrass, .RedMushroom}),
 					)
 				}
 			case .Meadow:

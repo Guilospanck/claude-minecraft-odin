@@ -85,3 +85,7 @@ ARROW            :: Tile{12, 4} // item icon
 GUNPOWDER        :: Tile{13, 4} // item icon
 SUGAR_CANE       :: Tile{14, 4} // sprite (transparent background)
 KELP             :: Tile{15, 4} // sprite (transparent background)
+RED_MUSHROOM     :: Tile{0, 5} // sprite (transparent background)
+BROWN_MUSHROOM   :: Tile{1, 5} // sprite (transparent background)
+PUMPKIN          :: Tile{2, 5} // side (carved face)
+PUMPKIN_TOP      :: Tile{3, 5} // top (ribbed stem)

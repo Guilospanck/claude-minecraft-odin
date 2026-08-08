@@ -97,6 +97,9 @@ BlockId :: enum u8 {
 	// Extra flora.
 	SugarCane, // tall reed sprite growing on sand/grass beside water
 	Kelp, // underwater strand sprite growing up from the ocean floor
+	RedMushroom, // shaded-forest/swamp floor sprite
+	BrownMushroom, // shaded-forest/taiga floor sprite
+	Pumpkin, // orange gourd cube, patches in grassy biomes
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -152,7 +155,9 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	     .Ladder,
 	     .Bamboo,
 	     .SugarCane,
-	     .Kelp:
+	     .Kelp,
+	     .RedMushroom,
+	     .BrownMushroom:
 		return true
 	}
 	return false
@@ -162,7 +167,7 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 // share the same non-solid, non-occluding, ray-stopping behaviour.
 block_is_plant :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo, .SugarCane, .Kelp:
+	case .FlowerRed, .FlowerYellow, .FlowerBlue, .FlowerPink, .FlowerWhite, .TallGrass, .Fern, .DeadBush, .Bamboo, .SugarCane, .Kelp, .RedMushroom, .BrownMushroom:
 		return true
 	}
 	return false
@@ -418,6 +423,13 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.SUGAR_CANE
 	case .Kelp:
 		return ad.KELP
+	case .RedMushroom:
+		return ad.RED_MUSHROOM
+	case .BrownMushroom:
+		return ad.BROWN_MUSHROOM
+	case .Pumpkin:
+		if f == .PosY do return ad.PUMPKIN_TOP
+		return ad.PUMPKIN
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -583,6 +595,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.55, 0.76, 0.44}
 	case .Kelp:
 		return {0.28, 0.52, 0.32}
+	case .RedMushroom:
+		return {0.78, 0.16, 0.14}
+	case .BrownMushroom:
+		return {0.60, 0.44, 0.30}
+	case .Pumpkin:
+		return {0.85, 0.52, 0.14}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -765,6 +783,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "Sugar Cane"
 	case .Kelp:
 		return "Kelp"
+	case .RedMushroom:
+		return "Red Mushroom"
+	case .BrownMushroom:
+		return "Brown Mushroom"
+	case .Pumpkin:
+		return "Pumpkin"
 	}
 	return "?"
 }

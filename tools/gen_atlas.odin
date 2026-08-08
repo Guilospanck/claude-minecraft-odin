@@ -455,6 +455,40 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = shade(Color{54, 108, 62, 255}, jitter(gx, gy, 10))
 					c.a = 255
 				}
+			case "red_mushroom":
+				// a red cap with white spots on a short pale stem
+				c = Color{0, 0, 0, 0}
+				stem := (px >= 7 && px <= 8) && py >= 8 && py <= 12
+				cap := (py >= 4 && py <= 8) && px >= 4 && px <= 11 && (px + py) >= 8 && (px - py) <= 7
+				spot := cap && ((px * py) % 5 == 0)
+				if stem {
+					c = Color{226, 220, 206, 255}
+				} else if cap {
+					c = spot ? Color{236, 236, 230, 255} : shade(Color{198, 40, 34, 255}, jitter(gx, gy, 10))
+					c.a = 255
+				}
+			case "brown_mushroom":
+				// a rounded tan cap on a short stem
+				c = Color{0, 0, 0, 0}
+				stem := (px >= 7 && px <= 8) && py >= 8 && py <= 12
+				cap := (py >= 5 && py <= 8) && px >= 5 && px <= 10
+				if stem {
+					c = Color{214, 206, 190, 255}
+				} else if cap {
+					c = shade(Color{150, 108, 66, 255}, jitter(gx, gy, 10));c.a = 255
+				}
+			case "pumpkin":
+				// orange ribbed gourd with a dark carved face
+				rib := (px % 4 == 0)
+				c = shade(rib ? Color{192, 116, 28, 255} : Color{216, 132, 34, 255}, jitter(gx, gy, 10))
+				eye := ((px >= 3 && px <= 5) || (px >= 10 && px <= 12)) && (py >= 5 && py <= 7)
+				mouth := (py >= 9 && py <= 11) && px >= 4 && px <= 11 && ((px + py) % 2 == 0)
+				if eye || mouth do c = Color{54, 30, 8, 255}
+			case "pumpkin_top":
+				// ribbed top with a small stem nub
+				rib := (px % 4 == 0)
+				c = shade(rib ? Color{150, 120, 50, 255} : Color{176, 142, 60, 255}, jitter(gx, gy, 10))
+				if px >= 7 && px <= 9 && py >= 6 && py <= 9 do c = Color{110, 84, 40, 255} // stem
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -570,6 +604,10 @@ main :: proc() {
 	paint(ad.BAMBOO, Color{0, 0, 0, 0}, "bamboo")
 	paint(ad.SUGAR_CANE, Color{0, 0, 0, 0}, "sugar_cane")
 	paint(ad.KELP, Color{0, 0, 0, 0}, "kelp")
+	paint(ad.RED_MUSHROOM, Color{0, 0, 0, 0}, "red_mushroom")
+	paint(ad.BROWN_MUSHROOM, Color{0, 0, 0, 0}, "brown_mushroom")
+	paint(ad.PUMPKIN, Color{216, 132, 34, 255}, "pumpkin")
+	paint(ad.PUMPKIN_TOP, Color{176, 142, 60, 255}, "pumpkin_top")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
