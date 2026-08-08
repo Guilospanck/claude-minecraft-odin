@@ -388,6 +388,7 @@ world_height_and_biome :: proc(seed: u64, wx, wz: int) -> (h: int, biome: Biome,
 // comment at its use site in worldgen_fill for why an unbounded depth was a
 // bug, not a feature.
 RAVINE_MAX_DEPTH :: 22
+OVERWORLD_LAVA_LEVEL :: 9 // carved-out space at/below this y floods with lava
 
 worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 	base_x := c.coord.x * CHUNK_W
@@ -478,6 +479,12 @@ worldgen_fill :: proc(w: ^World, c: ^Chunk, seed: u64) {
 						}
 					}
 				}
+
+				// Deep carved-out pockets flood with lava, so the bottom of the
+				// cave system glows and is dangerous — the lava that pools near
+				// bedrock in Minecraft. Placed after carving (so it fills the
+				// air the caves/ravines just opened) but before ore.
+				if b == .Air && y > 0 && y <= OVERWORLD_LAVA_LEVEL do b = .Lava
 
 				// Ore in connected veins (shows in cave/ravine walls since
 				// it's placed after carving), one shared noise field
