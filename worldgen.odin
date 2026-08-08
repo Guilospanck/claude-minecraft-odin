@@ -33,12 +33,16 @@ wg_smoothstep :: proc(e0, e1, x: f32) -> f32 {
 // turning the narrow bell into a spread that actually reaches every biome band
 // at drive-through scale. Not file-private: tests exercise it directly.
 climate_spread :: proc(x: f32) -> f32 {
-	// Push bell-shaped fbm toward the extremes so snow/desert (the tails) aren't
-	// vanishingly rare, but not so hard that the temperate transition band
-	// collapses — a wider middle means biomes grade into each other over a
-	// longer walk instead of snapping from forest to snow in a block or two.
+	// fbm clusters near 0, so raw temperature/humidity rarely reaches the extremes
+	// that snow and desert need. We still nudge the field outward, but only gently:
+	// the OLD curve multiplied by ~2 and clamped, which flattened everything past
+	// |x|≈0.5 into a plateau of pure desert/snow with a razor-thin transition band —
+	// that is what made biomes "snap" from lush to sand. A mild expansion with no
+	// early clamp keeps the whole field a smooth gradient, so a climate value drifts
+	// slowly across the biome thresholds and neighbours grade into each other over a
+	// long walk rather than flipping at a plateau edge.
 	s: f32 = x < 0 ? -1 : 1
-	return clamp(s * math.pow(min(abs(x) * 1.95, 1.0), 0.82), -1, 1)
+	return clamp(s * math.pow(abs(x), 0.78) * 1.18, -1, 1)
 }
 
 // Temperature + humidity for a column, as one shared function so the terrain
@@ -54,21 +58,20 @@ world_climate :: proc(seed: u64, wx, wz: int) -> (temp: f32, moist: f32) {
 	// that biome borders come out as clean, near-straight bands; the jitter breaks
 	// them into the irregular, interlocking edges a real world has.
 	warp_x :=
-		fbm2(seed + 9001, fx * 0.006, fz * 0.006, 2) * 30.0 +
-		fbm2(seed + 9003, fx * 0.026, fz * 0.026, 2) * 20.0 +
-		fbm2(seed + 9005, fx * 0.075, fz * 0.075, 2) * 7.0
+		fbm2(seed + 9001, fx * 0.005, fz * 0.005, 2) * 44.0 +
+		fbm2(seed + 9003, fx * 0.020, fz * 0.020, 2) * 14.0
 	warp_z :=
-		fbm2(seed + 9002, fx * 0.006, fz * 0.006, 2) * 30.0 +
-		fbm2(seed + 9004, fx * 0.026, fz * 0.026, 2) * 20.0 +
-		fbm2(seed + 9006, fx * 0.075, fz * 0.075, 2) * 7.0
-	// Low frequencies so biome regions are LARGE and coherent, and transitions
-	// are wide enough to pass through the intermediate biomes (a lush forest
-	// grades to desert through a broad savanna/plains belt, not in 40 blocks).
-	// Humidity runs at an even lower frequency than temperature, so big arid and
-	// big humid zones span several temperature bands rather than fragmenting into
-	// small patches.
-	t := fbm2(seed + 101, (fx + warp_x) * 0.0016, (fz + warp_z) * 0.0016, 3)
-	m := fbm2(seed + 202, (fx + warp_x) * 0.0011, (fz + warp_z) * 0.0011, 3)
+		fbm2(seed + 9002, fx * 0.005, fz * 0.005, 2) * 44.0 +
+		fbm2(seed + 9004, fx * 0.020, fz * 0.020, 2) * 14.0
+	// VERY low frequencies so a single biome region spans hundreds of blocks and
+	// the climate drifts only slowly across it — you walk a long way through forest
+	// before it grades through plains and savanna into desert, instead of "lush,
+	// boom sand, boom badlands" in a few dozen blocks. Two octaves only (not three)
+	// keeps the large-scale gradient smooth rather than breaking it into small
+	// sub-regions. Humidity is lower-frequency still, so big arid and big humid
+	// zones each span several temperature bands.
+	t := fbm2(seed + 101, (fx + warp_x) * 0.00085, (fz + warp_z) * 0.00085, 2)
+	m := fbm2(seed + 202, (fx + warp_x) * 0.00060, (fz + warp_z) * 0.00060, 2)
 	return climate_spread(t), climate_spread(m)
 }
 
