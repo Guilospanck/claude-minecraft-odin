@@ -42,6 +42,8 @@ Player :: struct {
 	swing_timer: f32, // counts down from SWING_DURATION; drives the held-item swing
 	sprinting:   bool, // running (Ctrl or double-tap W); faster + widens FOV
 	fov_kick:    f32, // 0..1 eased sprint FOV widen, for a smooth zoom in/out
+	bob_phase:   f32, // advances while walking; drives the camera head-bob
+	bob_amp:     f32, // 0..1 eased bob strength (fades in/out as you start/stop)
 	w_was_down:  bool, // previous-frame W state, for double-tap detection
 	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
@@ -239,6 +241,15 @@ process_input :: proc(p: ^Player, dt: f32) {
 
 	p.vel.x = wish.x * speed
 	p.vel.z = wish.z * speed
+
+	// Head-bob: advance the phase with walking speed while on the ground, and ease
+	// its amplitude in/out so it fades up as you start moving and settles when you
+	// stop — the gentle camera sway Minecraft uses on foot.
+	hs := math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
+	moving_ground := p.on_ground && !p.fly && hs > 0.3
+	if moving_ground do p.bob_phase += dt * (hs * 0.9 + 3.5)
+	bob_target: f32 = moving_ground ? 1 : 0
+	p.bob_amp += (bob_target - p.bob_amp) * min(dt * 8, 1)
 
 	if p.fly {
 		vy := wish.y * f32(FLY_SPEED) // from looking up/down while holding W/S

@@ -412,7 +412,15 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		t := 1.0 - p.eat_timer / EAT_ANIM_DURATION
 		eat_bob = math.sin(clamp(t, 0, 1) * math.PI)
 	}
-	view := view_matrix(eye - Vec3{0, 0.06 * eat_bob, 0}, p.yaw, p.pitch - 0.05 * eat_bob)
+	// Walk head-bob: the head dips on each footfall (abs(sin) → twice per stride)
+	// and sways side to side (sin along the camera-right axis), scaled by the eased
+	// bob amplitude so it fades in and out smoothly.
+	bs := math.sin(p.bob_phase)
+	bob_v := 0.045 * abs(bs) * p.bob_amp // vertical dip
+	bob_l := 0.045 * bs * p.bob_amp // lateral sway
+	right := Vec3{math.cos(p.yaw), 0, math.sin(p.yaw)}
+	eye_b := eye - Vec3{0, 0.06 * eat_bob + bob_v, 0} + right * bob_l
+	view := view_matrix(eye_b, p.yaw, p.pitch - 0.05 * eat_bob + 0.006 * bs * p.bob_amp)
 	proj := proj_matrix(aspect, p.fov_kick * SPRINT_FOV)
 	vp := proj * view
 
