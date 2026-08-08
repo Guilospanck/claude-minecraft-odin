@@ -119,7 +119,7 @@ load_meta :: proc() -> (u64, bool) {
 @(private = "file")
 PLAYER_PATH :: "saves/player.dat"
 @(private = "file")
-PLAYER_SAVE_VERSION :: u8(3)
+PLAYER_SAVE_VERSION :: u8(4)
 
 // Persist the player's own state (position, look, vitals, respawn, the full
 // inventory + food counters, the hotbar layout, and tool/armor tiers +
@@ -145,6 +145,9 @@ save_player :: proc(p: ^Player) {
 	// the fixed-slot inventory: one (id, count) pair per slot, positions kept
 	put_i32(&buf, i32(INV_SLOTS))
 	for s in p.slots {append(&buf, u8(s.id));put_i32(&buf, i32(s.count))}
+
+	// experience: current level + points banked toward the next one
+	put_i32(&buf, i32(p.xp_level));put_i32(&buf, i32(p.xp_points))
 
 	if err := os.write_entire_file(PLAYER_PATH, buf[:]); err != nil {
 		fmt.eprintln("save_player failed:", err)
@@ -200,6 +203,9 @@ load_player :: proc(p: ^Player) -> bool {
 		cnt := int(get_i32(data, off));off += 4
 		if i < INV_SLOTS do p.slots[i] = {id, cnt}
 	}
+	if !need(off, 8, len(data)) do return false
+	p.xp_level = int(get_i32(data, off));off += 4
+	p.xp_points = int(get_i32(data, off));off += 4
 	p.selected_slot = clamp(p.selected_slot, 0, HOTBAR_SLOTS - 1)
 	return true
 }

@@ -1528,6 +1528,8 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	p.tool_tier[.Pickaxe] = 3
 	p.tool_dur[.Pickaxe] = 120
 	p.armor_tier[.Helmet] = 2
+	p.xp_level = 5
+	p.xp_points = 8
 
 	save_player(&p)
 	defer os.remove("saves/player.dat")
@@ -1542,6 +1544,7 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, q.slots[0] == ItemStack{.Stone, 42} && q.slots[10] == ItemStack{.Gold, 3}, "slot stacks restored in place")
 	testing.expect(t, q.tool_tier[.Pickaxe] == 3 && q.tool_dur[.Pickaxe] == 120, "tools restored")
 	testing.expect(t, q.armor_tier[.Helmet] == 2, "armor restored")
+	testing.expect(t, q.xp_level == 5 && q.xp_points == 8, "experience level and points restored")
 	testing.expect(t, math.abs(q.pos.x - 10) < 0.01 && math.abs(q.pos.z - 30) < 0.01, "position restored")
 }
 
