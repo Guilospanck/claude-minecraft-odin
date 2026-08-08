@@ -48,8 +48,19 @@ climate_spread :: proc(x: f32) -> f32 {
 world_climate :: proc(seed: u64, wx, wz: int) -> (temp: f32, moist: f32) {
 	fx := f32(wx)
 	fz := f32(wz)
-	warp_x := fbm2(seed + 9001, fx * 0.006, fz * 0.006, 2) * 16.0
-	warp_z := fbm2(seed + 9002, fx * 0.006, fz * 0.006, 2) * 16.0
+	// Two-scale domain warp: a broad low-frequency meander (big, smooth bends in
+	// the biome borders) plus a stronger high-frequency jitter (block-scale
+	// raggedness). Without the high-frequency term the climate field is so smooth
+	// that biome borders come out as clean, near-straight bands; the jitter breaks
+	// them into the irregular, interlocking edges a real world has.
+	warp_x :=
+		fbm2(seed + 9001, fx * 0.006, fz * 0.006, 2) * 30.0 +
+		fbm2(seed + 9003, fx * 0.026, fz * 0.026, 2) * 20.0 +
+		fbm2(seed + 9005, fx * 0.075, fz * 0.075, 2) * 7.0
+	warp_z :=
+		fbm2(seed + 9002, fx * 0.006, fz * 0.006, 2) * 30.0 +
+		fbm2(seed + 9004, fx * 0.026, fz * 0.026, 2) * 20.0 +
+		fbm2(seed + 9006, fx * 0.075, fz * 0.075, 2) * 7.0
 	// Low frequencies so biome regions are LARGE and coherent, and transitions
 	// are wide enough to pass through the intermediate biomes (a lush forest
 	// grades to desert through a broad savanna/plains belt, not in 40 blocks).
