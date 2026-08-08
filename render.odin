@@ -413,7 +413,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 		eat_bob = math.sin(clamp(t, 0, 1) * math.PI)
 	}
 	view := view_matrix(eye - Vec3{0, 0.06 * eat_bob, 0}, p.yaw, p.pitch - 0.05 * eat_bob)
-	proj := proj_matrix(aspect)
+	proj := proj_matrix(aspect, p.fov_kick * SPRINT_FOV)
 	vp := proj * view
 
 	if !underwater && !nether do sky_render(eye, vp, w.time_of_day)

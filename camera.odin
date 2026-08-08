@@ -14,7 +14,7 @@ view_matrix :: proc(eye: Vec3, yaw, pitch: f32) -> Mat4 {
 	return linalg.matrix4_look_at_f32(eye, eye + f, Vec3{0, 1, 0})
 }
 
-proj_matrix :: proc(aspect: f32) -> Mat4 {
-	fov := g_settings.fov_deg * (3.141592653589793 / 180.0)
+proj_matrix :: proc(aspect: f32, extra_fov_deg: f32 = 0) -> Mat4 {
+	fov := (g_settings.fov_deg + extra_fov_deg) * (3.141592653589793 / 180.0)
 	return linalg.matrix4_perspective_f32(fov, aspect, 0.1, 1000.0)
 }

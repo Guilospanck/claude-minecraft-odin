@@ -40,6 +40,10 @@ Player :: struct {
 	place_cd:    f32, // throttle for held-right-button drag-placing
 	eat_timer:   f32, // counts down from EAT_ANIM_DURATION; drives the eat bob/crumbs
 	swing_timer: f32, // counts down from SWING_DURATION; drives the held-item swing
+	sprinting:   bool, // running (Ctrl or double-tap W); faster + widens FOV
+	fov_kick:    f32, // 0..1 eased sprint FOV widen, for a smooth zoom in/out
+	w_was_down:  bool, // previous-frame W state, for double-tap detection
+	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
 }
 
@@ -213,7 +217,26 @@ process_input :: proc(p: ^Player, dt: f32) {
 		key_down(glfw.KEY_D),
 	)
 
+	// Sprint: start on a double-tap of W or while holding Ctrl+forward; hold it
+	// as long as W stays down and there's stamina, exactly like Minecraft.
+	w_down := key_down(glfw.KEY_W)
+	if p.w_tap_timer > 0 do p.w_tap_timer -= dt
+	if w_down && !p.w_was_down {
+		if p.w_tap_timer > 0 do p.sprinting = true // second tap inside the window
+		p.w_tap_timer = 0.28
+	}
+	if w_down && key_down(glfw.KEY_LEFT_CONTROL) do p.sprinting = true
+	p.w_was_down = w_down
+	if !w_down || p.hunger <= 6 do p.sprinting = false // can't sprint stopped or starving
+
+	sprint_active := p.sprinting && !p.fly && !p.in_water
 	speed := p.fly ? f32(FLY_SPEED) : (p.in_water ? f32(WALK_SPEED) * 0.6 : f32(WALK_SPEED))
+	if sprint_active do speed *= SPRINT_MULT
+
+	// Ease the FOV toward its sprint target so the zoom is smooth, not a snap.
+	target: f32 = sprint_active ? 1 : 0
+	p.fov_kick += (target - p.fov_kick) * min(dt * 10, 1)
+
 	p.vel.x = wish.x * speed
 	p.vel.z = wish.z * speed
 

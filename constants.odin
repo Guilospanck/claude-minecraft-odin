@@ -36,6 +36,8 @@ REACH :: 6.0
 GRAVITY :: 28.0
 JUMP_SPEED :: 8.5
 WALK_SPEED :: 5.5
+SPRINT_MULT :: 1.35 // sprint speed multiplier over WALK_SPEED
+SPRINT_FOV :: 12.0 // extra FOV degrees at full sprint (widening zoom)
 FLY_SPEED :: 18.0
 TERMINAL_VEL :: 60.0
 
