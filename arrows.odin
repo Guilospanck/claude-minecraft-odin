@@ -94,7 +94,8 @@ arrows_update :: proc(w: ^World, p: ^Player, dt: f32) {
 				if hit_mob >= 0 {
 					d := Vec3{a.vel.x, 0, a.vel.z}
 					dl := math.sqrt(d.x * d.x + d.z * d.z) + 1e-4
-					mob_hit(w, hit_mob, Vec3{d.x / dl, 0, d.z / dl}, ARROW_DMG + 2)
+					mob_hit(w, hit_mob, Vec3{d.x / dl, 0, d.z / dl}, ARROW_DMG + 2 + combat_damage_bonus(p))
+					skill_gain(p, .Combat, 2)
 					w.arrows[i] = w.arrows[len(w.arrows) - 1]
 					pop(&w.arrows)
 					removed = true

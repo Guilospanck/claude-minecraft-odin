@@ -24,6 +24,7 @@ InputState :: struct {
 	interact:             bool, // one-shot R press (use/till/plant/harvest/sleep)
 	confirm:              bool, // one-shot Y press (confirm quit)
 	tools_toggle:         bool, // one-shot X press (tools/craft menu)
+	skills_toggle:        bool, // one-shot K press (skills menu)
 	dev_toggle:           bool, // one-shot ` press (dev/creative overlay)
 	tool_cycle:           bool, // one-shot H press (cycle the held tool)
 	nav_up, nav_down:     bool, // arrow keys (menus)
@@ -118,6 +119,8 @@ key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int) 
 		g_input.dev_toggle = true
 	case glfw.KEY_H:
 		g_input.tool_cycle = true
+	case glfw.KEY_K:
+		g_input.skills_toggle = true
 	case glfw.KEY_Q:
 		g_input.place_req = true // keyboard place (trackpads may lack right-click)
 	case glfw.KEY_UP:

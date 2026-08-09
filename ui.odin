@@ -89,6 +89,7 @@ InvTab :: enum {
 	Items,
 	Craft,
 	Tools,
+	Skills,
 }
 INV_TAB_COUNT :: len(InvTab)
 g_inv_tab: InvTab
@@ -114,6 +115,8 @@ inv_tab_name :: proc(t: InvTab) -> string {
 		return "CRAFT"
 	case .Tools:
 		return "TOOLS"
+	case .Skills:
+		return "SKILLS"
 	}
 	return "?"
 }
@@ -123,8 +126,8 @@ inv_tab_name :: proc(t: InvTab) -> string {
 @(private = "file")
 ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 	aspect := f32(fbw) / f32(max(fbh, 1))
-	labels := [INV_TAB_COUNT]string{"ITEMS", "CRAFT", "GEAR"}
-	seg: f32 = 0.30
+	labels := [INV_TAB_COUNT]string{"ITEMS", "CRAFT", "GEAR", "SKILLS"}
+	seg: f32 = 0.29
 	total := seg * f32(INV_TAB_COUNT)
 	x0 := -total * 0.5
 	for i in 0 ..< INV_TAB_COUNT {
@@ -219,6 +222,25 @@ ui_draw_tools_tab :: proc(p: ^Player, aspect, ch_w, ch_h, top: f32) {
 			reqs := [1]ReqLine{{block, count, inv_count(p, block)}}
 			ui_reqs_tooltip(mnx, mny, aspect, fmt.tprintf("%s %s", TIER_NAMES[nt], armor_name(as)), reqs[:])
 		}
+	}
+}
+
+// Skills tab: each skill's level, an XP bar toward the next level, and what its
+// current level does for you — the Stardew-style progression at a glance.
+@(private = "file")
+ui_draw_skills_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
+	step := ch_h * 2.3
+	y := top
+	for s in Skill {
+		lvl := p.skill_level[s]
+		text_draw(fmt.tprintf("%s   LV %d", skill_name(s), lvl), -0.52, y, ch_w, ch_h, MC_TEXT)
+		bx0, bx1 := f32(0.02), f32(0.5)
+		by0, by1 := y - ch_h * 0.9, y - ch_h * 0.1
+		hud_quad(bx0 - 0.005, by0 - 0.005, bx1 + 0.005, by1 + 0.005, Vec4{0.2, 0.2, 0.22, 1})
+		prog := skill_progress(p, s)
+		if prog > 0 do hud_quad(bx0, by0, bx0 + (bx1 - bx0) * prog, by1, Vec4{0.40, 0.86, 0.28, 1})
+		text_draw(skill_perk(s, lvl), -0.52, y - ch_h * 1.5, ch_w * 0.78, ch_h * 0.78, MC_TEXT_DIM)
+		y -= step
 	}
 }
 
@@ -737,7 +759,7 @@ inv_hit_tab :: proc(nx, ny: f32) -> int {
 	y := f32(0.44)
 	ch_h := f32(0.045 * 0.9)
 	if ny < y - ch_h * 1.05 || ny > y + ch_h * 0.55 do return -1
-	seg := f32(0.30)
+	seg := f32(0.29)
 	x0 := -seg * f32(INV_TAB_COUNT) * 0.5
 	for i in 0 ..< INV_TAB_COUNT {
 		cx := x0 + f32(i) * seg + seg * 0.5
@@ -777,7 +799,10 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
 
 	// Title for the current tab, then the tab buttons under it.
-	title := g_inv_tab == .Items ? "INVENTORY" : (g_inv_tab == .Craft ? "CRAFTING" : "EQUIPMENT")
+	title :=
+		g_inv_tab == .Items \
+		? "INVENTORY" \
+		: (g_inv_tab == .Craft ? "CRAFTING" : (g_inv_tab == .Tools ? "EQUIPMENT" : "SKILLS"))
 	text_center(title, 0.54, ch_w * 1.1, ch_h * 1.1, MC_TEXT)
 	ui_draw_tabs(fbw, fbh, ch_w * 0.9, ch_h * 0.9, 0.44)
 
@@ -801,6 +826,8 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.30)
 	case .Tools:
 		ui_draw_tools_tab(p, aspect, ch_w, ch_h, 0.30)
+	case .Skills:
+		ui_draw_skills_tab(p, ch_w, ch_h, 0.30)
 	}
 
 	action_hint: string
@@ -811,6 +838,8 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 		action_hint = "CLICK OR PRESS 1-9 TO CRAFT"
 	case .Tools:
 		action_hint = "PRESS 1-4 TOOLS    5-8 ARMOR"
+	case .Skills:
+		action_hint = "SKILLS LEVEL UP AS YOU MINE, FIGHT, FARM AND FORAGE"
 	}
 	text_center(action_hint, -0.38, ch_w * 0.6, ch_h * 0.6, MC_TEXT)
 	text_center(

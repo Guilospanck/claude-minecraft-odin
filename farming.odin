@@ -59,6 +59,10 @@ harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
 	net_send_edit(x, y, z, .Air, w.dimension)
 	inv_add(p, .Wheat, 1)
 	inv_add(p, .Seeds, 1 + rng_int(2))
+	// Farming skill: harvesting trains it and, at higher levels, sometimes yields
+	// an extra wheat.
+	skill_gain(p, .Farming, 5)
+	if rng_int(100) < p.skill_level[.Farming] * 6 do inv_add(p, .Wheat, 1)
 	audio_play(.Break, 0.6)
 	msg := fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", inv_count(p, .Wheat), inv_count(p, .Seeds))
 	fmt.println(msg)

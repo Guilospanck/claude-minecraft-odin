@@ -49,6 +49,8 @@ Player :: struct {
 	crouch:      f32, // 0..1 eased crouch amount, for a smooth camera dip
 	xp_level:    int, // current experience level (from absorbed XP orbs)
 	xp_points:   int, // experience banked toward the next level (see xp_need)
+	skill_xp:    [Skill]int, // per-skill experience banked toward the next level
+	skill_level: [Skill]int, // per-skill level (drives perks; see skills.odin)
 	w_was_down:  bool, // previous-frame W state, for double-tap detection
 	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
@@ -422,6 +424,14 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 	audio_play(.Break)
 	item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.3, f32(bz) + 0.5})
 	if broken == .Grass && rng_int(4) == 0 do inv_add(p, .Seeds, 1) // seeds hide in grass
+	// Skills: mining rock / chopping wood trains a skill and, at higher levels,
+	// occasionally yields a bonus drop.
+	if sk, xp, ok := mined_block_skill(broken); ok {
+		skill_gain(p, sk, xp)
+		if rng_int(100) < p.skill_level[sk] * 5 {
+			item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.5, f32(bz) + 0.5})
+		}
+	}
 	if kind, applies := mine_tool(broken); applies && p.held_tool == kind do tool_wear(p, kind)
 	falling_check_above(w, bx, by, bz) // gravel/sand resting on the broken block drops
 }
@@ -443,8 +453,9 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 			// spamming clicks is worse than timing full-strength blows, as in MC 1.9+.
 			charge := clamp(1 - p.attack_cd / ATTACK_CD_MAX, 0, 1)
 			base := f32(3 + held_attack_bonus(p))
-			dmg := max(1, int(base * (0.2 + 0.8 * charge * charge) + 0.5))
+			dmg := max(1, int(base * (0.2 + 0.8 * charge * charge) + 0.5)) + combat_damage_bonus(p)
 			mob_hit(w, mob_idx, dir, dmg)
+			skill_gain(p, .Combat, 3) // fighting trains combat
 			p.attack_cd = ATTACK_CD_MAX
 			tool_wear(p, p.held_tool)
 			mine_reset(p)

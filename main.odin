@@ -1104,6 +1104,7 @@ main :: proc() {
 	g_input.confirm = false
 	g_input.portal = false
 	g_input.tools_toggle = false
+	g_input.skills_toggle = false
 			g_input.dev_toggle = false
 	g_input.quit = false // an ESC on the title screen must not open quit-confirm on frame 0
 
@@ -1163,6 +1164,7 @@ main :: proc() {
 			if g_input.inv_toggle do open_tab(.Items)
 			if g_input.craft_toggle do open_tab(.Craft)
 			if g_input.tools_toggle do open_tab(.Tools)
+			if g_input.skills_toggle do open_tab(.Skills)
 				if g_input.dev_toggle {
 					g_show_dev = !g_show_dev
 					if g_show_dev {g_show_inventory = false;g_show_settings = false;g_show_chest = false}
@@ -1176,6 +1178,7 @@ main :: proc() {
 		g_input.settings_toggle = false
 		g_input.craft_toggle = false
 		g_input.tools_toggle = false
+		g_input.skills_toggle = false
 			g_input.dev_toggle = false
 
 		paused := g_show_inventory || g_show_settings || g_show_chest || g_show_quit_confirm || g_show_dev
@@ -1332,6 +1335,8 @@ main :: proc() {
 						} else if sel > TOOL_KIND_COUNT && sel <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
 							armor_craft(&player, ArmorSlot(sel - 1 - TOOL_KIND_COUNT))
 						}
+					case .Skills:
+					// view-only tab
 					}
 				}
 						g_input.select = 0
