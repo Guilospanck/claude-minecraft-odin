@@ -10,6 +10,7 @@ import "core:math"
 EVENT_LIGHTNING_CHANCE :: f32(0.30) // per second, only during a thunderstorm
 EVENT_STAR_CHANCE :: f32(0.12) // per second, only on a clear night
 EVENT_GUST_CHANCE :: f32(0.05) // per second, any time
+EVENT_CAVEIN_CHANCE :: f32(0.15) // per second (only crumbles if unsupported gravel is near)
 
 events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if net_is_client() do return
@@ -24,6 +25,9 @@ events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	}
 	if rng_f32() < dt * EVENT_GUST_CHANCE {
 		wind_gust(w, p)
+	}
+	if rng_f32() < dt * EVENT_CAVEIN_CHANCE {
+		cave_in(w, p) // crumbles nearby unsupported gravel/sand (no-op if none)
 	}
 }
 

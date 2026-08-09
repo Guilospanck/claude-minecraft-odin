@@ -414,6 +414,7 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 	item_spawn(&w.items, broken, Vec3{f32(bx) + 0.5, f32(by) + 0.3, f32(bz) + 0.5})
 	if broken == .Grass && rng_int(4) == 0 do inv_add(p, .Seeds, 1) // seeds hide in grass
 	if kind, applies := mine_tool(broken); applies && p.held_tool == kind do tool_wear(p, kind)
+	falling_check_above(w, bx, by, bz) // gravel/sand resting on the broken block drops
 }
 
 // Mine (hold left) / punch mobs (left click) / place (right click) against the

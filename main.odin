@@ -1430,6 +1430,7 @@ main :: proc() {
 			villagers_update(cur, &player, &cur.villagers, dt)
 			items_update(cur, &player, &cur.items, dt)
 			xp_orbs_update(cur, &player, dt)
+			falling_update(cur, dt)
 			spawners_update(cur, &player, dt)
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)

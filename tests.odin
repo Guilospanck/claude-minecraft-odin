@@ -24,6 +24,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.mobs)
 	delete(w.items)
 	delete(w.xp_orbs)
+	delete(w.falling)
 	delete(w.spawners)
 	delete(w.arrows)
 	delete(w.particles)
@@ -1579,6 +1580,23 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, q.armor_tier[.Helmet] == 2, "armor restored")
 	testing.expect(t, q.xp_level == 5 && q.xp_points == 8, "experience level and points restored")
 	testing.expect(t, math.abs(q.pos.x - 10) < 0.01 && math.abs(q.pos.z - 30) < 0.01, "position restored")
+}
+
+@(test)
+test_gravel_falls_and_settles :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	world_set_block(&w, 4, 40, 4, .Stone) // floor
+	world_set_block(&w, 4, 45, 4, .Gravel) // gravel floating five blocks up
+
+	// removing the block under a gravel column sets it loose
+	falling_check_above(&w, 4, 44, 4)
+	testing.expect(t, len(w.falling) == 1, "the unsupported gravel comes loose")
+	testing.expect(t, world_block(&w, 4, 45, 4) == .Air, "and is lifted out of the world while it falls")
+
+	for _ in 0 ..< 60 do falling_update(&w, 0.05)
+	testing.expect(t, len(w.falling) == 0, "it eventually lands")
+	testing.expect(t, world_block(&w, 4, 41, 4) == .Gravel, "and settles on top of the floor")
 }
 
 @(test)
