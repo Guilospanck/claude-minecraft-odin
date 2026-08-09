@@ -465,6 +465,30 @@ ai_flee :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
 	return true
 }
 
+MOB_REACT_RADIUS :: f32(4.5) // passive mobs notice a player within this range
+MOB_STARTLE_RADIUS :: f32(2.3) // ... and skittish ones bolt if you get this close
+
+// Passive mobs react to a nearby player: skittish kinds startle and bolt when
+// you crowd them, everything else pauses and turns to watch you — the small
+// touch that makes a herd feel alive rather than oblivious. Returns false when
+// the player is too far to notice.
+@(private = "file")
+ai_react_to_player :: proc(p: ^Player, m: ^Mob) -> bool {
+	dx := p.pos.x - m.pos.x
+	dz := p.pos.z - m.pos.z
+	d2 := dx * dx + dz * dz
+	if d2 > MOB_REACT_RADIUS * MOB_REACT_RADIUS do return false
+	if d2 < MOB_STARTLE_RADIUS * MOB_STARTLE_RADIUS && mob_is_prey(m.kind) {
+		m.yaw = math.atan2(-dx, dz) // away from the player
+		m.moving = true
+		m.flee_timer = max(m.flee_timer, 1.3)
+		return true
+	}
+	m.yaw = math.atan2(dx, -dz) // face the player and hold still, watching
+	m.moving = false
+	return true
+}
+
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	if m.hurt_flash > 0 do m.hurt_flash -= dt
 	dims := MOB_DIMS[m.kind]
@@ -564,6 +588,8 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 		m.moving = true // keep running the last panic heading
 	} else if mob_is_predator(m.kind) && ai_predator(w, m, self_idx, dt) {
 		// stalking prey
+	} else if m.love_timer <= 0 && ai_react_to_player(p, m) {
+		// noticing / startled by the nearby player
 	} else if m.love_timer <= 0 || !ai_seek_mate(w, m, self_idx) {
 		ai_wander(m, dt, 0.6)
 	}
@@ -1284,6 +1310,11 @@ mob_hit :: proc(w: ^World, idx: int, dir: Vec3, dmg: int) {
 	m := &w.mobs[idx]
 	m.health -= dmg
 	m.hurt_flash = HURT_FLASH_TIME
+	// A struck passive animal bolts away from the blow instead of standing there.
+	if !mob_is_hostile(m.kind) {
+		m.flee_timer = max(m.flee_timer, 2.2)
+		m.yaw = math.atan2(dir.x, -dir.z) // run the way the hit pushed it (away from you)
+	}
 	m.vel.x += dir.x * 6.0
 	m.vel.z += dir.z * 6.0
 	m.vel.y = 6.0

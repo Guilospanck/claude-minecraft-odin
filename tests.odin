@@ -1582,6 +1582,17 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_struck_animal_bolts :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	append(&w.mobs, Mob{kind = .Cow, pos = Vec3{4, 40, 4}, health = 10})
+	mob_hit(&w, 0, Vec3{1, 0, 0}, 1) // a non-fatal hit from the -x side
+	testing.expect(t, len(w.mobs) == 1, "the cow survives a light hit")
+	testing.expect(t, w.mobs[0].flee_timer > 0, "a struck passive animal starts fleeing")
+	testing.expect(t, w.mobs[0].hurt_flash > 0, "and flashes red")
+}
+
+@(test)
 test_inventory_quick_move_and_swap :: proc(t: ^testing.T) {
 	p: Player
 	p.slots = {}
