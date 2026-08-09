@@ -1189,11 +1189,12 @@ main :: proc() {
 			g_input.have_last = false
 			g_cursor_free = paused
 		}
-		// If the inventory closes with a stack on the cursor, put it back so
-		// nothing is lost.
+		// If the inventory closes with a stack on the cursor, put it back into the
+		// grid; anything that no longer fits is dropped into the world rather than
+		// vanishing.
 		if !g_show_inventory && !g_show_chest && g_cursor_stack.id != .Air {
-			inv_add(&player, g_cursor_stack.id, g_cursor_stack.count)
-			g_cursor_stack = {}
+			inv_return_to_grid(&player, &g_cursor_stack)
+			if g_cursor_stack.id != .Air do inv_drop_stack(cur, &player, &g_cursor_stack)
 		}
 		if paused {
 			ui_click := g_input.break_req // left-click, captured before it's discarded below
@@ -1210,10 +1211,15 @@ main :: proc() {
 				g_prev_left_ui = left_down
 				g_prev_right_ui = right_down
 				if vi := chest_view_hit(aspect, mnx, mny); vi >= 0 && (left_press || right_press) {
+					shift := g_win != nil && (glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS)
 					ch := cur.chests[g_chest_pos]
-					dst := chest_view_stack(&player, &ch, vi)
-					if left_press do stack_click(dst)
-					else do stack_rclick(dst)
+					if left_press && shift {
+						inv_quick_move_chest(&player, &ch, vi) // shift-click transfers the whole stack
+					} else if left_press {
+						stack_click(chest_view_stack(&player, &ch, vi))
+					} else {
+						stack_rclick(chest_view_stack(&player, &ch, vi))
+					}
 					cur.chests[g_chest_pos] = ch
 				}
 			}
@@ -1281,8 +1287,18 @@ main :: proc() {
 					aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
 					mnx, mny := cursor_ndc()
 
+					hov := inv_hit_slot(aspect, mnx, mny)
+					shift :=
+						g_win != nil && (glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS)
+
+					// A hotbar number over a slot swaps that item straight into the
+					// numbered slot (MC number-swap); otherwise it just equips.
 					if g_input.select >= 1 && g_input.select <= HOTBAR_SLOTS {
-						player.selected_slot = g_input.select - 1
+						if hov >= 0 {
+							inv_swap_to_hotbar(&player, hov, g_input.select - 1)
+						} else {
+							player.selected_slot = g_input.select - 1
+						}
 					}
 
 					// Edge-detect both mouse buttons for click handling.
@@ -1293,9 +1309,17 @@ main :: proc() {
 					g_prev_left_ui = left_down
 					g_prev_right_ui = right_down
 
-					if slot := inv_hit_slot(aspect, mnx, mny); slot >= 0 {
-						if left_press do inv_click_slot(&player, slot)
-						if right_press do inv_rclick_slot(&player, slot)
+					if hov >= 0 {
+						if left_press {
+							if shift {
+								inv_quick_move(&player, hov)
+							} else {
+								inv_click_slot(&player, hov)
+							}
+						}
+						if right_press do inv_rclick_slot(&player, hov)
+					} else if left_press && g_cursor_stack.id != .Air {
+						inv_drop_stack(cur, &player, &g_cursor_stack) // toss out of the window
 					}
 				case .Craft:
 					if g_input.scroll != 0 {

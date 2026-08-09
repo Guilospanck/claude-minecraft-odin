@@ -32,6 +32,17 @@ item_spawn :: proc(items: ^[dynamic]Item, block: BlockId, pos: Vec3) {
 	)
 }
 
+// Toss a whole stack out into the world in front of the player as bouncing item
+// entities (the classic "drop items out of your inventory" action). Clears the
+// stack it came from.
+inv_drop_stack :: proc(w: ^World, p: ^Player, s: ^ItemStack) {
+	if s.id == .Air || s.count == 0 do return
+	fwd := camera_front(p.yaw, 0)
+	origin := p.pos + Vec3{0, EYE_HEIGHT * 0.5, 0} + fwd * 0.7
+	for _ in 0 ..< min(s.count, 64) do item_spawn(&w.items, s.id, origin)
+	s^ = {}
+}
+
 item_spawn_food :: proc(items: ^[dynamic]Item, pos: Vec3) {
 	append(
 		items,

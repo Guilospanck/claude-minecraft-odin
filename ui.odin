@@ -581,6 +581,60 @@ stack_rclick :: proc(dst: ^ItemStack) {
 inv_click_slot :: proc(p: ^Player, slot: int) {stack_click(&p.slots[slot])}
 inv_rclick_slot :: proc(p: ^Player, slot: int) {stack_rclick(&p.slots[slot])}
 
+// Move a whole stack from `src` into the [lo,hi) slot range: fill same-type
+// stacks first, then the first empty slot. Shared by shift-click quick-move.
+@(private = "file")
+stack_move_into :: proc(src: ^ItemStack, slots: []ItemStack, lo, hi: int) {
+	if src.id == .Air do return
+	for i in lo ..< hi {
+		if src.count == 0 do break
+		d := &slots[i]
+		if d.id == src.id && d.count < STACK_MAX {
+			m := min(STACK_MAX - d.count, src.count)
+			d.count += m;src.count -= m
+		}
+	}
+	for i in lo ..< hi {
+		if src.count == 0 do break
+		d := &slots[i]
+		if d.id == .Air {d^ = src^;src^ = {};return}
+	}
+	if src.count == 0 do src^ = {}
+}
+
+// Shift-click quick-move: a storage stack jumps to the hotbar, a hotbar stack to
+// storage — the same one-click transfer Minecraft does.
+inv_quick_move :: proc(p: ^Player, slot: int) {
+	to_hotbar := slot >= HOTBAR_SLOTS
+	lo, hi := to_hotbar ? 0 : HOTBAR_SLOTS, to_hotbar ? HOTBAR_SLOTS : INV_SLOTS
+	stack_move_into(&p.slots[slot], p.slots[:], lo, hi)
+}
+
+// Press a hotbar number (1-9) while hovering a slot to swap that item straight
+// into the numbered hotbar slot (Minecraft's number-key swap).
+inv_swap_to_hotbar :: proc(p: ^Player, slot, hotbar: int) {
+	if slot == hotbar do return
+	p.slots[slot], p.slots[hotbar] = p.slots[hotbar], p.slots[slot]
+}
+
+// Put a cursor stack back into the inventory grid (used when a menu closes so a
+// held stack isn't lost). Any overflow is left in `s` for the caller to drop.
+inv_return_to_grid :: proc(p: ^Player, s: ^ItemStack) {
+	stack_move_into(s, p.slots[:], 0, INV_SLOTS)
+}
+
+// Shift-click inside the chest screen: chest slots dump into your inventory and
+// inventory slots dump into the chest.
+inv_quick_move_chest :: proc(p: ^Player, ch: ^Chest, vi: int) {
+	src := chest_view_stack(p, ch, vi)
+	if src.id == .Air do return
+	if vi < CHEST_SLOTS {
+		stack_move_into(src, p.slots[:], 0, INV_SLOTS) // chest -> player (hotbar first)
+	} else {
+		stack_move_into(src, ch.slots[:], 0, CHEST_SLOTS) // player -> chest
+	}
+}
+
 // Which Tools-tab row the NDC point is over, returned as the 1-8 "select"
 // number (1-4 tools, 5-8 armor) or -1. Mirrors ui_draw_tools_tab's layout
 // (ch_h = 0.045, rows pitched 1.9*ch_h from top=0.66).
@@ -662,7 +716,7 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	action_hint: string
 	switch g_inv_tab {
 	case .Items:
-		action_hint = "LEFT-CLICK PICK UP/DROP/SWAP    RIGHT-CLICK SPLIT/DROP ONE    1-9 EQUIP"
+		action_hint = "SHIFT-CLICK MOVE    HOVER + 1-9 SWAP    CLICK OUTSIDE TO DROP    RIGHT-CLICK SPLIT"
 	case .Craft:
 		action_hint = "CLICK OR PRESS 1-9 TO CRAFT"
 	case .Tools:

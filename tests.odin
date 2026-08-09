@@ -1582,6 +1582,42 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_inventory_quick_move_and_swap :: proc(t: ^testing.T) {
+	p: Player
+	p.slots = {}
+	p.slots[10] = {.Stone, 20} // a storage slot (>= HOTBAR_SLOTS)
+
+	// shift-click a storage stack -> lands in the first empty hotbar slot
+	inv_quick_move(&p, 10)
+	testing.expect(
+		t,
+		p.slots[0] == ItemStack{.Stone, 20} && p.slots[10].id == .Air,
+		"storage stack shift-moves onto the hotbar",
+	)
+
+	// number-swap: swap a hovered storage slot straight into a hotbar slot
+	p.slots[15] = {.Wood, 5}
+	inv_swap_to_hotbar(&p, 15, 3)
+	testing.expect(
+		t,
+		p.slots[3] == ItemStack{.Wood, 5} && p.slots[15].id == .Air,
+		"number-swap moves the item into that hotbar slot",
+	)
+
+	// quick-move merges into an existing same-type stack, no item loss
+	p.slots[20] = {.Stone, 40}
+	inv_quick_move(&p, 20) // storage -> hotbar, merges into slot 0's 20 Stone
+	total := 0
+	for s in p.slots do if s.id == .Stone do total += s.count
+	testing.expect(t, total == 60 && p.slots[0].count == 60, "shift-move merges same-type stacks")
+
+	// closing with a cursor stack returns it to the grid
+	g_cursor_stack = {.Dirt, 7}
+	inv_return_to_grid(&p, &g_cursor_stack)
+	testing.expect(t, g_cursor_stack.id == .Air, "a held stack goes back into the grid on close")
+}
+
+@(test)
 test_inventory_slot_clicks :: proc(t: ^testing.T) {
 	p: Player
 	p.slots = {}
