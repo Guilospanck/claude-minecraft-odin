@@ -12,6 +12,7 @@ EVENT_STAR_CHANCE :: f32(0.12) // per second, only on a clear night
 EVENT_GUST_CHANCE :: f32(0.05) // per second, any time
 EVENT_CAVEIN_CHANCE :: f32(0.15) // per second (only crumbles if unsupported gravel is near)
 EVENT_METEOR_CHANCE :: f32(0.02) // per second — a rare, dramatic falling star that impacts
+EVENT_STAMPEDE_CHANCE :: f32(0.02) // per second — a herd migrates through
 
 events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if net_is_client() do return
@@ -34,6 +35,41 @@ events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 		meteor_spawn(w, p)
 	}
 	meteor_update(w, p, dt)
+	if rng_f32() < dt * EVENT_STAMPEDE_CHANCE {
+		stampede(w, p)
+	}
+}
+
+// A herd of one kind gallops through: several animals spawn off to one side and
+// stampede across the area past the player, like a migration rolling through.
+@(private = "file")
+stampede :: proc(w: ^World, p: ^Player) {
+	kinds := [?]MobKind{.Cow, .Sheep, .Pig, .Deer, .Goat}
+	kind := kinds[rng_int(len(kinds))]
+	ang := rng_range(0, 6.2831853)
+	hx, hz := math.cos(ang), math.sin(ang) // heading
+	perpx, perpz := -hz, hx
+	bx := p.pos.x - hx * 28
+	bz := p.pos.z - hz * 28
+	n := 5 + rng_int(5)
+	for _ in 0 ..< n {
+		lat := rng_range(-8, 8)
+		fx := bx + perpx * lat + hx * rng_range(-4, 4)
+		fz := bz + perpz * lat + hz * rng_range(-4, 4)
+		gy := top_solid_y(w, int(fx), int(fz))
+		if gy <= SEA_LEVEL do continue // don't drop the herd into the sea
+		append(
+			&w.mobs,
+			Mob {
+				kind = kind,
+				pos = Vec3{fx, f32(gy + 1), fz},
+				health = 8,
+				yaw = math.atan2(hx, -hz), // face the heading (fwd = sin yaw, -cos yaw)
+				moving = true,
+				flee_timer = rng_range(6, 10), // gallop for a good while
+			},
+		)
+	}
 }
 
 Meteor :: struct {
