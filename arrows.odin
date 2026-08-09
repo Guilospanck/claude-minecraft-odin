@@ -74,6 +74,33 @@ arrows_update :: proc(w: ^World, p: ^Player, dt: f32) {
 				removed = true
 				break
 			}
+			// A player's arrow strikes a mob it flies into.
+			if a.from_player {
+				hit_mob := -1
+				for mi in 0 ..< len(w.mobs) {
+					m := w.mobs[mi]
+					if m.health <= 0 do continue
+					dims := MOB_DIMS[m.kind]
+					if a.pos.x > m.pos.x - dims.hw &&
+					   a.pos.x < m.pos.x + dims.hw &&
+					   a.pos.y > m.pos.y &&
+					   a.pos.y < m.pos.y + dims.h &&
+					   a.pos.z > m.pos.z - dims.hw &&
+					   a.pos.z < m.pos.z + dims.hw {
+						hit_mob = mi
+						break
+					}
+				}
+				if hit_mob >= 0 {
+					d := Vec3{a.vel.x, 0, a.vel.z}
+					dl := math.sqrt(d.x * d.x + d.z * d.z) + 1e-4
+					mob_hit(w, hit_mob, Vec3{d.x / dl, 0, d.z / dl}, ARROW_DMG + 2)
+					w.arrows[i] = w.arrows[len(w.arrows) - 1]
+					pop(&w.arrows)
+					removed = true
+					break
+				}
+			}
 		}
 		if removed do continue
 

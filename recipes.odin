@@ -33,6 +33,8 @@ RECIPES := [?]Recipe {
 	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .Ladder, out_count = 4},
 	{inputs = {{.Cobblestone, 6}, {}, {}}, n_in = 1, out = .Wall, out_count = 6},
 	{inputs = {{.Wood, 4}, {}, {}}, n_in = 1, out = .FenceGate, out_count = 2},
+	{inputs = {{.Wood, 3}, {.Feather, 3}, {}}, n_in = 2, out = .Bow, out_count = 1},
+	{inputs = {{.Feather, 1}, {.Stone, 1}, {}}, n_in = 2, out = .Arrow, out_count = 2},
 	// Dyed wool: wheat fleece coloured by a flower. Carpet: two wool -> three.
 	{inputs = {{.Wheat, 4}, {.FlowerWhite, 1}, {}}, n_in = 2, out = .WoolWhite, out_count = 4},
 	{inputs = {{.Wheat, 4}, {.FlowerRed, 1}, {}}, n_in = 2, out = .WoolRed, out_count = 4},

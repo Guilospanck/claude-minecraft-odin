@@ -95,3 +95,4 @@ CORAL_PINK       :: Tile{6, 5}
 CORAL_BLUE       :: Tile{7, 5}
 CORAL_PURPLE     :: Tile{8, 5}
 SPAWNER          :: Tile{9, 5}
+BOW              :: Tile{10, 5} // item icon

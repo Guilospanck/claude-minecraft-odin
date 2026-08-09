@@ -507,6 +507,18 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				bar := (px % 4 == 0) || (py % 4 == 0)
 				c = bar ? shade(Color{74, 78, 86, 255}, jitter(gx, gy, 8)) : Color{18, 18, 22, 255}
 				if (px - 8) * (px - 8) + (py - 8) * (py - 8) < 6 do c = Color{120, 70, 40, 255} // ember
+			case "bow":
+				// a curved wooden bow with a diagonal string
+				c = Color{0, 0, 0, 0}
+				dxc := int(px) - 4
+				dyc := int(py) - 8
+				arc := abs(dxc * dxc + dyc * dyc - 30) <= 7 && px <= 8 // left-bulging limb
+				str := abs((int(px) - 3) - (11 - int(py))) <= 0 && py >= 2 && py <= 13 // string
+				if arc {
+					c = shade(Color{130, 92, 46, 255}, jitter(gx, gy, 8));c.a = 255
+				} else if str {
+					c = Color{224, 224, 214, 255}
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -641,6 +653,7 @@ main :: proc() {
 	paint(ad.CORAL_BLUE, Color{82, 140, 234, 255}, "coral")
 	paint(ad.CORAL_PURPLE, Color{168, 92, 220, 255}, "coral")
 	paint(ad.SPAWNER, Color{40, 42, 48, 255}, "spawner")
+	paint(ad.BOW, Color{0, 0, 0, 0}, "bow")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

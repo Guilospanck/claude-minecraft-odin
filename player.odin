@@ -496,6 +496,23 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 	right_held :=
 		g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
 	want_place := g_input.place_req || (right_held && p.place_cd <= 0)
+
+	// Firing a bow: with a Bow selected, a place-request looses an Arrow downrange
+	// (no target block needed). Costs one Arrow item.
+	if want_place && inv_selected(p) == .Bow {
+		if inv_has(p, .Arrow, 1) {
+			inv_take(p, .Arrow, 1)
+			from := p.pos + Vec3{0, EYE_HEIGHT, 0} + dir * 0.6
+			append(&w.arrows, Arrow{pos = from, vel = dir * 30.0, from_player = true})
+			p.swing_timer = SWING_DURATION
+			audio_play(.Jump, 0.4)
+		} else {
+			toast_show("OUT OF ARROWS - CRAFT SOME (FEATHER + STONE)")
+		}
+		p.place_cd = 0.45
+		want_place = false // consumed the click; don't also try to place
+	}
+
 	if want_place && hit.hit && !p.tool_mode { 	// no block-placing while a tool is drawn
 		tx := hit.bx + hit.nx
 		ty := hit.by + hit.ny

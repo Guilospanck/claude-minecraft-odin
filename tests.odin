@@ -1584,6 +1584,23 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_player_arrow_hits_mob :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	append(&w.mobs, Mob{kind = .Zombie, pos = Vec3{8, 40, 10}, health = 12})
+	// a player arrow flying straight at the mob along +z
+	append(&w.arrows, Arrow{pos = Vec3{8, 41, 8}, vel = Vec3{0, 0, 20}, from_player = true})
+	p: Player
+	dead_or_hurt := false
+	for _ in 0 ..< 25 {
+		arrows_update(&w, &p, 0.02)
+		if len(w.mobs) == 0 || (len(w.mobs) == 1 && w.mobs[0].health < 12) do dead_or_hurt = true
+	}
+	testing.expect(t, dead_or_hurt, "a player's arrow damages the mob it flies into")
+	testing.expect(t, len(w.arrows) == 0, "and is consumed on the hit")
+}
+
+@(test)
 test_trader_swaps_goods :: proc(t: ^testing.T) {
 	p: Player
 	p.slots = {}
