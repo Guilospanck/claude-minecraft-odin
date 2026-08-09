@@ -41,6 +41,8 @@ Villager :: struct {
 	drown_accum: f32, // fractional drowning damage once air runs out
 	guard_cd:   f32, // cooldown between strikes when driving off a predator
 	hurt_flash: f32, // >0 briefly after taking a hit; drives the red damage blink
+	is_trader:  bool, // a rare wandering trader: distinct look, R to trade with it
+	trade_idx:  int, // which offer it presents next
 }
 
 VILLAGER_HW :: f32(0.3)
@@ -287,6 +289,7 @@ nomad_try_spawn :: proc(w: ^World, villagers: ^[dynamic]Villager, player_pos: Ve
 
 villagers_update :: proc(w: ^World, p: ^Player, villagers: ^[dynamic]Villager, dt: f32) {
 	if w.dimension == .Overworld && rng_f32() < 0.0005 do nomad_try_spawn(w, villagers, p.pos)
+	if w.dimension == .Overworld && rng_f32() < 0.00012 do trader_try_spawn(w, villagers, p.pos)
 
 	i := 0
 	for i < len(villagers^) {

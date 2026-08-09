@@ -81,7 +81,12 @@ try_interact :: proc(w: ^World, p: ^Player) {
 
 	v_idx, _ := villager_pick(&w.villagers, eye, dir, REACH)
 	if v_idx >= 0 {
-		try_talk_to_villager(&w.villagers[v_idx])
+		v := &w.villagers[v_idx]
+		if v.is_trader {
+			trader_interact(p, v)
+		} else {
+			try_talk_to_villager(v)
+		}
 		return
 	}
 

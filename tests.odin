@@ -1584,6 +1584,26 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_trader_swaps_goods :: proc(t: ^testing.T) {
+	p: Player
+	p.slots = {}
+	v: Villager
+	v.is_trader = true
+	v.trade_idx = 0 // first offer: 8 Wheat -> 1 Iron
+
+	inv_add(&p, .Wheat, 8)
+	trader_interact(&p, &v)
+	testing.expect(t, inv_count(&p, .Wheat) == 0, "the trade takes the payment")
+	testing.expect(t, inv_has(&p, .Iron, 1), "and hands over the goods")
+	testing.expect(t, v.trade_idx == 1, "the offer advances after a successful trade")
+
+	// nothing affordable now -> inventory unchanged, no crash
+	before := inv_count(&p, .Iron)
+	trader_interact(&p, &v)
+	testing.expect(t, inv_count(&p, .Iron) == before, "an unaffordable trade changes nothing")
+}
+
+@(test)
 test_pick_block :: proc(t: ^testing.T) {
 	p: Player
 	p.slots = {}

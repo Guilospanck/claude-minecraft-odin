@@ -434,6 +434,7 @@ mix3 :: proc(a, b: Vec3, t: f32) -> Vec3 {
 
 @(private = "file")
 villager_robe_color :: proc(v: ^Villager) -> Vec3 {
+	if v.is_trader do return Vec3{0.20, 0.55, 0.72} // a distinctive teal travelling coat
 	h := hash_string(v.name)
 	col: Vec3
 	if v.profession == .None {
