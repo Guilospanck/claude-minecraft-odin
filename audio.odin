@@ -17,6 +17,7 @@ Sound :: enum {
 	Eat,
 	Pickup,
 	Splash,
+	Thunder,
 }
 
 // Looping background music, chosen by context (see audio_set_music).
@@ -79,6 +80,21 @@ make_break :: proc() -> []f32 {
 	for i in 0 ..< n {
 		t := f32(i) / AUDIO_SR
 		buf[i] = noise() * math.exp(-t * 22) * 0.6
+	}
+	return buf
+}
+
+// A long low thunder rumble: filtered noise swelling then rolling away.
+make_thunder :: proc() -> []f32 {
+	n := secs(1.6)
+	buf := make([]f32, n)
+	lp: f32 = 0 // one-pole low-pass state, for a deep rumble
+	for i in 0 ..< n {
+		t := f32(i) / AUDIO_SR
+		swell := math.min(t * 6, 1.0) // quick crack in, then...
+		env := swell * math.exp(-t * 1.8) // ...a long decaying roll
+		lp += (noise() - lp) * 0.06
+		buf[i] = lp * env * 1.6
 	}
 	return buf
 }
@@ -351,6 +367,7 @@ audio_init :: proc() {
 	g_audio.bank[.Eat] = make_eat()
 	g_audio.bank[.Pickup] = make_pickup()
 	g_audio.bank[.Splash] = make_splash()
+	g_audio.bank[.Thunder] = make_thunder()
 
 	g_audio.music[.Calm] = make_music_calm()
 	g_audio.music[.Combat] = make_music_combat()

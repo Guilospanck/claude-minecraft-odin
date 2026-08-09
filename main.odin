@@ -1433,6 +1433,7 @@ main :: proc() {
 			spawners_update(cur, &player, dt)
 			arrows_update(cur, &player, dt)
 			weather_tick(cur, dt)
+			events_update(cur, &player, dt) // random "chaos": strikes, stars, gusts
 			// Precipitation type follows the biome the player is in: rain in
 			// temperate country, snow in the cold biomes, nothing in deserts.
 			precip := Precip.None
