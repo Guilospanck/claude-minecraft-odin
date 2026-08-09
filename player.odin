@@ -287,6 +287,19 @@ process_input :: proc(p: ^Player, dt: f32) {
 	}
 }
 
+// Hunger restored by eating one of a food item (0 = not edible).
+food_value :: proc(b: BlockId) -> int {
+	#partial switch b {
+	case .CookedFood:
+		return 8
+	case .Bread:
+		return 6
+	case .RawFood:
+		return 3
+	}
+	return 0
+}
+
 // Per-frame player upkeep: timers, health regen, footstep sounds.
 player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 	if p.hurt_timer > 0 do p.hurt_timer -= dt
@@ -316,33 +329,29 @@ player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
 		p.starve = 0
 	}
 
-	// eat: prefer cooked meat (+8), then bread (+6), then raw meat (+3)
+	// eat (G): eat the held item if it's food, otherwise fall back to the best
+	// food in the inventory (cooked +8, bread +6, raw +3).
 	if g_input.eat {
 		if p.hunger < f32(HUNGER_MAX) {
-			ate := true
-			food_col := Vec3{0.72, 0.28, 0.22}
-			if inv_has(p, .CookedFood, 1) {
-				inv_take(p, .CookedFood, 1)
-				p.hunger = min(p.hunger + 8, f32(HUNGER_MAX))
-				food_col = Vec3{0.55, 0.35, 0.2}
-				toast_show(fmt.tprintf("ATE COOKED FOOD (HUNGER %d)", int(p.hunger)))
+			held := inv_selected(p)
+			eaten := BlockId.Air
+			if food_value(held) > 0 && inv_has(p, held, 1) {
+				eaten = held // eat what you're holding
+			} else if inv_has(p, .CookedFood, 1) {
+				eaten = .CookedFood
 			} else if inv_has(p, .Bread, 1) {
-				inv_take(p, .Bread, 1)
-				p.hunger = min(p.hunger + 6, f32(HUNGER_MAX))
-				food_col = Vec3{0.78, 0.58, 0.30}
-				toast_show(fmt.tprintf("ATE BREAD (HUNGER %d)", int(p.hunger)))
+				eaten = .Bread
 			} else if inv_has(p, .RawFood, 1) {
-				inv_take(p, .RawFood, 1)
-				p.hunger = min(p.hunger + 3, f32(HUNGER_MAX))
-				toast_show(fmt.tprintf("ATE RAW FOOD - COOK IT FOR MORE (HUNGER %d)", int(p.hunger)))
-			} else {
-				ate = false
+				eaten = .RawFood
 			}
-			if ate {
+			if eaten != .Air {
+				inv_take(p, eaten, 1)
+				p.hunger = min(p.hunger + f32(food_value(eaten)), f32(HUNGER_MAX))
+				toast_show(fmt.tprintf("ATE %s (HUNGER %d)", block_name(eaten), int(p.hunger)))
 				audio_play(.Eat, 0.6)
 				p.eat_timer = EAT_ANIM_DURATION
 				mouth := p.pos + Vec3{0, EYE_HEIGHT * 0.85, 0} + camera_front(p.yaw, 0) * 0.4
-				particle_spawn_eat(&w.particles, mouth, food_col)
+				particle_spawn_eat(&w.particles, mouth, block_color(eaten))
 			}
 		}
 		g_input.eat = false

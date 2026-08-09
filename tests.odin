@@ -1584,6 +1584,33 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_pick_block :: proc(t: ^testing.T) {
+	p: Player
+	p.slots = {}
+	p.selected_slot = 0
+	p.slots[0] = {.Dirt, 5}
+
+	// picking a block already in the hotbar just selects its slot
+	p.slots[4] = {.Wood, 2}
+	pick_block(&p, .Wood)
+	testing.expect(t, p.selected_slot == 4, "pick selects an existing hotbar slot")
+
+	// picking a block from storage swaps it up into the selected slot
+	p.selected_slot = 0
+	p.slots[12] = {.Stone, 3}
+	pick_block(&p, .Stone)
+	testing.expect(
+		t,
+		p.slots[0] == ItemStack{.Stone, 3} && p.slots[12] == ItemStack{.Dirt, 5},
+		"pick pulls a storage block into the held slot",
+	)
+
+	// picking a block you don't have hands you one
+	pick_block(&p, .Glass)
+	testing.expect(t, inv_has(&p, .Glass, 1), "pick hands you a block you don't own")
+}
+
+@(test)
 test_gravel_falls_and_settles :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)

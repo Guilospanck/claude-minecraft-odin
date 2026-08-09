@@ -1364,6 +1364,20 @@ main :: proc() {
 			player_tick(cur, &player, dt)
 			handle_break_place(cur, &player, dt)
 
+			// Middle-click picks the block you're looking at into your hand.
+			mid_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_MIDDLE) == glfw.PRESS
+			if mid_down && !g_prev_mid {
+				eye := player.pos + Vec3{0, EYE_HEIGHT, 0}
+				hit := raycast(cur, eye, camera_front(player.yaw, player.pitch), REACH)
+				if hit.hit {
+					b := world_block(cur, hit.bx, hit.by, hit.bz)
+					if b != .Air && b != .Water && b != .Lava && b != .Bedrock && !block_is_item(b) {
+						pick_block(&player, b)
+					}
+				}
+			}
+			g_prev_mid = mid_down
+
 			// R: use/interact (till, plant, harvest, sleep)
 			if g_input.interact {
 				try_interact(cur, &player)

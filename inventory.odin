@@ -7,6 +7,21 @@ package main
 
 STACK_MAX :: 99
 HOTBAR_SLOTS :: 9
+
+// Pick-block (middle-click): make block `b` the held item. If it's already in the
+// hotbar just select it; if it's in storage swap it up; otherwise hand you one
+// (into the selected slot, or the first free hotbar slot).
+pick_block :: proc(p: ^Player, b: BlockId) {
+	p.tool_mode = false
+	for i in 0 ..< HOTBAR_SLOTS do if p.slots[i].id == b {p.selected_slot = i;return}
+	for i in HOTBAR_SLOTS ..< INV_SLOTS do if p.slots[i].id == b {
+		p.slots[p.selected_slot], p.slots[i] = p.slots[i], p.slots[p.selected_slot]
+		return
+	}
+	if p.slots[p.selected_slot].id == .Air {p.slots[p.selected_slot] = {b, 1};return}
+	for i in 0 ..< HOTBAR_SLOTS do if p.slots[i].id == .Air {p.slots[i] = {b, 1};p.selected_slot = i;return}
+	p.slots[p.selected_slot] = {b, 1} // hotbar full: replace the held slot
+}
 STORAGE_ROWS :: 3
 INV_SLOTS :: HOTBAR_SLOTS + STORAGE_ROWS * 9 // 36
 

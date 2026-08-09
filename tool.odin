@@ -140,9 +140,14 @@ tool_wear :: proc(p: ^Player, k: ToolKind) {
 	if p.tool_tier[k] <= 0 do return
 	p.tool_dur[k] -= 1
 	if p.tool_dur[k] <= 0 {
-		toast_show(fmt.tprintf("YOUR %s %s BROKE", TIER_NAMES[p.tool_tier[k]], tool_name(k)))
+		// break: a snap sound, crumbling toast, tool gone
+		toast_show(fmt.tprintf("YOUR %s %s BROKE!", TIER_NAMES[p.tool_tier[k]], tool_name(k)))
+		audio_play(.Break, 0.9)
 		p.tool_tier[k] = 0
 		p.tool_dur[k] = 0
+	} else if p.tool_dur[k] == 8 {
+		// low-durability warning, once, as it gets close to breaking
+		toast_show(fmt.tprintf("%s ALMOST BROKEN (%d LEFT)", tool_name(k), p.tool_dur[k]))
 	}
 }
 
