@@ -16,6 +16,7 @@ Sound :: enum {
 	Hurt,
 	Eat,
 	Pickup,
+	Splash,
 }
 
 // Looping background music, chosen by context (see audio_set_music).
@@ -78,6 +79,19 @@ make_break :: proc() -> []f32 {
 	for i in 0 ..< n {
 		t := f32(i) / AUDIO_SR
 		buf[i] = noise() * math.exp(-t * 22) * 0.6
+	}
+	return buf
+}
+
+// A watery plunge: a falling "bloop" tone under a burst of noisy spray.
+make_splash :: proc() -> []f32 {
+	n := secs(0.35)
+	buf := make([]f32, n)
+	for i in 0 ..< n {
+		t := f32(i) / AUDIO_SR
+		env := math.exp(-t * 8)
+		bloop := math.sin(2 * math.PI * (240 - 150 * t) * t) * 0.4
+		buf[i] = (noise() * 0.5 + bloop) * env * 0.6
 	}
 	return buf
 }
@@ -336,6 +350,7 @@ audio_init :: proc() {
 	g_audio.bank[.Hurt] = make_hurt()
 	g_audio.bank[.Eat] = make_eat()
 	g_audio.bank[.Pickup] = make_pickup()
+	g_audio.bank[.Splash] = make_splash()
 
 	g_audio.music[.Calm] = make_music_calm()
 	g_audio.music[.Combat] = make_music_combat()

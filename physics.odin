@@ -198,7 +198,13 @@ physics_update :: proc(w: ^World, p: ^Player, dt: f32) {
 		return
 	}
 
+	prev_water := p.in_water
 	p.in_water = player_in_water(w, p.pos)
+	// Plunging in from the air throws up a splash — a bit of reactive feedback.
+	if p.in_water && !prev_water && p.vel.y < -2.5 {
+		particle_spawn_splash(&w.particles, Vec3{p.pos.x, p.pos.y + 0.3, p.pos.z})
+		audio_play(.Splash, 0.7)
+	}
 
 	if p.in_water {
 		// buoyant, reduced-gravity water; swim velocity is set in process_input

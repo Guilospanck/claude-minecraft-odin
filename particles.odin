@@ -29,6 +29,22 @@ particle_spawn_break :: proc(ps: ^[dynamic]Particle, block: BlockId, bx, by, bz:
 }
 
 // A small burst of crumbs at the player's mouth when eating.
+// A ring of water droplets thrown up when something plunges into water.
+particle_spawn_splash :: proc(ps: ^[dynamic]Particle, pos: Vec3) {
+	for _ in 0 ..< 16 {
+		append(
+			ps,
+			Particle {
+				pos = pos + Vec3{rng_range(-0.3, 0.3), 0, rng_range(-0.3, 0.3)},
+				vel = Vec3{rng_range(-1.8, 1.8), rng_range(2.0, 4.8), rng_range(-1.8, 1.8)},
+				max_life = rng_range(0.3, 0.6),
+				color = Vec3{0.62, 0.76, 0.95},
+				size = rng_range(0.03, 0.07),
+			},
+		)
+	}
+}
+
 particle_spawn_eat :: proc(ps: ^[dynamic]Particle, pos: Vec3, color: Vec3) {
 	for _ in 0 ..< 6 {
 		t := rng_range(0.8, 1.1)
