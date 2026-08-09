@@ -16,6 +16,7 @@ World :: struct {
 	items:       [dynamic]Item,
 	xp_orbs:     [dynamic]XpOrb, // floating experience orbs dropped by kills
 	falling:     [dynamic]FallingBlock, // gravel/sand mid-fall
+	meteors:     [dynamic]Meteor, // burning rocks streaking down from the sky
 	spawners:    map[Ivec3]f32, // dungeon mob-spawner positions → spawn cooldown
 	arrows:      [dynamic]Arrow,
 	particles:   [dynamic]Particle,
@@ -53,6 +54,7 @@ world_init :: proc(w: ^World, seed: u64, dim: Dimension = .Overworld) {
 	w.items = make([dynamic]Item, 0, 64)
 	w.xp_orbs = make([dynamic]XpOrb, 0, 32)
 	w.falling = make([dynamic]FallingBlock, 0, 16)
+	w.meteors = make([dynamic]Meteor, 0, 4)
 	w.spawners = make(map[Ivec3]f32)
 	w.arrows = make([dynamic]Arrow, 0, 32)
 	w.particles = make([dynamic]Particle, 0, 128)

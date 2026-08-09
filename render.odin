@@ -475,6 +475,7 @@ render_frame :: proc(w: ^World, p: ^Player, fbw, fbh: i32) {
 	villagers_render_frame(&w.villagers, vp, ambient)
 	items_render_frame(&w.items, vp, ambient)
 	falling_render_frame(&w.falling, vp, ambient)
+	meteors_render_frame(&w.meteors, vp)
 	xp_orbs_render_frame(&w.xp_orbs, vp, ambient)
 	arrows_render_frame(&w.arrows, vp, ambient)
 	particles_render_frame(&w.particles, vp, ambient)

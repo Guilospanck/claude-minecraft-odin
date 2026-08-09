@@ -25,6 +25,7 @@ free_test_world :: proc(w: ^World) {
 	delete(w.items)
 	delete(w.xp_orbs)
 	delete(w.falling)
+	delete(w.meteors)
 	delete(w.spawners)
 	delete(w.arrows)
 	delete(w.particles)

@@ -11,6 +11,7 @@ EVENT_LIGHTNING_CHANCE :: f32(0.30) // per second, only during a thunderstorm
 EVENT_STAR_CHANCE :: f32(0.12) // per second, only on a clear night
 EVENT_GUST_CHANCE :: f32(0.05) // per second, any time
 EVENT_CAVEIN_CHANCE :: f32(0.15) // per second (only crumbles if unsupported gravel is near)
+EVENT_METEOR_CHANCE :: f32(0.02) // per second — a rare, dramatic falling star that impacts
 
 events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	if net_is_client() do return
@@ -28,6 +29,98 @@ events_update :: proc(w: ^World, p: ^Player, dt: f32) {
 	}
 	if rng_f32() < dt * EVENT_CAVEIN_CHANCE {
 		cave_in(w, p) // crumbles nearby unsupported gravel/sand (no-op if none)
+	}
+	if rng_f32() < dt * EVENT_METEOR_CHANCE {
+		meteor_spawn(w, p)
+	}
+	meteor_update(w, p, dt)
+}
+
+Meteor :: struct {
+	pos, vel: Vec3,
+}
+
+// A burning rock plunges out of the sky toward a spot near the player.
+@(private = "file")
+meteor_spawn :: proc(w: ^World, p: ^Player) {
+	tx := p.pos.x + rng_range(-24, 24)
+	tz := p.pos.z + rng_range(-24, 24)
+	gy := f32(top_solid_y(w, int(tx), int(tz)))
+	start := Vec3{tx + rng_range(-34, 34), p.pos.y + rng_range(70, 100), tz + rng_range(-34, 34)}
+	target := Vec3{tx, gy, tz}
+	d := target - start
+	L := math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + 1e-4
+	append(&w.meteors, Meteor{pos = start, vel = (d / L) * rng_range(40, 60)})
+}
+
+@(private = "file")
+meteor_update :: proc(w: ^World, p: ^Player, dt: f32) {
+	i := 0
+	for i < len(w.meteors) {
+		m := &w.meteors[i]
+		m.pos += m.vel * dt
+		// fiery trail
+		for _ in 0 ..< 3 {
+			append(
+				&w.particles,
+				Particle {
+					pos = m.pos + Vec3{rng_range(-0.3, 0.3), rng_range(-0.3, 0.3), rng_range(-0.3, 0.3)},
+					vel = Vec3{rng_range(-0.6, 0.6), rng_range(-0.6, 0.6), rng_range(-0.6, 0.6)},
+					max_life = rng_range(0.35, 0.7),
+					color = Vec3{1.0, rng_range(0.4, 0.7), 0.12},
+					size = rng_range(0.12, 0.28),
+					float = true,
+				},
+			)
+		}
+		ix, iy, iz := int(math.floor(m.pos.x)), int(math.floor(m.pos.y)), int(math.floor(m.pos.z))
+		if iy < 1 || block_is_solid(world_block(w, ix, iy, iz)) {
+			meteor_impact(w, p, ix, max(iy, 1), iz)
+			w.meteors[i] = w.meteors[len(w.meteors) - 1]
+			pop(&w.meteors)
+			continue
+		}
+		i += 1
+	}
+}
+
+// Impact: blow out a small crater, throw up an ember-and-debris burst, flash and
+// boom, and send nearby animals bolting.
+@(private = "file")
+meteor_impact :: proc(w: ^World, p: ^Player, cx, cy, cz: int) {
+	R := 2
+	for dx in -R ..= R do for dy in -R ..= R do for dz in -R ..= R {
+		if dx * dx + dy * dy + dz * dz > R * R + 1 do continue
+		x, y, z := cx + dx, cy + dy, cz + dz
+		b := world_block(w, x, y, z)
+		if b != .Air && b != .Bedrock && block_is_solid(b) {
+			world_set_block(w, x, y, z, .Air)
+			net_send_edit(x, y, z, .Air, w.dimension)
+		}
+	}
+	// gravel/sand around the rim can crumble into the new pit
+	for dx in -R ..= R do for dz in -R ..= R do falling_check_above(w, cx + dx, cy, cz + dz)
+
+	for _ in 0 ..< 44 {
+		append(
+			&w.particles,
+			Particle {
+				pos = Vec3{f32(cx) + 0.5, f32(cy) + 0.5, f32(cz) + 0.5},
+				vel = Vec3{rng_range(-4, 4), rng_range(1, 7), rng_range(-4, 4)},
+				max_life = rng_range(0.5, 1.1),
+				color = rng_f32() < 0.5 ? Vec3{1.0, 0.5, 0.12} : Vec3{0.3, 0.3, 0.32},
+				size = rng_range(0.06, 0.16),
+			},
+		)
+	}
+	w.flash = 0.6
+	audio_play(.Thunder, 1.0)
+	for &m in w.mobs {
+		dx := m.pos.x - f32(cx);dz := m.pos.z - f32(cz)
+		if dx * dx + dz * dz < 24 * 24 && !mob_is_hostile(m.kind) {
+			m.flee_timer = max(m.flee_timer, 2.5)
+			m.moving = true
+		}
 	}
 }
 

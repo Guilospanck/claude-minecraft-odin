@@ -1164,6 +1164,23 @@ xp_orbs_render_frame :: proc(orbs: ^[dynamic]XpOrb, vp: Mat4, ambient: f32) {
 	gl.BindVertexArray(0)
 }
 
+// Meteor heads: glowing molten rocks, drawn full-bright so they read as on fire.
+meteors_render_frame :: proc(meteors: ^[dynamic]Meteor, vp: Mat4) {
+	if len(meteors^) == 0 do return
+	gl.UseProgram(e_prog)
+	gl.Uniform1f(e_flash, 0)
+	gl.Uniform1f(e_ambient, 1.0) // full bright: it's glowing
+	gl.BindVertexArray(e_vao)
+	for i in 0 ..< len(meteors^) {
+		m := &meteors^[i]
+		model := linalg.matrix4_translate_f32(m.pos) * linalg.matrix4_scale_f32(Vec3{0.7, 0.7, 0.7})
+		ent_set_mat4(e_mvp, vp * model)
+		gl.Uniform3f(e_color, 1.0, 0.55, 0.15)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+	}
+	gl.BindVertexArray(0)
+}
+
 // Falling gravel/sand blocks: full 1x1x1 cubes tumbling down, flat-shaded in the
 // block's colour (the entity shader has no texture path).
 falling_render_frame :: proc(falling: ^[dynamic]FallingBlock, vp: Mat4, ambient: f32) {
