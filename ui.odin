@@ -33,6 +33,47 @@ ui_panel :: proc(x0, y0, x1, y1, aspect: f32) {
 	ui_bevel(x0, y0, x1, y1, 0.014, aspect, MC_PANEL, MC_PANEL_HI, MC_PANEL_LO)
 }
 
+// One requirement line for a tooltip: an ingredient, how many are needed, and
+// how many you currently have (drawn green if you have enough, red if not).
+ReqLine :: struct {
+	block:      BlockId,
+	need, have: int,
+}
+
+// A dark Minecraft-style tooltip near the cursor: a title (what it makes) and a
+// list of requirements with have/need counts. Kept on-screen by flipping to the
+// cursor's left when it would run off the right edge.
+@(private = "file")
+ui_reqs_tooltip :: proc(mnx, mny, aspect: f32, title: string, reqs: []ReqLine) {
+	ch_h := f32(0.036)
+	ch_w := ch_h / aspect * (f32(GLYPH_W) / f32(GLYPH_H))
+	rows := len(reqs) + 1
+	boxw := f32(0.46)
+	boxh := f32(rows) * ch_h * 1.5 + 0.02
+	x0 := mnx + 0.02
+	x1 := x0 + boxw
+	if x1 > 0.98 {x0 = mnx - 0.02 - boxw;x1 = mnx - 0.02}
+	y1 := clamp(mny + 0.05, -0.9 + boxh, 0.95)
+	y0 := y1 - boxh
+	hud_quad(x0 - 0.006, y0 - 0.006, x1 + 0.006, y1 + 0.006, Vec4{0.55, 0.45, 0.75, 0.95}) // violet border
+	hud_quad(x0, y0, x1, y1, Vec4{0.06, 0.05, 0.10, 0.97}) // dark fill
+	ty := y1 - ch_h * 1.2
+	text_draw(title, x0 + 0.012, ty, ch_w, ch_h, Vec4{1, 0.92, 0.55, 1})
+	ty -= ch_h * 1.5
+	for r in reqs {
+		ok := r.have >= r.need
+		text_draw(
+			fmt.tprintf("%d %s  (have %d)", r.need, block_name(r.block), r.have),
+			x0 + 0.012,
+			ty,
+			ch_w * 0.9,
+			ch_h * 0.9,
+			ok ? Vec4{0.45, 0.95, 0.5, 1} : Vec4{0.98, 0.5, 0.5, 1},
+		)
+		ty -= ch_h * 1.5
+	}
+}
+
 // Dim the world behind an open menu.
 @(private = "file")
 ui_dim :: proc() {hud_quad(-1, -1, 1, 1, Vec4{0, 0, 0, 0.6})}
@@ -105,7 +146,7 @@ ui_draw_tabs :: proc(fbw, fbh: int, ch_w, ch_h, y: f32) {
 // Tools tab content: tools (1-4) then armor (5-8), each with tier + durability
 // and its next upgrade; press the number to craft/upgrade it.
 @(private = "file")
-ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
+ui_draw_tools_tab :: proc(p: ^Player, aspect, ch_w, ch_h, top: f32) {
 	NUMCOL :: Vec4{0.45, 0.32, 0.08, 1} // engraved gold number
 	GOOD :: Vec4{0.13, 0.45, 0.13, 1} // affordable upgrade (green)
 	BAD :: Vec4{0.62, 0.22, 0.22, 1} // can't afford (red)
@@ -161,6 +202,23 @@ ui_draw_tools_tab :: proc(p: ^Player, ch_w, ch_h, top: f32) {
 		}
 		text_draw(msg, 0.16, y, ch_w * 0.85, ch_h * 0.85, col)
 		y -= step
+	}
+
+	// Hover a row → a tooltip showing its next upgrade's cost vs what you have.
+	mnx, mny := cursor_ndc()
+	hr := inv_hit_tools_row(mnx, mny)
+	if hr >= 1 && hr <= TOOL_KIND_COUNT {
+		k := ToolKind(hr - 1)
+		if nt, block, count, ok := tool_next(p, k); ok {
+			reqs := [1]ReqLine{{block, count, inv_count(p, block)}}
+			ui_reqs_tooltip(mnx, mny, aspect, fmt.tprintf("%s %s", TIER_NAMES[nt], tool_name(k)), reqs[:])
+		}
+	} else if hr > TOOL_KIND_COUNT && hr <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
+		as := ArmorSlot(hr - 1 - TOOL_KIND_COUNT)
+		if nt, block, count, ok := armor_next(p, as); ok {
+			reqs := [1]ReqLine{{block, count, inv_count(p, block)}}
+			ui_reqs_tooltip(mnx, mny, aspect, fmt.tprintf("%s %s", TIER_NAMES[nt], armor_name(as)), reqs[:])
+		}
 	}
 }
 
@@ -276,9 +334,9 @@ ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
 		r := RECIPES[i]
 		can := recipe_can_make(p, w, r)
 		txt := can ? MC_TEXT : MC_TEXT_DIM
-		if i == hovr do hud_quad(-0.58, y - pitch + ch_h * 0.6, 0.58, y + ch_h * 0.55, Vec4{1, 1, 1, 0.4})
+		if i == hovr do hud_quad(-0.40, y - pitch + ch_h * 0.6, 0.46, y + ch_h * 0.55, Vec4{1, 1, 1, 0.4})
 		sy := y - bs + ch_h * 0.35 // mini-slots aligned to the text line
-		x: f32 = -0.56
+		x: f32 = -0.34
 		if i - lo < 9 {
 			text_draw(fmt.tprintf("%d", i - lo + 1), x, y, ch_w, ch_h, can ? Vec4{0.45, 0.32, 0.08, 1} : MC_TEXT_DIM)
 		}
@@ -297,6 +355,22 @@ ui_draw_craft_tab :: proc(p: ^Player, w: ^World, aspect, ch_w, ch_h, top: f32) {
 		y -= pitch
 	}
 	if hi < len(RECIPES) do text_center("v  more below", y + ch_h * 0.1, ch_w * 0.7, ch_h * 0.7, MC_TEXT_DIM)
+
+	// Hover a recipe row → a tooltip listing exactly what it needs and what you
+	// have, the Minecraft way.
+	if hovr >= 0 {
+		r := RECIPES[hovr]
+		reqs: [3]ReqLine
+		for j in 0 ..< r.n_in do reqs[j] = {r.inputs[j].block, r.inputs[j].count, inv_count(p, r.inputs[j].block)}
+		note := r.needs_furnace ? " (NEAR FURNACE)" : ""
+		ui_reqs_tooltip(
+			mnx,
+			mny,
+			aspect,
+			fmt.tprintf("%dx %s%s", r.out_count, block_name(r.out), note),
+			reqs[:r.n_in],
+		)
+	}
 }
 
 // A small sunken slot with a block icon and its count, for the craft rows.
@@ -657,6 +731,22 @@ inv_hit_tools_row :: proc(nx, ny: f32) -> int {
 
 // Which Craft-tab recipe row the NDC point is over, or -1. Mirrors the row
 // layout in ui_draw_craft_tab (called with ch_h scaled by 0.95, from top).
+// Which tab button (0 Items / 1 Craft / 2 Tools) the NDC point is over, or -1.
+// Mirrors ui_draw_tabs called from ui_draw_inventory (y = 0.44, ch scaled 0.9).
+inv_hit_tab :: proc(nx, ny: f32) -> int {
+	y := f32(0.44)
+	ch_h := f32(0.045 * 0.9)
+	if ny < y - ch_h * 1.05 || ny > y + ch_h * 0.55 do return -1
+	seg := f32(0.30)
+	x0 := -seg * f32(INV_TAB_COUNT) * 0.5
+	for i in 0 ..< INV_TAB_COUNT {
+		cx := x0 + f32(i) * seg + seg * 0.5
+		w2 := seg * 0.44
+		if nx >= cx - w2 && nx <= cx + w2 do return i
+	}
+	return -1
+}
+
 CRAFT_ROW_CH_H :: f32(0.045 * 0.95)
 inv_hit_craft_row :: proc(nx, ny: f32) -> int {
 	top := f32(0.30)
@@ -665,7 +755,7 @@ inv_hit_craft_row :: proc(nx, ny: f32) -> int {
 	hi := min(len(RECIPES), g_craft_scroll + CRAFT_VISIBLE)
 	for i in g_craft_scroll ..< hi {
 		y := top - f32(i - g_craft_scroll) * spacing
-		if nx >= -0.58 && nx <= 0.58 && ny <= y + CRAFT_ROW_CH_H * 0.55 && ny >= y - spacing + CRAFT_ROW_CH_H * 0.6 {
+		if nx >= -0.40 && nx <= 0.46 && ny <= y + CRAFT_ROW_CH_H * 0.55 && ny >= y - spacing + CRAFT_ROW_CH_H * 0.6 {
 			return i
 		}
 	}
@@ -710,7 +800,7 @@ ui_draw_inventory :: proc(p: ^Player, w: ^World, fbw, fbh: int) {
 	case .Craft:
 		ui_draw_craft_tab(p, w, aspect, ch_w * 0.95, ch_h * 0.95, 0.30)
 	case .Tools:
-		ui_draw_tools_tab(p, ch_w, ch_h, 0.30)
+		ui_draw_tools_tab(p, aspect, ch_w, ch_h, 0.30)
 	}
 
 	action_hint: string

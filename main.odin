@@ -1197,7 +1197,6 @@ main :: proc() {
 			if g_cursor_stack.id != .Air do inv_drop_stack(cur, &player, &g_cursor_stack)
 		}
 		if paused {
-			ui_click := g_input.break_req // left-click, captured before it's discarded below
 			// Chest: R empties it into the inventory; left/right-click drags
 			// stacks between the chest grid and your inventory.
 			if g_show_chest {
@@ -1279,29 +1278,8 @@ main :: proc() {
 					}
 				}
 				if g_show_inventory {
-				switch g_inv_tab {
-				case .Items:
-					// Fixed-slot inventory: left-click a slot to pick up / drop
-					// / swap a whole stack, right-click to split off half or
-					// place a single item. 1-9 equips that hotbar slot.
 					aspect := f32(g_input.fb_w) / f32(max(g_input.fb_h, 1))
 					mnx, mny := cursor_ndc()
-
-					hov := inv_hit_slot(aspect, mnx, mny)
-					shift :=
-						g_win != nil && (glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS)
-
-					// A hotbar number over a slot swaps that item straight into the
-					// numbered slot (MC number-swap); otherwise it just equips.
-					if g_input.select >= 1 && g_input.select <= HOTBAR_SLOTS {
-						if hov >= 0 {
-							inv_swap_to_hotbar(&player, hov, g_input.select - 1)
-						} else {
-							player.selected_slot = g_input.select - 1
-						}
-					}
-
-					// Edge-detect both mouse buttons for click handling.
 					left_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
 					right_down := g_win != nil && glfw.GetMouseButton(g_win, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
 					left_press := left_down && !g_prev_left_ui
@@ -1309,47 +1287,54 @@ main :: proc() {
 					g_prev_left_ui = left_down
 					g_prev_right_ui = right_down
 
-					if hov >= 0 {
-						if left_press {
-							if shift {
-								inv_quick_move(&player, hov)
+					// Clicking a tab button switches tabs (as well as the E/T/X keys).
+					tab_clicked := false
+					if left_press {
+						if tab := inv_hit_tab(mnx, mny); tab >= 0 {
+							g_inv_tab = InvTab(tab)
+							tab_clicked = true
+						}
+					}
+
+					if !tab_clicked do switch g_inv_tab {
+					case .Items:
+						hov := inv_hit_slot(aspect, mnx, mny)
+						shift := g_win != nil && (glfw.GetKey(g_win, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(g_win, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS)
+						if g_input.select >= 1 && g_input.select <= HOTBAR_SLOTS {
+							if hov >= 0 {
+								inv_swap_to_hotbar(&player, hov, g_input.select - 1)
 							} else {
-								inv_click_slot(&player, hov)
+								player.selected_slot = g_input.select - 1
 							}
 						}
-						if right_press do inv_rclick_slot(&player, hov)
-					} else if left_press && g_cursor_stack.id != .Air {
-						inv_drop_stack(cur, &player, &g_cursor_stack) // toss out of the window
-					}
-				case .Craft:
-					if g_input.scroll != 0 {
-						g_craft_scroll -= int(g_input.scroll) // wheel up -> earlier recipes
-						craft_scroll_clamp()
-					}
-					// keys 1-9 map to the first 9 currently-visible rows
-					if g_input.select > 0 {
-						recipe_try(&player, cur, g_craft_scroll + g_input.select - 1)
-					}
-					if ui_click {
-						mnx, mny := cursor_ndc()
-						if row := inv_hit_craft_row(mnx, mny); row >= 0 {
-							recipe_try(&player, cur, row)
+						if hov >= 0 {
+							if left_press {
+								if shift {inv_quick_move(&player, hov)} else {inv_click_slot(&player, hov)}
+							}
+							if right_press do inv_rclick_slot(&player, hov)
+						} else if left_press && g_cursor_stack.id != .Air {
+							inv_drop_stack(cur, &player, &g_cursor_stack)
+						}
+					case .Craft:
+						if g_input.scroll != 0 {
+							g_craft_scroll -= int(g_input.scroll)
+							craft_scroll_clamp()
+						}
+						if g_input.select > 0 do recipe_try(&player, cur, g_craft_scroll + g_input.select - 1)
+						if left_press {
+							if row := inv_hit_craft_row(mnx, mny); row >= 0 do recipe_try(&player, cur, row)
+						}
+					case .Tools:
+						sel := g_input.select
+						if sel == 0 && left_press do sel = inv_hit_tools_row(mnx, mny)
+						if sel >= 1 && sel <= TOOL_KIND_COUNT {
+							tool_craft(&player, ToolKind(sel - 1))
+						} else if sel > TOOL_KIND_COUNT && sel <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
+							armor_craft(&player, ArmorSlot(sel - 1 - TOOL_KIND_COUNT))
 						}
 					}
-				case .Tools:
-					sel := g_input.select
-					if sel == 0 && ui_click {
-						mnx, mny := cursor_ndc()
-						sel = inv_hit_tools_row(mnx, mny) // click a row to craft/upgrade it
-					}
-					if sel >= 1 && sel <= TOOL_KIND_COUNT {
-						tool_craft(&player, ToolKind(sel - 1))
-					} else if sel > TOOL_KIND_COUNT && sel <= TOOL_KIND_COUNT + ARMOR_SLOT_COUNT {
-						armor_craft(&player, ArmorSlot(sel - 1 - TOOL_KIND_COUNT))
-					}
 				}
-			}
-			g_input.select = 0
+						g_input.select = 0
 			g_input.scroll = 0
 		} else {
 			process_input(&player, dt)
