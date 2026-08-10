@@ -98,3 +98,6 @@ SPAWNER          :: Tile{9, 5}
 BOW              :: Tile{10, 5} // item icon
 FISHING_ROD      :: Tile{11, 5} // item icon
 CAMPFIRE         :: Tile{12, 5}
+EGG              :: Tile{13, 5} // item icon
+MILK             :: Tile{14, 5} // item icon
+CAKE             :: Tile{15, 5} // item icon

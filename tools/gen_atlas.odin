@@ -542,6 +542,31 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 					c = hot ? Color{255, 214, 70, 255} : shade(Color{232, 96, 22, 255}, jitter(gx, gy, 14))
 				}
 				c.a = 255
+			case "egg":
+				// a pale oval egg on a transparent tile
+				c = Color{0, 0, 0, 0}
+				if (px - 8) * (px - 8) + (py - 8) * (py - 8) * 3 / 4 < 20 {
+					c = shade(Color{236, 226, 200, 255}, jitter(gx, gy, 8));c.a = 255
+				}
+			case "milk":
+				// a little bucket of milk: grey pail, white top
+				c = Color{0, 0, 0, 0}
+				pail := px >= 4 && px <= 11 && py >= 6 && py <= 13
+				top := px >= 4 && px <= 11 && py >= 5 && py <= 6
+				if top {c = Color{242, 242, 246, 255}} else if pail {
+					c = shade(Color{120, 124, 130, 255}, jitter(gx, gy, 8));c.a = 255
+				}
+			case "cake":
+				// a slice of cake: cream top, sponge body, a red berry
+				c = Color{0, 0, 0, 0}
+				body := px >= 3 && px <= 12 && py >= 5 && py <= 13
+				cream := px >= 3 && px <= 12 && py >= 4 && py <= 6
+				berry := (px - 8) * (px - 8) + (py - 4) * (py - 4) < 3
+				if berry {c = Color{210, 40, 40, 255}} else if cream {
+					c = Color{244, 240, 228, 255}
+				} else if body {
+					c = shade(Color{198, 150, 96, 255}, jitter(gx, gy, 8));c.a = 255
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -679,6 +704,9 @@ main :: proc() {
 	paint(ad.BOW, Color{0, 0, 0, 0}, "bow")
 	paint(ad.FISHING_ROD, Color{0, 0, 0, 0}, "fishing_rod")
 	paint(ad.CAMPFIRE, Color{44, 32, 26, 255}, "campfire")
+	paint(ad.EGG, Color{0, 0, 0, 0}, "egg")
+	paint(ad.MILK, Color{0, 0, 0, 0}, "milk")
+	paint(ad.CAKE, Color{0, 0, 0, 0}, "cake")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

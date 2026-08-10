@@ -109,6 +109,10 @@ BlockId :: enum u8 {
 	Bow, // held item: fire it with right-click, consumes an Arrow
 	FishingRod, // held item: cast into water to catch fish
 	Campfire, // low fire pit: a warm light, and cooks raw food when you use it (R)
+	// Animal produce + cooking (inventory items).
+	Egg, // laid by chickens
+	Milk, // from milking a cow (drinkable)
+	Cake, // baked from wheat + egg + milk; a hearty meal
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -127,7 +131,10 @@ block_is_item :: proc(b: BlockId) -> bool {
 	     .Arrow,
 	     .Gunpowder,
 	     .Bow,
-	     .FishingRod:
+	     .FishingRod,
+	     .Egg,
+	     .Milk,
+	     .Cake:
 		return true
 	}
 	return false
@@ -464,6 +471,12 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.FISHING_ROD
 	case .Campfire:
 		return ad.CAMPFIRE
+	case .Egg:
+		return ad.EGG
+	case .Milk:
+		return ad.MILK
+	case .Cake:
+		return ad.CAKE
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -653,6 +666,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.62, 0.45, 0.24}
 	case .Campfire:
 		return {0.85, 0.45, 0.15}
+	case .Egg:
+		return {0.92, 0.88, 0.78}
+	case .Milk:
+		return {0.96, 0.96, 0.98}
+	case .Cake:
+		return {0.92, 0.86, 0.72}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -859,6 +878,12 @@ block_name :: proc(b: BlockId) -> string {
 		return "Fishing Rod"
 	case .Campfire:
 		return "Campfire"
+	case .Egg:
+		return "Egg"
+	case .Milk:
+		return "Milk"
+	case .Cake:
+		return "Cake"
 	}
 	return "?"
 }

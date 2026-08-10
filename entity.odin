@@ -138,6 +138,8 @@ Mob :: struct {
 	flee_timer:     f32, // >0 while a prey animal is bolting from a predator
 	hurt_flash:     f32, // >0 briefly after taking a hit; drives the red damage blink
 	tamed:          bool, // a wolf/cat fed into a loyal pet: follows and defends the player
+	produce_cd:     f32, // cooldown before a sheep can be sheared / a cow milked again
+	lay_timer:      f32, // countdown for a chicken to lay its next egg
 }
 
 // How long a mob/villager stays tinted red after taking damage.
@@ -533,6 +535,15 @@ ai_react_to_player :: proc(p: ^Player, m: ^Mob) -> bool {
 
 mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	if m.hurt_flash > 0 do m.hurt_flash -= dt
+	if m.produce_cd > 0 do m.produce_cd -= dt
+	// Chickens periodically lay an egg on the ground.
+	if m.kind == .Chicken && m.age > 3 {
+		m.lay_timer -= dt
+		if m.lay_timer <= 0 {
+			m.lay_timer = rng_range(45, 90)
+			if m.on_ground do item_spawn(&w.items, .Egg, m.pos + Vec3{0, 0.2, 0})
+		}
+	}
 	dims := MOB_DIMS[m.kind]
 	if m.is_baby {
 		dims.hw *= 0.6
@@ -1332,6 +1343,26 @@ try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 	if m.is_baby {
 		toast_show(fmt.tprintf("%s (BABY)", name))
 		return true
+	}
+	// With empty hands (no wheat to breed), harvest animal produce: shear a sheep
+	// for wool, milk a cow — each on a regrow cooldown.
+	if !inv_has(p, .Wheat, 1) {
+		if m.kind == .Sheep && m.produce_cd <= 0 {
+			inv_add(p, .WoolWhite, 1 + rng_int(2))
+			m.produce_cd = 45
+			skill_gain(p, .Farming, 3)
+			audio_play(.Break, 0.4)
+			toast_show("SHEARED THE SHEEP FOR WOOL")
+			return true
+		}
+		if m.kind == .Cow && m.produce_cd <= 0 {
+			inv_add(p, .Milk, 1)
+			m.produce_cd = 45
+			skill_gain(p, .Farming, 3)
+			audio_play(.Place, 0.4)
+			toast_show("MILKED THE COW")
+			return true
+		}
 	}
 	// Taming: a wolf fed a bone, or a cat fed a fish, becomes a loyal pet.
 	if !m.tamed && (m.kind == .Wolf || m.kind == .Cat) {

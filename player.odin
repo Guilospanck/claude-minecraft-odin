@@ -296,10 +296,14 @@ process_input :: proc(p: ^Player, dt: f32) {
 // Hunger restored by eating one of a food item (0 = not edible).
 food_value :: proc(b: BlockId) -> int {
 	#partial switch b {
+	case .Cake:
+		return 14
 	case .CookedFood:
 		return 8
 	case .Bread:
 		return 6
+	case .Milk:
+		return 4
 	case .RawFood:
 		return 3
 	}
