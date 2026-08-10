@@ -119,7 +119,7 @@ load_meta :: proc() -> (u64, bool) {
 @(private = "file")
 PLAYER_PATH :: "saves/player.dat"
 @(private = "file")
-PLAYER_SAVE_VERSION :: u8(5)
+PLAYER_SAVE_VERSION :: u8(6)
 
 // Persist the player's own state (position, look, vitals, respawn, the full
 // inventory + food counters, the hotbar layout, and tool/armor tiers +

@@ -107,6 +107,7 @@ BlockId :: enum u8 {
 	CoralPurple,
 	Spawner, // dungeon mob spawner cage (spawns hostiles when the player is near)
 	Bow, // held item: fire it with right-click, consumes an Arrow
+	FishingRod, // held item: cast into water to catch fish
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -124,7 +125,8 @@ block_is_item :: proc(b: BlockId) -> bool {
 	     .RottenFlesh,
 	     .Arrow,
 	     .Gunpowder,
-	     .Bow:
+	     .Bow,
+	     .FishingRod:
 		return true
 	}
 	return false
@@ -455,6 +457,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.SPAWNER
 	case .Bow:
 		return ad.BOW
+	case .FishingRod:
+		return ad.FISHING_ROD
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -640,6 +644,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.20, 0.22, 0.26}
 	case .Bow:
 		return {0.55, 0.40, 0.20}
+	case .FishingRod:
+		return {0.62, 0.45, 0.24}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -842,6 +848,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Mob Spawner"
 	case .Bow:
 		return "Bow"
+	case .FishingRod:
+		return "Fishing Rod"
 	}
 	return "?"
 }

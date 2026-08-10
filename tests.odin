@@ -1588,6 +1588,40 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_fishing :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	world_set_block(&w, 4, 41, 6, .Water)
+
+	// aiming a ray at the water finds a bobber spot just above it
+	_, ok := fishing_target(&w, Vec3{4.5, 41.5, 4.5}, Vec3{0, 0, 1})
+	testing.expect(t, ok, "aiming at water finds a cast target")
+
+	p: Player
+	p.slots = {}
+	// reeling in with a fish on the line lands a catch and trains Fishing
+	p.fishing = true
+	p.fish_bite = 1.0
+	p.fish_pos = Vec3{4, 42, 6}
+	fishing_reel(&w, &p)
+	testing.expect(t, !p.fishing, "reeling in ends the cast")
+	testing.expect(t, p.skill_xp[.Fishing] >= 6 || p.skill_level[.Fishing] > 0, "landing a fish trains Fishing")
+	caught := 0
+	for s in p.slots do caught += s.count
+	testing.expect(t, caught >= 1, "a fish (or treasure) lands in the inventory")
+
+	// reeling with no bite just clears the line, no catch
+	p2: Player
+	p2.slots = {}
+	p2.fishing = true
+	p2.fish_bite = 0
+	fishing_reel(&w, &p2)
+	empty := true
+	for s in p2.slots do if s.count > 0 do empty = false
+	testing.expect(t, !p2.fishing && empty, "reeling early catches nothing")
+}
+
+@(test)
 test_player_arrow_hits_mob :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)

@@ -519,6 +519,19 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				} else if str {
 					c = Color{224, 224, 214, 255}
 				}
+			case "fishing_rod":
+				// a diagonal brown rod, a pale line drooping from the tip, a hook
+				c = Color{0, 0, 0, 0}
+				rod := abs((int(px)) - (13 - int(py))) <= 1 && py >= 2 && py <= 13
+				line := int(px) == 12 && py >= 6 && py <= 13
+				hook := (int(px) == 11 || int(px) == 12) && py == 13
+				if rod {
+					c = shade(Color{120, 84, 44, 255}, jitter(gx, gy, 8));c.a = 255
+				} else if hook {
+					c = Color{200, 200, 208, 255}
+				} else if line {
+					c = Color{210, 210, 200, 255}
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -654,6 +667,7 @@ main :: proc() {
 	paint(ad.CORAL_PURPLE, Color{168, 92, 220, 255}, "coral")
 	paint(ad.SPAWNER, Color{40, 42, 48, 255}, "spawner")
 	paint(ad.BOW, Color{0, 0, 0, 0}, "bow")
+	paint(ad.FISHING_ROD, Color{0, 0, 0, 0}, "fishing_rod")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

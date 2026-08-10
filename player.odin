@@ -51,6 +51,10 @@ Player :: struct {
 	xp_points:   int, // experience banked toward the next level (see xp_need)
 	skill_xp:    [Skill]int, // per-skill experience banked toward the next level
 	skill_level: [Skill]int, // per-skill level (drives perks; see skills.odin)
+	fishing:     bool, // rod is cast and the bobber is in the water
+	fish_timer:  f32, // seconds until a bite (while waiting)
+	fish_bite:   f32, // >0 during the reel-in window after a bite
+	fish_pos:    Vec3, // where the bobber sits, for splashes
 	w_was_down:  bool, // previous-frame W state, for double-tap detection
 	w_tap_timer: f32, // >0 during the window a second W press counts as a double-tap
 	slots:       [INV_SLOTS]ItemStack, // fixed-slot inventory (0..8 hotbar, 9.. storage)
@@ -304,6 +308,8 @@ food_value :: proc(b: BlockId) -> int {
 
 // Per-frame player upkeep: timers, health regen, footstep sounds.
 player_tick :: proc(w: ^World, p: ^Player, dt: f32) {
+	if p.fishing && inv_selected(p) != .FishingRod do p.fishing = false // put the rod away
+	fishing_tick(w, p, dt)
 	if p.hurt_timer > 0 do p.hurt_timer -= dt
 	if p.eat_timer > 0 {
 		p.eat_timer -= dt
@@ -522,6 +528,19 @@ handle_break_place :: proc(w: ^World, p: ^Player, dt: f32) {
 		}
 		p.place_cd = 0.45
 		want_place = false // consumed the click; don't also try to place
+	}
+
+	// Fishing rod: cast at water, or reel in if already cast.
+	if want_place && inv_selected(p) == .FishingRod {
+		if p.fishing {
+			fishing_reel(w, p)
+		} else if pos, ok := fishing_target(w, eye, dir); ok {
+			fishing_cast(w, p, pos)
+		} else {
+			toast_show("AIM AT WATER TO CAST")
+		}
+		p.place_cd = 0.4
+		want_place = false
 	}
 
 	if want_place && hit.hit && !p.tool_mode { 	// no block-placing while a tool is drawn

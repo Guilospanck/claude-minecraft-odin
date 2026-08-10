@@ -11,6 +11,7 @@ Skill :: enum {
 	Combat, // fighting mobs
 	Farming, // harvesting crops
 	Foraging, // chopping wood & leaves
+	Fishing, // reeling in catches
 }
 
 skill_name :: proc(s: Skill) -> string {
@@ -23,6 +24,8 @@ skill_name :: proc(s: Skill) -> string {
 		return "FARMING"
 	case .Foraging:
 		return "FORAGING"
+	case .Fishing:
+		return "FISHING"
 	}
 	return "?"
 }
@@ -38,6 +41,8 @@ skill_perk :: proc(s: Skill, level: int) -> string {
 		return fmt.tprintf("+%d%% chance of a bonus crop/seed", level * 6)
 	case .Foraging:
 		return fmt.tprintf("+%d%% chance of a bonus log", level * 5)
+	case .Fishing:
+		return fmt.tprintf("+%d%% chance of a bonus catch, faster bites", level * 5)
 	}
 	return ""
 }
