@@ -1588,6 +1588,25 @@ test_player_save_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_taming_a_wolf :: proc(t: ^testing.T) {
+	w, _ := make_test_world()
+	defer free_test_world(&w)
+	append(&w.mobs, Mob{kind = .Wolf, pos = Vec3{4, 40, 4}, health = 8})
+	p: Player
+	p.slots = {}
+
+	// no bone -> a prompt, no taming
+	try_feed(&w, &p, &w.mobs[0])
+	testing.expect(t, !w.mobs[0].tamed, "a wolf without a bone isn't tamed")
+
+	// feed it a bone -> tamed, bone consumed
+	inv_add(&p, .Bone, 1)
+	try_feed(&w, &p, &w.mobs[0])
+	testing.expect(t, w.mobs[0].tamed, "feeding a bone tames the wolf")
+	testing.expect(t, !inv_has(&p, .Bone, 1), "and consumes the bone")
+}
+
+@(test)
 test_fishing :: proc(t: ^testing.T) {
 	w, _ := make_test_world()
 	defer free_test_world(&w)

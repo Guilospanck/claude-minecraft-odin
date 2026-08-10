@@ -1005,6 +1005,10 @@ entity_render_frame :: proc(mobs: ^[dynamic]Mob, vp: Mat4, ambient: f32) {
 			gl.DrawArrays(gl.TRIANGLES, 0, 36)
 		}
 		emit_face(vp, base, face_def_for_mob(m.kind))
+		if m.tamed { 	// a red collar marks a pet
+			d := MOB_DIMS[m.kind]
+			draw_cube(vp, base, Vec3{0, d.h * 0.52, 0}, Vec3{d.hw * 1.5, 0.09, d.hw * 1.5}, Vec3{0.85, 0.15, 0.15})
+		}
 	}
 	gl.BindVertexArray(0)
 }

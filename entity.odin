@@ -137,6 +137,7 @@ Mob :: struct {
 	drown_accum:    f32, // fractional drowning damage once air runs out
 	flee_timer:     f32, // >0 while a prey animal is bolting from a predator
 	hurt_flash:     f32, // >0 briefly after taking a hit; drives the red damage blink
+	tamed:          bool, // a wolf/cat fed into a loyal pet: follows and defends the player
 }
 
 // How long a mob/villager stays tinted red after taking damage.
@@ -465,6 +466,47 @@ ai_flee :: proc(w: ^World, m: ^Mob, self_idx: int) -> bool {
 	return true
 }
 
+PET_ATTACK_RADIUS :: f32(11.0) // a pet lunges at hostiles within this range
+PET_REACH :: f32(1.7) // ... and bites once this close
+PET_DMG :: 4
+PET_FOLLOW_STOP :: f32(3.2) // a pet stops trailing once this close to its owner
+
+// A tamed wolf/cat: hunt down and bite any nearby hostile mob, otherwise trot
+// after its owner (stopping a few blocks away) and face them while idle.
+@(private = "file")
+ai_pet :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
+	m.attack_timer -= dt
+	// find the nearest hostile to defend against
+	best := -1
+	bd := PET_ATTACK_RADIUS * PET_ATTACK_RADIUS
+	for i in 0 ..< len(w.mobs) {
+		if i == self_idx do continue
+		o := w.mobs[i]
+		if o.health <= 0 || !mob_is_hostile(o.kind) do continue
+		d2 := (o.pos.x - m.pos.x) * (o.pos.x - m.pos.x) + (o.pos.z - m.pos.z) * (o.pos.z - m.pos.z)
+		if d2 < bd {bd = d2;best = i}
+	}
+	if best >= 0 {
+		o := &w.mobs[best]
+		dx := o.pos.x - m.pos.x
+		dz := o.pos.z - m.pos.z
+		m.yaw = math.atan2(dx, -dz)
+		m.moving = true
+		d2 := dx * dx + dz * dz
+		if d2 < PET_REACH * PET_REACH && m.attack_timer <= 0 {
+			inv := 1.0 / (math.sqrt(d2) + 1e-4)
+			mob_hit(w, best, Vec3{dx * inv, 0, dz * inv}, PET_DMG)
+			m.attack_timer = 1.0
+		}
+		return
+	}
+	// otherwise follow the owner
+	dx := p.pos.x - m.pos.x
+	dz := p.pos.z - m.pos.z
+	m.yaw = math.atan2(dx, -dz)
+	m.moving = dx * dx + dz * dz > PET_FOLLOW_STOP * PET_FOLLOW_STOP
+}
+
 MOB_REACT_RADIUS :: f32(4.5) // passive mobs notice a player within this range
 MOB_STARTLE_RADIUS :: f32(2.3) // ... and skittish ones bolt if you get this close
 
@@ -582,6 +624,8 @@ mob_update :: proc(w: ^World, p: ^Player, m: ^Mob, self_idx: int, dt: f32) {
 	if m.flee_timer > 0 do m.flee_timer -= dt
 	if mob_is_hostile(m.kind) {
 		ai_hostile(w, p, m, self_idx, dt)
+	} else if m.tamed {
+		ai_pet(w, p, m, self_idx, dt) // a fed wolf/cat follows and defends its owner
 	} else if mob_is_prey(m.kind) && ai_flee(w, m, self_idx) {
 		// bolting from a predator
 	} else if m.flee_timer > 0 {
@@ -1287,6 +1331,20 @@ try_feed :: proc(w: ^World, p: ^Player, m: ^Mob) -> bool {
 	}
 	if m.is_baby {
 		toast_show(fmt.tprintf("%s (BABY)", name))
+		return true
+	}
+	// Taming: a wolf fed a bone, or a cat fed a fish, becomes a loyal pet.
+	if !m.tamed && (m.kind == .Wolf || m.kind == .Cat) {
+		food := m.kind == .Wolf ? BlockId.Bone : BlockId.RawFood
+		if inv_has(p, food, 1) {
+			inv_take(p, food, 1)
+			m.tamed = true
+			audio_play(.Pickup, 0.6)
+			toast_show(fmt.tprintf("TAMED %s - IT WILL FOLLOW AND DEFEND YOU", name))
+			particle_spawn_eat(&w.particles, m.pos + Vec3{0, MOB_DIMS[m.kind].h + 0.2, 0}, LOVE_HEART_COLOR)
+		} else {
+			toast_show(fmt.tprintf("%s - FEED %s TO TAME", name, block_name(food)))
+		}
 		return true
 	}
 	if !inv_has(p, .Wheat, 1) {
