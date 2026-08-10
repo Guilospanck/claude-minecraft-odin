@@ -20,7 +20,7 @@ crops_tick :: proc(w: ^World, dt: f32) {
 		cr := &w.crops[i]
 		b := world_block(w, cr.pos.x, cr.pos.y, cr.pos.z)
 		// drop crops that are gone (harvested/broken/unloaded) or already ripe
-		if !block_is_crop(b) || b == .Wheat3 {
+		if !block_is_crop(b) || block_is_ripe(b) {
 			w.crops[i] = w.crops[len(w.crops) - 1]
 			pop(&w.crops)
 			continue
@@ -28,9 +28,9 @@ crops_tick :: proc(w: ^World, dt: f32) {
 		cr.timer += dt
 		if cr.timer >= GROW_TIME {
 			cr.timer = 0
-			next: BlockId = b == .Wheat1 ? .Wheat2 : .Wheat3
+			next := crop_next_stage(b)
 			world_set_block(w, cr.pos.x, cr.pos.y, cr.pos.z, next)
-			if next == .Wheat3 { 	// ripened this tick — stop tracking it
+			if block_is_ripe(next) { 	// ripened this tick — stop tracking it
 				w.crops[i] = w.crops[len(w.crops) - 1]
 				pop(&w.crops)
 				continue
@@ -52,19 +52,27 @@ crop_forget :: proc(w: ^World, pos: Ivec3) {
 	}
 }
 
-// Harvest a ripe crop: wheat + a seed or two back, and the block clears.
+// Harvest a ripe crop. Wheat yields wheat + a seed or two; carrots yield a few
+// carrots (which double as the replant "seed"). Either way the block clears and
+// higher Farming levels sometimes add a bonus.
 harvest_crop :: proc(w: ^World, p: ^Player, x, y, z: int) {
+	ripe := world_block(w, x, y, z)
 	world_set_block(w, x, y, z, .Air)
 	crop_forget(w, Ivec3{x, y, z})
 	net_send_edit(x, y, z, .Air, w.dimension)
-	inv_add(p, .Wheat, 1)
-	inv_add(p, .Seeds, 1 + rng_int(2))
-	// Farming skill: harvesting trains it and, at higher levels, sometimes yields
-	// an extra wheat.
 	skill_gain(p, .Farming, 5)
-	if rng_int(100) < p.skill_level[.Farming] * 6 do inv_add(p, .Wheat, 1)
+	bonus := rng_int(100) < p.skill_level[.Farming] * 6
+	msg: string
+	if ripe == .CarrotCrop3 {
+		n := 2 + rng_int(2) + (bonus ? 1 : 0)
+		inv_add(p, .Carrot, n)
+		msg = fmt.tprintf("HARVESTED CARROTS (%d CARROTS)", inv_count(p, .Carrot))
+	} else {
+		inv_add(p, .Wheat, 1 + (bonus ? 1 : 0))
+		inv_add(p, .Seeds, 1 + rng_int(2))
+		msg = fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", inv_count(p, .Wheat), inv_count(p, .Seeds))
+	}
 	audio_play(.Break, 0.6)
-	msg := fmt.tprintf("HARVESTED WHEAT (%d WHEAT, %d SEEDS)", inv_count(p, .Wheat), inv_count(p, .Seeds))
 	fmt.println(msg)
 	toast_show(msg)
 }
@@ -122,11 +130,21 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		} else {
 			toast_show("CAMPFIRE - HOLD RAW FOOD (R) TO COOK IT")
 		}
-	case .Wheat3:
+	case .Wheat3, .CarrotCrop3:
 		harvest_crop(w, p, hit.bx, hit.by, hit.bz)
 	case .Farmland:
 		ax, ay, az := hit.bx, hit.by + 1, hit.bz
 		if ay >= CHUNK_H || world_block(w, ax, ay, az) != .Air {
+			return
+		}
+		// Hold a carrot to plant carrots; otherwise plant wheat from seeds.
+		if inv_selected(p) == .Carrot && inv_has(p, .Carrot, 1) {
+			world_set_block(w, ax, ay, az, .CarrotCrop1)
+			net_send_edit(ax, ay, az, .CarrotCrop1, w.dimension)
+			append(&w.crops, Crop{pos = Ivec3{ax, ay, az}})
+			inv_take(p, .Carrot, 1)
+			audio_play(.Place, 0.4)
+			toast_show(fmt.tprintf("PLANTED CARROTS (%d CARROTS LEFT)", inv_count(p, .Carrot)))
 			return
 		}
 		if !inv_has(p, .Seeds, 1) {

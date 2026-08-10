@@ -21,6 +21,7 @@ TRADES := [?]Trade {
 	{.Leather, 4, .Bread, 3},
 	{.Gunpowder, 3, .Glowstone, 1},
 	{.DiamondOre, 1, .Iron, 6},
+	{.Wheat, 3, .Carrot, 4}, // bootstraps the carrot crop (replant to grow more)
 }
 
 // Rarely spawn a lone trader near the player (never a second one), reusing the

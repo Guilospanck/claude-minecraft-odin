@@ -304,6 +304,8 @@ food_value :: proc(b: BlockId) -> int {
 		return 6
 	case .Milk:
 		return 4
+	case .Carrot:
+		return 4
 	case .RawFood:
 		return 3
 	}
@@ -421,8 +423,13 @@ break_block :: proc(w: ^World, p: ^Player, bx, by, bz: int, broken: BlockId) {
 		crop_forget(w, Ivec3{bx, by, bz})
 		net_send_edit(bx, by, bz, .Air, w.dimension)
 		audio_play(.Break)
-		inv_add(p, .Seeds, 1)
-		if broken == .Wheat3 do inv_add(p, .Wheat, 1)
+		#partial switch broken {
+		case .CarrotCrop1, .CarrotCrop2, .CarrotCrop3:
+			inv_add(p, .Carrot, broken == .CarrotCrop3 ? 1 + rng_int(2) : 1)
+		case:
+			inv_add(p, .Seeds, 1)
+			if broken == .Wheat3 do inv_add(p, .Wheat, 1)
+		}
 		return
 	}
 	if broken == .Chest do chest_break(w, p, Ivec3{bx, by, bz}) // recover contents first

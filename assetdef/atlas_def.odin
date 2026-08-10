@@ -101,3 +101,7 @@ CAMPFIRE         :: Tile{12, 5}
 EGG              :: Tile{13, 5} // item icon
 MILK             :: Tile{14, 5} // item icon
 CAKE             :: Tile{15, 5} // item icon
+CARROT_CROP1     :: Tile{0, 6} // sprite (transparent background)
+CARROT_CROP2     :: Tile{1, 6} // sprite
+CARROT_CROP3     :: Tile{2, 6} // sprite (ripe, orange tops showing)
+CARROT           :: Tile{3, 6} // item icon

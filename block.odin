@@ -113,6 +113,12 @@ BlockId :: enum u8 {
 	Egg, // laid by chickens
 	Milk, // from milking a cow (drinkable)
 	Cake, // baked from wheat + egg + milk; a hearty meal
+	// Carrots: a second crop. Carrot1..3 are the growing block stages; Carrot is
+	// the harvested item, which is also what you replant (no separate seed).
+	CarrotCrop1,
+	CarrotCrop2,
+	CarrotCrop3,
+	Carrot,
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -134,7 +140,8 @@ block_is_item :: proc(b: BlockId) -> bool {
 	     .FishingRod,
 	     .Egg,
 	     .Milk,
-	     .Cake:
+	     .Cake,
+	     .Carrot:
 		return true
 	}
 	return false
@@ -165,6 +172,9 @@ block_is_sprite :: proc(b: BlockId) -> bool {
 	case .Wheat1,
 	     .Wheat2,
 	     .Wheat3,
+	     .CarrotCrop1,
+	     .CarrotCrop2,
+	     .CarrotCrop3,
 	     .Torch,
 	     .FlowerRed,
 	     .FlowerYellow,
@@ -220,7 +230,34 @@ block_is_carpet :: proc(b: BlockId) -> bool {
 }
 
 block_is_crop :: proc(b: BlockId) -> bool {
-	return b == .Wheat1 || b == .Wheat2 || b == .Wheat3
+	return(
+		b == .Wheat1 ||
+		b == .Wheat2 ||
+		b == .Wheat3 ||
+		b == .CarrotCrop1 ||
+		b == .CarrotCrop2 ||
+		b == .CarrotCrop3 \
+	)
+}
+
+// A ripe crop block ready to harvest (last stage of its chain).
+block_is_ripe :: proc(b: BlockId) -> bool {
+	return b == .Wheat3 || b == .CarrotCrop3
+}
+
+// Next growth stage for a crop block (returns the same block if already ripe).
+crop_next_stage :: proc(b: BlockId) -> BlockId {
+	#partial switch b {
+	case .Wheat1:
+		return .Wheat2
+	case .Wheat2:
+		return .Wheat3
+	case .CarrotCrop1:
+		return .CarrotCrop2
+	case .CarrotCrop2:
+		return .CarrotCrop3
+	}
+	return b
 }
 
 // The raycast stops here when targeting for break/place/interact. Solid blocks
@@ -242,7 +279,7 @@ Face :: enum {
 // Participates in player collision.
 block_is_solid :: proc(b: BlockId) -> bool {
 	#partial switch b {
-	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .Torch, .Ladder:
+	case .Air, .Water, .Lava, .Portal, .Wheat1, .Wheat2, .Wheat3, .CarrotCrop1, .CarrotCrop2, .CarrotCrop3, .Torch, .Ladder:
 		return false
 	}
 	if block_is_plant(b) || block_is_item(b) || block_is_carpet(b) do return false
@@ -259,6 +296,9 @@ block_is_opaque :: proc(b: BlockId) -> bool {
 	     .Wheat1,
 	     .Wheat2,
 	     .Wheat3,
+	     .CarrotCrop1,
+	     .CarrotCrop2,
+	     .CarrotCrop3,
 	     .Torch,
 	     .Door,
 	     .Fence,
@@ -342,6 +382,14 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.WHEAT2
 	case .Wheat3:
 		return ad.WHEAT3
+	case .CarrotCrop1:
+		return ad.CARROT_CROP1
+	case .CarrotCrop2:
+		return ad.CARROT_CROP2
+	case .CarrotCrop3:
+		return ad.CARROT_CROP3
+	case .Carrot:
+		return ad.CARROT
 	case .Torch:
 		return ad.TORCH
 	case .Bed:
@@ -540,6 +588,12 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.62, 0.66, 0.28}
 	case .Wheat3:
 		return {0.82, 0.70, 0.28}
+	case .CarrotCrop1:
+		return {0.35, 0.58, 0.26}
+	case .CarrotCrop2:
+		return {0.42, 0.60, 0.24}
+	case .CarrotCrop3, .Carrot:
+		return {0.92, 0.52, 0.16}
 	case .Torch:
 		return {0.95, 0.80, 0.35}
 	case .Bed:
@@ -736,6 +790,14 @@ block_name :: proc(b: BlockId) -> string {
 		return "Wheat (growing)"
 	case .Wheat3:
 		return "Wheat (ripe)"
+	case .CarrotCrop1:
+		return "Carrots (young)"
+	case .CarrotCrop2:
+		return "Carrots (growing)"
+	case .CarrotCrop3:
+		return "Carrots (ripe)"
+	case .Carrot:
+		return "Carrot"
 	case .Torch:
 		return "Torch"
 	case .Bed:

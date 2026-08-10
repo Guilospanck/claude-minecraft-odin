@@ -567,6 +567,34 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				} else if body {
 					c = shade(Color{198, 150, 96, 255}, jitter(gx, gy, 8));c.a = 255
 				}
+			case "carrot_crop1", "carrot_crop2", "carrot_crop3":
+				// leafy carrot tops as a cutout sprite; taller each stage, ripe
+				// stage shows a hint of orange root poking up at the base.
+				c = Color{0, 0, 0, 0}
+				stage := kind == "carrot_crop3" ? 3 : (kind == "carrot_crop2" ? 2 : 1)
+				height := stage == 1 ? 5 : (stage == 2 ? 10 : 14)
+				top := ad.TILE_PX - height
+				frond := px == 2 || px == 5 || px == 7 || px == 8 || px == 10 || px == 13
+				if frond && py >= top {
+					col := stage == 1 \
+						? Color{88, 148, 70, 255} \
+						: (stage == 2 ? Color{106, 162, 62, 255} : Color{120, 176, 58, 255})
+					c = shade(col, jitter(gx, gy, 10));c.a = 255
+				}
+				if stage == 3 && py >= 13 && (px == 7 || px == 8) {
+					c = Color{232, 132, 40, 255} // orange root shoulder at the soil
+				}
+			case "carrot":
+				// item icon: orange tapered root pointing down, green leafy top
+				c = Color{0, 0, 0, 0}
+				half := px >= 6 && px <= 9
+				taper := py >= 4 && py <= 13 && px >= 6 + (py - 4) / 4 && px <= 9 - (py - 4) / 4
+				if taper {
+					c = shade(Color{232, 132, 40, 255}, jitter(gx, gy, 10));c.a = 255
+					if px == 6 + (py - 4) / 4 do c = Color{206, 108, 28, 255} // shaded edge
+				} else if half && py >= 1 && py <= 4 {
+					c = shade(Color{96, 164, 60, 255}, jitter(gx, gy, 10));c.a = 255 // greens
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -707,6 +735,10 @@ main :: proc() {
 	paint(ad.EGG, Color{0, 0, 0, 0}, "egg")
 	paint(ad.MILK, Color{0, 0, 0, 0}, "milk")
 	paint(ad.CAKE, Color{0, 0, 0, 0}, "cake")
+	paint(ad.CARROT_CROP1, Color{0, 0, 0, 0}, "carrot_crop1")
+	paint(ad.CARROT_CROP2, Color{0, 0, 0, 0}, "carrot_crop2")
+	paint(ad.CARROT_CROP3, Color{0, 0, 0, 0}, "carrot_crop3")
+	paint(ad.CARROT, Color{0, 0, 0, 0}, "carrot")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
