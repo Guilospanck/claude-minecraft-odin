@@ -112,6 +112,16 @@ try_interact :: proc(w: ^World, p: ^Player) {
 		world_set_block(w, hit.bx, hit.by, hit.bz, .Stair) // re-set to mark dirty
 		audio_play(.Place, 0.4)
 		toast_show("ROTATED STAIR")
+	case .Campfire:
+		n := inv_count(p, .RawFood)
+		if n > 0 {
+			inv_take(p, .RawFood, n)
+			inv_add(p, .CookedFood, n)
+			audio_play(.Eat, 0.5)
+			toast_show(fmt.tprintf("COOKED %d RAW FOOD ON THE CAMPFIRE", n))
+		} else {
+			toast_show("CAMPFIRE - HOLD RAW FOOD (R) TO COOK IT")
+		}
 	case .Wheat3:
 		harvest_crop(w, p, hit.bx, hit.by, hit.bz)
 	case .Farmland:

@@ -97,3 +97,4 @@ CORAL_PURPLE     :: Tile{8, 5}
 SPAWNER          :: Tile{9, 5}
 BOW              :: Tile{10, 5} // item icon
 FISHING_ROD      :: Tile{11, 5} // item icon
+CAMPFIRE         :: Tile{12, 5}

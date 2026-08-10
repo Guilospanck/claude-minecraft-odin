@@ -108,6 +108,7 @@ BlockId :: enum u8 {
 	Spawner, // dungeon mob spawner cage (spawns hostiles when the player is near)
 	Bow, // held item: fire it with right-click, consumes an Arrow
 	FishingRod, // held item: cast into water to catch fish
+	Campfire, // low fire pit: a warm light, and cooks raw food when you use it (R)
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -137,6 +138,8 @@ block_emission :: proc(b: BlockId) -> u8 {
 	#partial switch b {
 	case .Glowstone:
 		return 15
+	case .Campfire:
+		return 12 // warm firelight
 	case .Spawner:
 		return 4 // faint glow from the caged flame
 	case .Torch:
@@ -191,7 +194,7 @@ block_is_plant :: proc(b: BlockId) -> bool {
 // block". Still solid for collision (block_is_solid below) — the visual
 // shrink is cosmetic only, same trade-off sprites already accept.
 block_is_lowbox :: proc(b: BlockId) -> bool {
-	return b == .Bed || b == .Slab
+	return b == .Bed || b == .Slab || b == .Campfire
 }
 
 // Fraction of a full cell's height a low-box block's top face sits at.
@@ -459,6 +462,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.BOW
 	case .FishingRod:
 		return ad.FISHING_ROD
+	case .Campfire:
+		return ad.CAMPFIRE
 	case .WoolWhite, .CarpetWhite:
 		return ad.WOOL_WHITE
 	case .WoolRed, .CarpetRed:
@@ -646,6 +651,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.55, 0.40, 0.20}
 	case .FishingRod:
 		return {0.62, 0.45, 0.24}
+	case .Campfire:
+		return {0.85, 0.45, 0.15}
 	case .WoolWhite, .CarpetWhite:
 		return {0.93, 0.93, 0.95}
 	case .WoolRed, .CarpetRed:
@@ -850,6 +857,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Bow"
 	case .FishingRod:
 		return "Fishing Rod"
+	case .Campfire:
+		return "Campfire"
 	}
 	return "?"
 }

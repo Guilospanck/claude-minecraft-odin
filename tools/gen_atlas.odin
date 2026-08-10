@@ -532,6 +532,16 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				} else if line {
 					c = Color{210, 210, 200, 255}
 				}
+			case "campfire":
+				// dark ash base, brown logs along the bottom, an orange flame cone
+				c = shade(Color{44, 32, 26, 255}, jitter(gx, gy, 10))
+				if py >= 11 do c = shade(Color{82, 56, 30, 255}, jitter(gx, gy, 10))
+				flame := py <= 11 && abs(int(px) - 8) <= max(0, 11 - int(py))
+				if flame {
+					hot := ((jitter(gx, gy, 100) + 100) % 3) < 1
+					c = hot ? Color{255, 214, 70, 255} : shade(Color{232, 96, 22, 255}, jitter(gx, gy, 14))
+				}
+				c.a = 255
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -668,6 +678,7 @@ main :: proc() {
 	paint(ad.SPAWNER, Color{40, 42, 48, 255}, "spawner")
 	paint(ad.BOW, Color{0, 0, 0, 0}, "bow")
 	paint(ad.FISHING_ROD, Color{0, 0, 0, 0}, "fishing_rod")
+	paint(ad.CAMPFIRE, Color{44, 32, 26, 255}, "campfire")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")
