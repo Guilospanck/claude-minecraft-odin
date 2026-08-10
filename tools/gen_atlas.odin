@@ -595,6 +595,20 @@ paint :: proc(tile: ad.Tile, base: Color, kind: string) {
 				} else if half && py >= 1 && py <= 4 {
 					c = shade(Color{96, 164, 60, 255}, jitter(gx, gy, 10));c.a = 255 // greens
 				}
+			case "stew":
+				// a wooden bowl of orange broth with a couple of carrot chunks
+				c = Color{0, 0, 0, 0}
+				dx := px - 8
+				bowl := py >= 8 && py <= 13 && dx * dx + (py - 9) * (py - 9) < 40
+				broth := py >= 8 && py <= 10 && dx * dx < 30
+				chunk := (px == 6 && py == 8) || (px == 10 && py == 9) || (px == 8 && py == 8)
+				if chunk {
+					c = Color{236, 138, 44, 255} // carrot pieces floating
+				} else if broth {
+					c = shade(Color{198, 116, 52, 255}, jitter(gx, gy, 8));c.a = 255
+				} else if bowl {
+					c = shade(Color{130, 88, 46, 255}, jitter(gx, gy, 8));c.a = 255 // bowl
+				}
 			case "wool":
 				// soft fleecy texture: gentle noise with a faint tuft grid
 				tuft := ((px + 1) % 4 < 2) != ((py + 1) % 4 < 2)
@@ -739,6 +753,7 @@ main :: proc() {
 	paint(ad.CARROT_CROP2, Color{0, 0, 0, 0}, "carrot_crop2")
 	paint(ad.CARROT_CROP3, Color{0, 0, 0, 0}, "carrot_crop3")
 	paint(ad.CARROT, Color{0, 0, 0, 0}, "carrot")
+	paint(ad.STEW, Color{0, 0, 0, 0}, "stew")
 
 	if !os.exists("assets") {
 		os.make_directory("assets")

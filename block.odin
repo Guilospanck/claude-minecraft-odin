@@ -119,6 +119,7 @@ BlockId :: enum u8 {
 	CarrotCrop2,
 	CarrotCrop3,
 	Carrot,
+	Stew, // hearty bowl cooked from carrots + meat; restores lots of hunger
 }
 
 // Inventory-only items (food/seeds): they live in slots and stack like blocks
@@ -141,7 +142,8 @@ block_is_item :: proc(b: BlockId) -> bool {
 	     .Egg,
 	     .Milk,
 	     .Cake,
-	     .Carrot:
+	     .Carrot,
+	     .Stew:
 		return true
 	}
 	return false
@@ -390,6 +392,8 @@ block_tile :: proc(b: BlockId, f: Face) -> ad.Tile {
 		return ad.CARROT_CROP3
 	case .Carrot:
 		return ad.CARROT
+	case .Stew:
+		return ad.STEW
 	case .Torch:
 		return ad.TORCH
 	case .Bed:
@@ -594,6 +598,8 @@ block_color :: proc(b: BlockId) -> Vec3 {
 		return {0.42, 0.60, 0.24}
 	case .CarrotCrop3, .Carrot:
 		return {0.92, 0.52, 0.16}
+	case .Stew:
+		return {0.80, 0.46, 0.20}
 	case .Torch:
 		return {0.95, 0.80, 0.35}
 	case .Bed:
@@ -798,6 +804,8 @@ block_name :: proc(b: BlockId) -> string {
 		return "Carrots (ripe)"
 	case .Carrot:
 		return "Carrot"
+	case .Stew:
+		return "Carrot Stew"
 	case .Torch:
 		return "Torch"
 	case .Bed:

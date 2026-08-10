@@ -298,6 +298,8 @@ food_value :: proc(b: BlockId) -> int {
 	#partial switch b {
 	case .Cake:
 		return 14
+	case .Stew:
+		return 10
 	case .CookedFood:
 		return 8
 	case .Bread:

@@ -105,3 +105,4 @@ CARROT_CROP1     :: Tile{0, 6} // sprite (transparent background)
 CARROT_CROP2     :: Tile{1, 6} // sprite
 CARROT_CROP3     :: Tile{2, 6} // sprite (ripe, orange tops showing)
 CARROT           :: Tile{3, 6} // item icon
+STEW             :: Tile{4, 6} // item icon
